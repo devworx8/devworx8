@@ -1,0 +1,99 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.log
+
+# Dev server logs (npm run start:log → expo-dev.log, npm run web:dev:log → dev-server.log)
+logs/
+
+# Production builds
+dist/
+dist-update/
+builds/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.*.local
+.env.eas
+
+# Expo
+.expo/
+.expo-shared/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials (NEVER COMMIT)
+credentials-backup/
+*.p12
+*.pem
+*.key
+*SERVICE_ROLE_KEY*
+*EDUSITE*KEY*
+t *
+
+# Documentation (in separate repo)
+docs/
+archive/
+artifacts/
+playstore-assets/
+exam-papers-official/
+textbook-downloads/
+CAPS/
+edudashpro-dev/
+*.md
+!README.md
+!SECURITY_NOTES.md
+!CODEBASE_REVIEW_SUMMARY.md
+!supabase/README.md
+!PAYMENT_INTEGRATIONS_CHECKLIST.md
+!AGENTS.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!reports/prod-ready/PROD_READINESS_REPORT.md
+!docs/
+docs/*
+!docs/SECURITY_ROTATION_CHECKLIST.md
+!docs/UX_SCOPE_NEXTGEN.md
+!docs/DASH_POLICY_BY_ORGTYPE.md
+
+# Build artifacts
+*.apk
+*.aab
+*.ipa
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.backup
+*.backup.*
+*-backup.*
+*.old
+*.old.*
+*-old.*
+
+# Keystore - NEVER COMMIT
+*.jks
+credentials.json
+.vercel
+.env*.local
+.env.eas.*
+env.local
+web/.next.bak*

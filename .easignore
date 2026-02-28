@@ -1,0 +1,74 @@
+# Ignore large local artifacts and non-build files to reduce EAS upload size
+
+# Native project folders - CRITICAL: EAS Prebuild generates fresh android/ios
+android/
+ios/
+
+# VCS
+.git
+.git/
+.github
+.github/
+
+# Build outputs and APKs
+build-*.apk
+artifacts/
+dist/
+builds/
+
+# Web folder (Next.js PWA - not needed for native build)
+web/
+web
+
+# Large non-essential folders (Note: be careful with case-sensitivity)
+# Exclude top-level CAPS data folder but NOT components/caps/ or services/caps/
+/CAPS/
+/CAPS
+docs/
+docs
+temp/
+temp
+archive/
+archive
+tests/
+tests
+
+# Supabase (functions deployed separately, not needed for native build)
+supabase/
+supabase
+
+# Local caches and Expo files
+.expo/
+.expo-shared/
+.expo-start.pid
+.expo/devices.json
+node_modules/.cache/
+
+# Local env and logs (EAS uses eas.json/env or EAS env store)
+.env.local
+.env.migration
+expo_logs.txt
+
+# Keystores, credentials (do not upload; EAS remote credentials are used)
+*.jks
+credentials.json
+@edudashpro__*.jks
+
+# Dev-only heavy reports and debug outputs (be specific to avoid excluding needed assets)
+database-*.json
+database-inspection-*.json
+database-sql-inspection-*.json
+memory_cleanup_*/
+
+# Supabase local temp and migration drafts (not needed for build)
+supabase/.temp/
+migrations_drafts/
+server-examples/
+
+# Scripts and local reports (optional to exclude)
+scripts/*.sh
+scripts/*.ts
+/reports/
+
+# Keep assets (png/jpg) and config JSON files included for the app to bundle correctly
+# Do NOT add global patterns like *.png or *.json here.

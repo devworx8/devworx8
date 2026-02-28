@@ -1,0 +1,533 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  Modal,
+  TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import { ApprovalWorkflowService, type ProofOfPayment, type PettyCashRequest, type ApprovalSummary } from '@/services/ApprovalWorkflowService';
+import { assertSupabase } from '@/lib/supabase';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
+
+type TabType = 'summary' | 'pops' | 'petty_cash' | 'history';
+
+interface School {
+  id: string;
+  name: string;
+}
+
+export default function PrincipalApprovalDashboard() {
+  const { user, profile, profileLoading, loading } = useAuth();
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
+
+  const navigationAttempted = useRef(false);
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const isStillLoading = loading || profileLoading;
+
+  const [school, setSchool] = useState<School | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('summary');
+  const [dataLoading, setDataLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [summary, setSummary] = useState<ApprovalSummary>({
+    pending_pops: 0,
+    pending_petty_cash: 0,
+    total_pending_amount: 0,
+    urgent_requests: 0,
+    overdue_receipts: 0,
+  });
+  const [pendingPOPs, setPendingPOPs] = useState<ProofOfPayment[]>([]);
+  const [pendingPettyCash, setPendingPettyCash] = useState<PettyCashRequest[]>([]);
+
+  const [selectedPOP, setSelectedPOP] = useState<ProofOfPayment | null>(null);
+  const [selectedPettyCash, setSelectedPettyCash] = useState<PettyCashRequest | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [approvedAmount, setApprovedAmount] = useState('');
+
+  useEffect(() => {
+    if (isStillLoading || navigationAttempted.current) return;
+    if (!user) {
+      navigationAttempted.current = true;
+      try { router.replace('/(auth)/sign-in'); } catch { try { router.replace('/sign-in'); } catch { /* non-fatal */ } }
+      return;
+    }
+    if (!orgId) {
+      navigationAttempted.current = true;
+      try { router.replace('/screens/principal-onboarding'); } catch { /* non-fatal */ }
+    }
+  }, [isStillLoading, user, orgId, profile]);
+
+  const loadApprovalData = async () => {
+    if (!user || !orgId) return;
+
+    try {
+      setDataLoading(true);
+
+      // Use orgId from profile (already resolved from organization_id || preschool_id)
+      const schoolId = orgId;
+
+      const { data: schoolData, error: schoolError } = await assertSupabase()
+        .from('preschools')
+        .select('id, name')
+        .eq('id', schoolId)
+        .single();
+
+      if (schoolError) {
+        logger.error('ApprovalDashboard', 'Error loading school:', schoolError);
+        return;
+      }
+
+      setSchool(schoolData);
+
+      const approvalSummary = await ApprovalWorkflowService.getApprovalSummary(schoolData.id);
+      setSummary(approvalSummary);
+
+      const pops = await ApprovalWorkflowService.getPendingPOPs(schoolData.id);
+      setPendingPOPs(pops);
+
+      const pettyCashRequests = await ApprovalWorkflowService.getPendingPettyCashRequests(schoolData.id);
+      setPendingPettyCash(pettyCashRequests);
+
+    } catch (error) {
+      logger.error('ApprovalDashboard', 'Error loading approval data:', error);
+      showAlert({
+        title: 'Error',
+        message: 'Failed to load approval data',
+        type: 'error',
+      });
+    } finally {
+      setDataLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (orgId && user) {
+      loadApprovalData();
+    }
+  }, [user?.id, orgId]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadApprovalData();
+  };
+
+  const handleApprovePOP = async (pop: ProofOfPayment) => {
+    if (!user || !school) return;
+
+    const success = await ApprovalWorkflowService.approvePOP(
+      pop.id,
+      user.id,
+      (user as any)?.user_metadata?.name || 'Principal',
+      reviewNotes
+    );
+
+    if (success) {
+      showAlert({
+        title: 'Success',
+        message: 'Payment proof approved successfully',
+        type: 'success',
+      });
+      setSelectedPOP(null);
+      setReviewNotes('');
+      await loadApprovalData();
+    } else {
+      showAlert({
+        title: 'Error',
+        message: 'Failed to approve payment proof',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRejectPOP = async (pop: ProofOfPayment) => {
+    if (!user || !school || !rejectionReason.trim()) {
+      showAlert({
+        title: 'Error',
+        message: 'Please provide a rejection reason',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const success = await ApprovalWorkflowService.rejectPOP(
+      pop.id,
+      user.id,
+      (user as any)?.user_metadata?.name || 'Principal',
+      rejectionReason,
+      reviewNotes
+    );
+
+    if (success) {
+      showAlert({
+        title: 'Success',
+        message: 'Payment proof rejected',
+        type: 'success',
+      });
+      setSelectedPOP(null);
+      setReviewNotes('');
+      setRejectionReason('');
+      await loadApprovalData();
+    } else {
+      showAlert({
+        title: 'Error',
+        message: 'Failed to reject payment proof',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleApprovePettyCash = async (request: PettyCashRequest) => {
+    if (!user || !school) return;
+
+    const approvedAmountValue = approvedAmount ? parseFloat(approvedAmount) : undefined;
+
+    const success = await ApprovalWorkflowService.approvePettyCashRequest(
+      request.id,
+      user.id,
+      (user as any)?.user_metadata?.name || 'Principal',
+      approvedAmountValue,
+      reviewNotes
+    );
+
+    if (success) {
+      showAlert({
+        title: 'Success',
+        message: 'Petty cash request approved',
+        type: 'success',
+      });
+      setSelectedPettyCash(null);
+      setReviewNotes('');
+      setApprovedAmount('');
+      await loadApprovalData();
+    } else {
+      showAlert({
+        title: 'Error',
+        message: 'Failed to approve petty cash request',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRejectPettyCash = async (request: PettyCashRequest) => {
+    if (!user || !school || !rejectionReason.trim()) {
+      showAlert({
+        title: 'Error',
+        message: 'Please provide a rejection reason',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const success = await ApprovalWorkflowService.rejectPettyCashRequest(
+      request.id,
+      user.id,
+      (user as any)?.user_metadata?.name || 'Principal',
+      rejectionReason,
+      reviewNotes
+    );
+
+    if (success) {
+      showAlert({
+        title: 'Success',
+        message: 'Petty cash request rejected',
+        type: 'success',
+      });
+      setSelectedPettyCash(null);
+      setRejectionReason('');
+      setReviewNotes('');
+      await loadApprovalData();
+    } else {
+      showAlert({
+        title: 'Error',
+        message: 'Failed to reject petty cash request',
+        type: 'error',
+      });
+    }
+  };
+
+  const styles = createStyles(theme);
+
+  if (isStillLoading || !user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!orgId) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+          <TouchableOpacity onPress={() => { try { router.replace('/screens/principal-onboarding'); } catch { /* non-fatal */ } }}>
+            <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.header}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => {
+              try { router.back(); }
+              catch { try { router.replace('/screens/principal-dashboard'); } catch { /* non-fatal */ } }
+            }}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleWrap}>
+            <Text style={[styles.title, { color: theme.text }]}>{t('approvals.header', { defaultValue: 'Approvals' })}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t('approvals.subtitle', { defaultValue: 'Review and manage pending requests' })}</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={onRefresh}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh"
+          >
+            <Ionicons name="refresh" size={20} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.tabs}>
+        {(['summary', 'pops', 'petty_cash', 'history'] as TabType[]).map((tab) => (
+          <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && { borderBottomColor: theme.primary }]} onPress={() => setActiveTab(tab)}>
+            <Text style={[styles.tabText, { color: activeTab === tab ? theme.primary : theme.textSecondary }]}>
+              {tab.replace('_', ' ').toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView style={{ flex: 1 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {activeTab === 'summary' && (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>{t('approvals.summary', { defaultValue: 'Summary' })}</Text>
+            <View style={styles.summaryGrid}>
+              <SummaryItem label={t('approvals.pending_pops', { defaultValue: 'Pending POPs' })} value={summary.pending_pops} theme={theme} icon="document-attach" />
+              <SummaryItem label={t('approvals.pending_petty_cash', { defaultValue: 'Pending Petty Cash' })} value={summary.pending_petty_cash} theme={theme} icon="wallet" />
+              <SummaryItem label={t('approvals.total_pending', { defaultValue: 'Total Pending' })} value={`R${summary.total_pending_amount.toFixed(2)}`} theme={theme} icon="cash" />
+              <SummaryItem label={t('approvals.urgent', { defaultValue: 'Urgent' })} value={summary.urgent_requests} theme={theme} icon="alert" />
+              <SummaryItem label={t('approvals.overdue_receipts', { defaultValue: 'Overdue Receipts' })} value={summary.overdue_receipts} theme={theme} icon="time" />
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'pops' && (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Payment Proofs</Text>
+            {pendingPOPs.length === 0 ? (
+              <Text style={{ color: theme.textSecondary }}>No pending POPs.</Text>
+            ) : (
+              pendingPOPs.map((pop) => {
+                const paidDateLabel = pop.payment_date ? new Date(pop.payment_date).toLocaleDateString('en-ZA') : 'Unknown date';
+                const billingMonthLabel = pop.payment_for_month
+                  ? new Date(pop.payment_for_month).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
+                  : null;
+                return (
+                  <TouchableOpacity key={pop.id} style={styles.listItem} onPress={() => setSelectedPOP(pop)}>
+                    <View style={styles.listIcon}><Ionicons name="document-attach" size={18} color={theme.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.text, fontWeight: '600' }}>{pop.student_name || 'Student'}</Text>
+                      <Text style={{ color: theme.textSecondary }}>
+                        R{pop.payment_amount.toFixed(2)} • Paid {paidDateLabel}
+                        {billingMonthLabel ? ` • For ${billingMonthLabel}` : ''}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {activeTab === 'petty_cash' && (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Petty Cash Requests</Text>
+            {pendingPettyCash.length === 0 ? (
+              <Text style={{ color: theme.textSecondary }}>No pending petty cash requests.</Text>
+            ) : (
+              pendingPettyCash.map((req) => (
+                <TouchableOpacity key={req.id} style={styles.listItem} onPress={() => setSelectedPettyCash(req)}>
+                  <View style={styles.listIcon}><Ionicons name="wallet" size={18} color={theme.primary} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontWeight: '600' }}>{req.requestor_name}</Text>
+                    <Text style={{ color: theme.textSecondary }}>R{req.amount.toFixed(2)} • {req.category}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* POP Review Modal */}
+      <Modal visible={!!selectedPOP} animationType="slide" onRequestClose={() => setSelectedPOP(null)}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.background }]}> 
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setSelectedPOP(null)}><Ionicons name="close" size={22} color={theme.text} /></TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Review Payment Proof</Text>
+            <View style={{ width: 22 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+            <Text style={[styles.label, { color: theme.text }]}>Review Notes</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={reviewNotes}
+              onChangeText={setReviewNotes}
+              placeholder="Add any notes for this review"
+              placeholderTextColor={theme.textSecondary}
+              multiline
+            />
+
+            <Text style={[styles.label, { color: theme.text }]}>Rejection Reason (optional)</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder="Provide a reason if rejecting"
+              placeholderTextColor={theme.textSecondary}
+              multiline
+            />
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity style={[styles.btn, { backgroundColor: '#EF4444' }]} onPress={() => selectedPOP && handleRejectPOP(selectedPOP)}>
+              <Text style={styles.btnText}>Reject</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={() => selectedPOP && handleApprovePOP(selectedPOP)}>
+              <Text style={[styles.btnText, { color: theme.onPrimary }]}>Approve</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Petty Cash Review Modal */}
+      <Modal visible={!!selectedPettyCash} animationType="slide" onRequestClose={() => setSelectedPettyCash(null)}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.background }]}> 
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setSelectedPettyCash(null)}><Ionicons name="close" size={22} color={theme.text} /></TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Review Petty Cash</Text>
+            <View style={{ width: 22 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+            <Text style={[styles.label, { color: theme.text }]}>Approval Notes</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={reviewNotes}
+              onChangeText={setReviewNotes}
+              placeholder="Add any notes for this review"
+              placeholderTextColor={theme.textSecondary}
+              multiline
+            />
+
+            <Text style={[styles.label, { color: theme.text }]}>Approved Amount (optional)</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={approvedAmount}
+              onChangeText={setApprovedAmount}
+              placeholder="e.g. 500.00"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="decimal-pad"
+            />
+
+            <Text style={[styles.label, { color: theme.text }]}>Rejection Reason (optional)</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder="Provide a reason if rejecting"
+              placeholderTextColor={theme.textSecondary}
+              multiline
+            />
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity style={[styles.btn, { backgroundColor: '#EF4444' }]} onPress={() => selectedPettyCash && handleRejectPettyCash(selectedPettyCash)}>
+              <Text style={styles.btnText}>Reject</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={() => selectedPettyCash && handleApprovePettyCash(selectedPettyCash)}>
+              <Text style={[styles.btnText, { color: theme.onPrimary }]}>Approve</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <AlertModal {...alertProps} />
+    </SafeAreaView>
+  );
+}
+
+function SummaryItem({ label, value, theme, icon }: { label: string; value: string | number; theme: any; icon: any }) {
+  return (
+    <View style={{ alignItems: 'center', padding: 12, flex: 1 }}>
+      <Ionicons name={icon} size={20} color={theme.primary} />
+      <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', marginTop: 6 }}>{String(value)}</Text>
+      <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{label}</Text>
+    </View>
+  );
+}
+
+const createStyles = (theme: any) => StyleSheet.create({
+  container: { flex: 1 },
+  header: { padding: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerTitleWrap: { flex: 1 },
+  headerIconBtn: { padding: 10, borderRadius: 999, backgroundColor: theme.surface },
+  title: { fontSize: 22, fontWeight: '800' },
+  subtitle: { marginTop: 4 },
+  tabs: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabText: { fontWeight: '700' },
+  card: { margin: 16, padding: 16, borderRadius: 12, backgroundColor: theme.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border },
+  cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomColor: theme.border, borderBottomWidth: StyleSheet.hairlineWidth },
+  listIcon: { marginRight: 10, backgroundColor: theme.elevated, borderRadius: 10, padding: 8 },
+  modalContainer: { flex: 1 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  label: { marginTop: 12, marginBottom: 6, fontWeight: '600' },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 44 },
+  modalFooter: { flexDirection: 'row', gap: 12, padding: 16 },
+  btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center' },
+  btnText: { color: '#fff', fontWeight: '700' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { fontSize: 16 },
+});

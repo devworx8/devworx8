@@ -1,0 +1,69 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "types": ["react", "react-native", "jest"],
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext", "dom"],
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true
+  },
+  "exclude": [
+    "scripts/**/*",
+    "supabase/**/*",
+    "temp/**/*",
+    "docs/**/*",
+    "archive/**/*",
+    "legacy/**/*",
+    "check-*.js",
+    "test-*.js",
+    "create-*.sql",
+    "lib/api/**/*",
+    "lib/api/__tests__/**/*",
+    "lib/security/__tests__/**/*",
+    "components/whatsapp/**/*",
+    "components/settings/PushNotificationTester.tsx",
+    "components/ui/LoadingExamples.tsx",
+    "lib/NotificationService.ts",
+    "lib/auth/useProfile.ts",
+    "lib/services/EducationalWorkflowService.ts",
+    "lib/services/AssignmentService.ts",
+    "lib/services/SubmissionService.ts",
+    "lib/services/invoiceService.ts",
+    "lib/security/validation.ts",
+    "utils/biometricDebugExtended.ts",
+    "app/onboarding/**/*",
+    "app/screens/super-admin-analytics.tsx",
+    "app/screens/super-admin-whatsapp.tsx",
+    "services/GoogleCalendarService.ts",
+    "services/SMSService.ts",
+    "services/DashWhatsAppIntegration.ts"
+  ],
+  "include": [
+    "types/deno-std.d.ts",
+    "types/**/*.d.ts",
+    "components/**/*",
+    "features/**/*",
+    "lib/voice/**/*",
+    "services/**/*",
+    "lib/**/*",
+    "hooks/**/*",
+    "contexts/**/*",
+    "utils/**/*",
+    "app/**/*",
+    "tests/**/*"
+  ]
+}

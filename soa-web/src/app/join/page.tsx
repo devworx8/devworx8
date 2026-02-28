@@ -1,0 +1,1160 @@
+'use client';
+
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
+import { getSupabase } from '@/lib/supabase';
+import { generateDeepLink, getPlatformDownloadUrl, isMobileDevice } from '@/lib/deepLinks';
+import {
+  Leaf,
+  Ticket,
+  ArrowRight,
+  CheckCircle2,
+  Mail,
+  Phone,
+  User,
+  Users,
+  Shield,
+  Loader2,
+  AlertCircle,
+  Download,
+  ExternalLink,
+  MapPin,
+  X,
+  Building2,
+  Heart,
+  Smartphone,
+  Calendar,
+  Home,
+  CreditCard,
+  Lock,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+
+// Organization info returned from database
+interface OrganizationInfo {
+  id: string;
+  code: string;
+  organization_id: string;
+  organization_name: string;
+  region_id: string;
+  region_name: string;
+  region_code: string;
+  allowed_member_types: string[];
+  member_count: number;
+}
+
+// All available member types with their display info
+const memberTypeConfig: Record<string, { label: string; icon: any; description: string }> = {
+  learner: { label: 'Learner', icon: User, description: 'New to SOA, eager to learn' },
+  volunteer: { label: 'Volunteer', icon: Heart, description: 'Contribute your time' },
+  facilitator: { label: 'Facilitator', icon: Users, description: 'Guide and teach learners' },
+  mentor: { label: 'Mentor', icon: Shield, description: 'Senior leadership' },
+  staff: { label: 'Staff', icon: Building2, description: 'SOA employee' },
+  executive: { label: 'Executive', icon: Shield, description: 'Leadership team' },
+};
+
+type MemberType = 'learner' | 'volunteer' | 'facilitator' | 'mentor' | 'staff' | 'executive';
+
+interface FormData {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  id_number: string;
+  date_of_birth: string;
+  physical_address: string;
+  member_type: MemberType;
+  password: string;
+  confirm_password: string;
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto"></div>
+          <p className="text-white mt-4">Loading...</p>
+        </div>
+      </div>
+    }>
+      <JoinPageContent />
+    </Suspense>
+  );
+}
+
+function JoinPageContent() {
+  const searchParams = useSearchParams();
+  const [inviteCode, setInviteCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
+  const [codeError, setCodeError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [memberNumber, setMemberNumber] = useState('');
+  const [isComplete, setIsComplete] = useState(false);
+
+  const [formData, setFormData] = useState<FormData>({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    id_number: '',
+    date_of_birth: '',
+    physical_address: '',
+    member_type: 'learner',
+    password: '',
+    confirm_password: '',
+  });
+  
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Auto-fill invite code from URL params and verify
+  useEffect(() => {
+    const codeParam = searchParams?.get('code');
+    console.log('[Join] URL code param:', codeParam);
+    
+    // Only auto-verify if we have a valid code and haven't already verified
+    if (codeParam && codeParam.trim().length >= 5 && !orgInfo && !isVerifying) {
+      const cleanCode = codeParam.trim().toUpperCase();
+      console.log('[Join] Auto-filling code:', cleanCode);
+      setInviteCode(cleanCode);
+      
+      // Auto-verify the code immediately
+      verifyCode(cleanCode);
+    } else if (codeParam && codeParam.trim().length > 0 && codeParam.trim().length < 5) {
+      // Code exists but is too short - still show it but don't auto-verify
+      setInviteCode(codeParam.trim().toUpperCase());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const updateField = (field: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value as any }));
+    setFormError('');
+  };
+
+  const verifyCode = async (codeToVerify?: string) => {
+    const code = codeToVerify || inviteCode;
+    if (!code || code.length < 5) {
+      setCodeError('Please enter a valid invite code');
+      return;
+    }
+
+    setIsVerifying(true);
+    setCodeError('');
+
+    try {
+      const supabase = getSupabase();
+      const codeUpper = code.toUpperCase();
+      
+      // Update inviteCode state if provided as parameter
+      if (codeToVerify && codeToVerify !== inviteCode) {
+        setInviteCode(codeToVerify);
+      }
+
+      console.log('[Join] Verifying code:', codeUpper);
+
+      // First try join_requests table (youth wing invites with temp passwords)
+      const { data: joinRequestData, error: joinRequestError } = await supabase
+        .from('join_requests')
+        .select(`
+          id,
+          invite_code,
+          organization_id,
+          region_id,
+          invited_by,
+          temp_password,
+          requested_role,
+          status,
+          expires_at
+        `)
+        .eq('invite_code', codeUpper)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      // Debug logging
+      if (joinRequestError) {
+        console.error('[Join] join_requests query error:', joinRequestError.code, joinRequestError.message);
+      }
+      console.log('[Join] joinRequestData:', joinRequestData ? 'Found' : 'Not found');
+
+      if (!joinRequestError && joinRequestData) {
+        // Check if code has expired
+        if (joinRequestData.expires_at && new Date(joinRequestData.expires_at) < new Date()) {
+          setCodeError('This invite code has expired.');
+          setIsVerifying(false);
+          return;
+        }
+
+        // Fetch organization separately to avoid join RLS issues
+        let org: any = null;
+        if (joinRequestData.organization_id) {
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('id, name, logo_url')
+            .eq('id', joinRequestData.organization_id)
+            .maybeSingle();
+          org = orgData;
+        }
+
+        // Get region info - prioritize region_id from join_request, then inviter's region, then first region
+        let orgRegionData: any = null;
+        
+        // 1. Try region_id directly stored in join_request
+        if (joinRequestData.region_id) {
+          const { data: regionData } = await supabase
+            .from('organization_regions')
+            .select('id, name, code, province_code')
+            .eq('id', joinRequestData.region_id)
+            .maybeSingle();
+          orgRegionData = regionData;
+          console.log('[Join] Using region from join_request:', regionData?.name);
+        }
+        
+        // 2. Fall back to inviter's region
+        if (!orgRegionData && joinRequestData.invited_by) {
+          const { data: inviterMember } = await supabase
+            .from('organization_members')
+            .select('region_id')
+            .eq('user_id', joinRequestData.invited_by)
+            .eq('organization_id', joinRequestData.organization_id)
+            .maybeSingle();
+          
+          if (inviterMember?.region_id) {
+            const { data: regionData } = await supabase
+              .from('organization_regions')
+              .select('id, name, code, province_code')
+              .eq('id', inviterMember.region_id)
+              .maybeSingle();
+            orgRegionData = regionData;
+            console.log('[Join] Using inviter region:', regionData?.name);
+          }
+        }
+        
+        // 3. Last resort: first region for the organization (alphabetically)
+        if (!orgRegionData) {
+          const { data: fallbackRegion } = await supabase
+            .from('organization_regions')
+            .select('id, name, code, province_code')
+            .eq('organization_id', joinRequestData.organization_id)
+            .order('name', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          orgRegionData = fallbackRegion;
+          console.log('[Join] Using fallback region:', fallbackRegion?.name);
+        }
+
+        const { count: memberCount } = await supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', joinRequestData.organization_id);
+
+        const requestedRole = joinRequestData.requested_role || 'learner';
+        const roleMap: Record<string, MemberType> = {
+          'learner': 'learner',
+          'youth_member': 'volunteer',
+          'facilitator': 'facilitator',
+          'mentor': 'mentor',
+        };
+        const mappedType = roleMap[requestedRole] || 'learner';
+
+        setOrgInfo({
+          id: joinRequestData.id,
+          code: joinRequestData.invite_code,
+          organization_id: joinRequestData.organization_id,
+          organization_name: org?.name || 'Soil of Africa',
+          region_id: orgRegionData?.id || '',
+          region_name: orgRegionData?.name || 'Main Region',
+          region_code: orgRegionData?.province_code || orgRegionData?.code || 'XX',
+          allowed_member_types: [mappedType],
+          member_count: memberCount || 0,
+        });
+
+        // Pre-fill member_type
+        setFormData(prev => ({ ...prev, member_type: mappedType }));
+
+        setIsVerifying(false);
+        return;
+      }
+      
+      // Log join_requests error for debugging (but continue to region_invite_codes fallback)
+      if (joinRequestError) {
+        console.warn('[Join] join_requests failed, trying region_invite_codes:', joinRequestError.message);
+      }
+      
+      // Fallback: Query the region_invite_codes table
+      const { data: inviteData, error: inviteError } = await supabase
+        .from('region_invite_codes')
+        .select(`
+          id,
+          code,
+          organization_id,
+          region_id,
+          allowed_member_types,
+          is_active,
+          organizations:organization_id (
+            id,
+            name
+          ),
+          organization_regions:region_id (
+            id,
+            name,
+            code
+          )
+        `)
+        .eq('code', codeUpper)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (inviteError || !inviteData) {
+        console.error('[Join] Both queries failed:', { joinRequestError, inviteError });
+        setCodeError('Invalid invite code. Please check and try again.');
+        return;
+      }
+
+      // Get member count for this region
+      const { count: memberCount } = await supabase
+        .from('organization_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', inviteData.organization_id)
+        .eq('region_id', inviteData.region_id);
+
+      const org = inviteData.organizations as any;
+      const region = inviteData.organization_regions as any;
+
+      const allowedTypes = inviteData.allowed_member_types || ['learner'];
+      const defaultType = allowedTypes.includes('learner') ? 'learner' : (allowedTypes[0] as MemberType);
+
+      setOrgInfo({
+        id: inviteData.id,
+        code: inviteData.code,
+        organization_id: inviteData.organization_id,
+        organization_name: org?.name || 'Soil of Africa',
+        region_id: inviteData.region_id,
+        region_name: region?.name || 'Unknown Region',
+        region_code: region?.code || 'XX',
+        allowed_member_types: allowedTypes,
+        member_count: memberCount || 0,
+      });
+
+      // Pre-fill member_type
+      setFormData(prev => ({ ...prev, member_type: defaultType }));
+    } catch (error: any) {
+      console.error('[Join] Code verification error:', error);
+      if (error.message?.includes('Supabase URL')) {
+        setCodeError('Service temporarily unavailable. Please try again later.');
+      } else {
+        setCodeError('Failed to verify code. Please try again.');
+      }
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const resetCode = () => {
+    setOrgInfo(null);
+    setInviteCode('');
+    setCodeError('');
+  };
+
+  const handleSubmit = async () => {
+    // Validate
+    if (!formData.first_name || !formData.last_name) {
+      setFormError('Please enter your full name');
+      return;
+    }
+    if (!formData.email || !formData.email.includes('@')) {
+      setFormError('Please enter a valid email address');
+      return;
+    }
+    if (!formData.phone) {
+      setFormError('Please enter your phone number');
+      return;
+    }
+    if (!formData.id_number) {
+      setFormError('Please enter your ID or passport number');
+      return;
+    }
+    if (!formData.date_of_birth) {
+      setFormError('Please enter your date of birth');
+      return;
+    }
+    if (!formData.physical_address) {
+      setFormError('Please enter your home address');
+      return;
+    }
+    
+    // Password validation
+    if (!formData.password) {
+      setFormError('Please create a password');
+      return;
+    }
+    if (formData.password.length < 8) {
+      setFormError('Password must be at least 8 characters long');
+      return;
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      setFormError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      setFormError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(formData.password)) {
+      setFormError('Password must contain at least one number');
+      return;
+    }
+    if (formData.password !== formData.confirm_password) {
+      setFormError('Passwords do not match');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError('');
+
+    try {
+      const supabase = getSupabase();
+      
+      // Check for duplicate email in this organization
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:390',message:'Checking for duplicate email',data:{email:formData.email.toLowerCase(),orgId:orgInfo?.organization_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+      // Use maybeSingle() instead of single() to avoid 406 error when no results
+      const { data: existingEmail, error: emailCheckError } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('organization_id', orgInfo?.organization_id)
+        .eq('email', formData.email.toLowerCase())
+        .maybeSingle();
+
+      // Only fail if we found an existing email (not if there was an error or no result)
+      if (existingEmail && !emailCheckError) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:400',message:'Duplicate email found',data:{email:formData.email.toLowerCase(),existingId:existingEmail.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
+        setFormError('This email is already registered. Please use a different email or contact your regional manager.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Check for duplicate ID number in this organization (like register page does)
+      if (formData.id_number && formData.id_number.trim()) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:407',message:'Checking for duplicate ID number',data:{idNumber:formData.id_number.trim(),orgId:orgInfo?.organization_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
+        const { data: existingIdNumber, error: idCheckError } = await supabase
+          .from('organization_members')
+          .select('id, id_number, member_number, first_name, last_name')
+          .eq('organization_id', orgInfo?.organization_id)
+          .eq('id_number', formData.id_number.trim())
+          .maybeSingle();
+        
+        if (existingIdNumber && !idCheckError) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:415',message:'Duplicate ID number found',data:{idNumber:formData.id_number.trim(),existingId:existingIdNumber.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          setFormError('This ID number is already registered. Each person can only register once, regardless of region.');
+          setIsSubmitting(false);
+          return;
+        }
+        
+        if (idCheckError) {
+          console.warn('[Join] ID number check error (continuing anyway):', idCheckError.message);
+        }
+      }
+      
+      // Log any error for debugging but continue - the RPC will also check for duplicates
+      if (emailCheckError) {
+        console.warn('[Join] Email check error (continuing anyway):', emailCheckError.message);
+      }
+      
+      // 1. Create user in Supabase Auth with user's chosen password
+      // User sets their own password during registration - no need for password reset emails
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
+        options: {
+          data: {
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            phone: formData.phone,
+          },
+          // After email confirmation, redirect to sign-in page (they already have password)
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+        },
+      });
+
+      if (authError) throw authError;
+      
+      if (!authData.user?.id) {
+        throw new Error('Failed to create user account - no user ID returned');
+      }
+
+      // 1.5. Wait for user to be committed to auth.users (timing issue fix)
+      // Supabase auth.signUp is eventually consistent - the user may not immediately appear in auth.users
+      // Increased from 1s to 2s based on production observation of USER_NOT_FOUND errors
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:430',message:'Waiting for auth.user propagation',data:{userId:authData.user?.id,waitMs:2000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H5'})}).catch(()=>{});
+      // #endregion
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+      // User sets their own password during registration - much simpler flow!
+      // They just need to confirm their email, then they can sign in directly
+
+      // 2. Generate member number
+      const year = new Date().getFullYear().toString().slice(-2);
+      const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
+      const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
+
+      // 3. Create membership record using RPC with retry for timing issues
+      // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
+      // Wing is automatically set by RPC function based on member_type
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:456',message:'Before RPC call',data:{userId:authData.user.id,orgId:orgInfo?.organization_id,memberType:formData.member_type,hasDateOfBirth:!!formData.date_of_birth,hasPhysicalAddress:!!formData.physical_address},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H5'})}).catch(()=>{});
+      // #endregion
+      let rpcResult: any = null;
+      let rpcError: any = null;
+      let retries = 0;
+      const maxRetries = 5; // Increased from 3 to give more time for user propagation
+      
+      while (retries < maxRetries) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:463',message:'RPC call attempt',data:{retry:retries+1,maxRetries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        const { data, error } = await supabase.rpc('register_organization_member', {
+          p_organization_id: orgInfo?.organization_id,
+          p_user_id: authData.user.id,
+          p_region_id: orgInfo?.region_id || null,
+          p_member_number: generatedMemberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: 'standard',
+          p_membership_status: 'pending_verification', // Must match RLS policy requirement
+          p_first_name: formData.first_name,
+          p_last_name: formData.last_name,
+          p_email: formData.email.toLowerCase(),
+          p_phone: formData.phone || null,
+          p_id_number: formData.id_number || null,
+          p_date_of_birth: formData.date_of_birth || null,
+          p_physical_address: formData.physical_address || null,
+          p_role: 'member',
+          p_invite_code_used: inviteCode.toUpperCase(),
+          p_joined_via: 'invite_code',
+        });
+        
+        rpcResult = data;
+        rpcError = error;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:485',message:'After RPC call',data:{hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code,error:rpcError?.message,rpcError:rpcResult?.error,retry:retries+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        
+        // If RPC error or user not found, retry after a delay
+        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`[WebJoin] Retry attempt ${retries}/${maxRetries} after delay...`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:492',message:'Retrying RPC after delay',data:{retry:retries,delayMs:1000*retries},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+            continue;
+          }
+        } else {
+          // Success or non-retryable error
+          break;
+        }
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:502',message:'RPC retries complete',data:{finalRetries:retries,hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+      if (rpcError) throw rpcError;
+      if (!rpcResult?.success) {
+        // Handle USER_NOT_FOUND with helpful message
+        if (rpcResult?.code === 'USER_NOT_FOUND') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:506',message:'USER_NOT_FOUND after all retries',data:{retries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+          // #endregion
+          throw new Error('Your account is being created. Please wait a moment and try again, or check your email for a confirmation link.');
+        }
+        throw new Error(rpcResult?.error || 'Failed to create membership record');
+      }
+      
+      // Handle existing member case
+      if (rpcResult.action === 'existing') {
+        throw new Error('You are already a member. Please login to your existing account instead.');
+      }
+
+      // Use returned member_number
+      const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
+
+      // 5. Increment the usage count on the invite code
+      await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
+
+      setMemberNumber(finalMemberNumber);
+      setIsComplete(true);
+    } catch (err: any) {
+      console.error('Join error:', err);
+      // Handle specific error cases
+      const message = err?.message?.toLowerCase() || '';
+      const code = err?.code || '';
+      
+      if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
+        if (message.includes('email')) {
+          setFormError('This email is already registered. Please use a different email or contact support.');
+        } else {
+          setFormError('You are already a member. Please login to your existing account instead.');
+        }
+      } else if (message.includes('user already registered')) {
+        setFormError('An account with this email already exists. Please login instead.');
+      } else {
+        setFormError(err.message || 'Failed to join. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+
+      <main className="pt-24 pb-20">
+        <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Success State */}
+          {isComplete ? (
+            <ScaleIn>
+              <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
+                <motion.div 
+                  className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                >
+                  <CheckCircle2 className="w-10 h-10 text-soa-primary" />
+                </motion.div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Welcome to {orgInfo?.region_name} Region!
+              </h2>
+              <p className="text-gray-600 mb-6">
+                You've successfully joined Soil of Africa. Your membership is pending approval by
+                the regional manager.
+              </p>
+
+              {/* Member Number */}
+              <div className="bg-soa-light rounded-xl p-6 mb-8">
+                <p className="text-sm text-soa-dark mb-2">Your Member Number</p>
+                <p className="text-2xl font-bold text-soa-primary font-mono">{memberNumber}</p>
+              </div>
+
+              {/* What's Next */}
+              <div className="bg-gray-50 rounded-xl p-6 text-left mb-8">
+                <h3 className="font-semibold text-gray-900 mb-4">What's Next?</h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                      1
+                    </div>
+                    <span className="text-gray-600"><strong>Check your email</strong> for a confirmation link (check spam folder too)</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                      2
+                    </div>
+                    <span className="text-gray-600">
+                      Click the link to <strong>verify your email address</strong>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                      3
+                    </div>
+                    <span className="text-gray-600">Download the app and <strong>sign in with your email and password</strong></span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Open App / Download CTA */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                {isMobileDevice() ? (
+                  <>
+                <a
+                      href={generateDeepLink({
+                        flow: 'join',
+                        email: formData.email.toLowerCase(),
+                        memberNumber: memberNumber,
+                        organizationId: orgInfo?.organization_id,
+                      })}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-soa-primary text-white rounded-xl font-medium hover:bg-soa-dark transition"
+                    >
+                      <Smartphone className="w-5 h-5" />
+                      Open in App
+                    </a>
+                    <a
+                      href={getPlatformDownloadUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download App
+                    </a>
+                  </>
+                ) : (
+                  <a
+                    href={getPlatformDownloadUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                >
+                  <Download className="w-5 h-5" />
+                    Download the App
+                </a>
+                )}
+                <Link
+                  href="/"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 text-gray-700 border border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition"
+                >
+                  Back to Home
+                </Link>
+              </div>
+
+              <p className="mt-8 text-sm text-gray-500">
+                Manage your membership on{' '}
+                <a
+                  href="https://edudashpro.org.za"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-edudash-primary hover:underline inline-flex items-center gap-1"
+                >
+                  EduDash Pro
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </p>
+              </div>
+            </ScaleIn>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="text-center mb-8">
+                <ScaleIn>
+                  <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Ticket className="w-10 h-10 text-white" />
+                  </div>
+                </ScaleIn>
+                <FadeIn delay={0.1}>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Join with Invite Code</h1>
+                </FadeIn>
+                <SlideIn direction="up" delay={0.2}>
+                  <p className="text-gray-500">
+                    Enter the invite code you received from your regional manager
+                  </p>
+                </SlideIn>
+              </div>
+
+              {/* Code Input (if not verified) */}
+              {!orgInfo && (
+                <SlideIn direction="up" delay={0.3}>
+                  <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Invite Code
+                  </label>
+                  <div
+                    className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 transition ${
+                      codeError
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-gray-200 focus-within:border-soa-primary'
+                    }`}
+                  >
+                    <Ticket className={`w-5 h-5 ${codeError ? 'text-red-400' : 'text-gray-400'}`} />
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => {
+                        setInviteCode(e.target.value.toUpperCase());
+                        setCodeError('');
+                      }}
+                      placeholder="e.g., SOA-GP-2025"
+                      className="flex-1 text-lg font-mono tracking-wider bg-transparent outline-none placeholder:text-gray-300"
+                    />
+                    {inviteCode && (
+                      <button type="button" onClick={() => setInviteCode('')}>
+                        <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+
+                  {codeError && (
+                    <div className="flex items-center gap-2 mt-2 text-red-600 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{codeError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => verifyCode()}
+                    disabled={isVerifying || inviteCode.length < 5}
+                    className="w-full mt-6 inline-flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-soa-primary to-soa-secondary text-white rounded-xl font-semibold hover:opacity-90 transition disabled:opacity-50"
+                  >
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>
+                        Verify Code
+                        <ArrowRight className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Help text */}
+                  <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+                    <p className="text-sm text-gray-600">
+                      Don't have an invite code? Contact your regional manager or{' '}
+                      <Link href="/register" className="text-soa-primary hover:underline">
+                        register directly
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                  </div>
+                </SlideIn>
+              )}
+
+              {/* Verified Organization + Form */}
+              {orgInfo && (
+                <motion.div 
+                  className="space-y-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  {/* Verified Org Card */}
+                  <div className="bg-white rounded-2xl shadow-sm p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-soa-light text-soa-primary rounded-full text-sm font-medium">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Verified Organization
+                      </div>
+                      <button
+                        type="button"
+                        onClick={resetCode}
+                        className="text-sm text-soa-primary hover:underline"
+                      >
+                        Change Code
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center">
+                        <Leaf className="w-8 h-8 text-soa-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">{orgInfo.organization_name}</h3>
+                        <p className="text-soa-primary font-medium">{orgInfo.region_name} Region</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6 mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        {orgInfo.member_count} members
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4" />
+                        {orgInfo.region_code}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Join Form */}
+                  <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8">
+                    <h3 className="text-lg font-bold text-gray-900 mb-6">Your Information</h3>
+
+                    {formError && (
+                      <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+                        <AlertCircle className="w-5 h-5 shrink-0" />
+                        <span>{formError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            First Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.first_name}
+                            onChange={(e) => updateField('first_name', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="John"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Last Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.last_name}
+                            onChange={(e) => updateField('last_name', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="Doe"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email Address *
+                        </label>
+                        <div className="relative">
+                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => updateField('email', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="john@example.com"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone Number *
+                        </label>
+                        <div className="relative">
+                          <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="tel"
+                            value={formData.phone}
+                            onChange={(e) => updateField('phone', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="+27 82 123 4567"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ID/Passport Number *
+                        </label>
+                        <div className="relative">
+                          <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={formData.id_number}
+                            onChange={(e) => updateField('id_number', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="9001011234567"
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">SA ID (13 digits) or passport number</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Date of Birth *
+                        </label>
+                        <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="date"
+                            value={formData.date_of_birth}
+                            onChange={(e) => updateField('date_of_birth', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            max={new Date().toISOString().split('T')[0]}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Home Address *
+                        </label>
+                        <div className="relative">
+                          <Home className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
+                          <textarea
+                            value={formData.physical_address}
+                            onChange={(e) => updateField('physical_address', e.target.value)}
+                            rows={3}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent resize-none"
+                            placeholder="123 Main Street, Suburb, City, Province"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Member Type Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Join as *
+                        </label>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                          {orgInfo.allowed_member_types.map((type) => {
+                            const config = memberTypeConfig[type];
+                            if (!config) return null;
+                            const Icon = config.icon;
+                            return (
+                              <button
+                                key={type}
+                                type="button"
+                                onClick={() => updateField('member_type', type)}
+                                className={`p-3 rounded-xl border-2 text-center transition ${
+                                  formData.member_type === type
+                                    ? 'border-soa-primary bg-soa-light'
+                                    : 'border-gray-200 hover:border-soa-primary/50'
+                                }`}
+                              >
+                                <Icon
+                                  className={`w-5 h-5 mx-auto mb-1 ${
+                                    formData.member_type === type
+                                      ? 'text-soa-primary'
+                                      : 'text-gray-400'
+                                  }`}
+                                />
+                                <span
+                                  className={`text-sm font-medium ${
+                                    formData.member_type === type
+                                      ? 'text-soa-primary'
+                                      : 'text-gray-700'
+                                  }`}
+                                >
+                                  {config.label}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Password Fields */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-4">Create Your Password</h4>
+                        
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Password *
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={formData.password}
+                                onChange={(e) => updateField('password', e.target.value)}
+                                className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                                placeholder="Create a strong password"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                              </button>
+                            </div>
+                            <div className="mt-2 space-y-1 text-xs">
+                              <p className={formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}>
+                                • At least 8 characters
+                              </p>
+                              <p className={/[A-Z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One uppercase letter
+                              </p>
+                              <p className={/[a-z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One lowercase letter
+                              </p>
+                              <p className={/[0-9]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One number
+                              </p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Confirm Password *
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={formData.confirm_password}
+                                onChange={(e) => updateField('confirm_password', e.target.value)}
+                                className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent ${
+                                  formData.confirm_password && formData.password !== formData.confirm_password
+                                    ? 'border-red-300 bg-red-50'
+                                    : 'border-gray-200'
+                                }`}
+                                placeholder="Confirm your password"
+                              />
+                            </div>
+                            {formData.confirm_password && formData.password !== formData.confirm_password && (
+                              <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
+                            )}
+                            {formData.confirm_password && formData.password === formData.confirm_password && formData.password.length >= 8 && (
+                              <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Passwords match
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Terms */}
+                    <div className="mt-6 p-4 bg-gray-50 rounded-xl text-sm text-gray-600">
+                      By joining, you agree to Soil of Africa's Terms of Service and Privacy Policy.
+                      Your membership will be reviewed by the regional manager.
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSubmitting}
+                      className="w-full mt-6 inline-flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-soa-primary to-soa-secondary text-white rounded-xl font-semibold hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Joining...
+                        </>
+                      ) : (
+                        <>
+                          Join {orgInfo.region_name} Region
+                          <ArrowRight className="w-5 h-5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Link to full registration */}
+              <p className="text-center mt-8 text-gray-500">
+                Don't have an invite code?{' '}
+                <Link href="/register" className="text-soa-primary hover:underline font-medium">
+                  Register normally
+                </Link>
+              </p>
+            </>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

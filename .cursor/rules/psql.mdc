@@ -1,0 +1,28 @@
+---
+description: Supabase migration and deployment rules for EduDash Pro
+alwaysApply: true
+---
+
+# Supabase & Deployment Rules
+
+## Migrations
+- **Always use `supabase db push`** to apply migrations — never run raw SQL via psql directly.
+- After writing a new migration file in `supabase/migrations/`, immediately run:
+  ```bash
+  supabase db push
+  ```
+- Never skip running migrations after creating them.
+
+## Edge Functions
+- Whenever an Edge Function is created or modified, always deploy it:
+  ```bash
+  supabase functions deploy <function-name>
+  ```
+
+## Web/Native Parity
+- Whenever a change is made to the native (Expo/React Native) app, apply the equivalent change to the web (Next.js/PWA) app — the two must remain in parity at all times.
+
+## General
+- Always enhance any prompt or AI request with improvements where possible.
+- The app must serve all four roles: **principals**, **teachers**, **learners**, and **parents** — enabling seamless integration of traditional schooling and advanced technological teaching.
+- When a file exceeds the size limits in WARP.md / `.cursor` rules, refactor it immediately.

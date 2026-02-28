@@ -1,0 +1,476 @@
+/**
+ * Hook for managing announcements state and operations
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { assertSupabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
+import { useAuth } from '@/contexts/AuthContext';
+import { isSuperAdmin } from '@/lib/roleUtils';
+import {
+  PlatformAnnouncement,
+  AnnouncementForm,
+  INITIAL_FORM_STATE,
+} from './types';
+
+export function useAnnouncements() {
+  const { profile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<PlatformAnnouncement | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<AnnouncementForm>(INITIAL_FORM_STATE);
+
+  const isAuthorized = profile && isSuperAdmin(profile.role);
+
+  // Fetch announcements
+  const fetchAnnouncements = useCallback(async () => {
+    if (!isSuperAdmin(profile?.role)) {
+      Alert.alert('Access Denied', 'Super admin privileges required');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Fetch real announcements from database
+      const { data: announcementsData, error: announcementsError } = await assertSupabase()
+        .from('platform_announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (announcementsError) {
+        // Table might not exist or access denied - show empty state
+        console.log('Announcements table not configured:', announcementsError.message);
+        setAnnouncements([]);
+        return;
+      }
+
+      if (announcementsData && announcementsData.length > 0) {
+        const formattedAnnouncements: PlatformAnnouncement[] = announcementsData.map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          content: a.content,
+          type: a.type || 'info',
+          priority: a.priority || 'medium',
+          target_audience: a.target_audience || 'all',
+          target_schools: a.target_schools || [],
+          is_active: a.is_active ?? true,
+          is_pinned: a.is_pinned ?? false,
+          show_banner: a.show_banner ?? false,
+          created_at: a.created_at,
+          updated_at: a.updated_at,
+          created_by: a.created_by || 'system',
+          views_count: a.views_count || 0,
+          click_count: a.click_count || 0,
+          expires_at: a.expires_at,
+          scheduled_at: a.scheduled_at,
+        }));
+        setAnnouncements(formattedAnnouncements);
+      } else {
+        // No announcements - show empty state
+        setAnnouncements([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch announcements:', error);
+      setAnnouncements([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.role, profile?.id]);
+
+  // Handle route params for compose
+  const routeParams = useLocalSearchParams<{ 
+    compose?: string; 
+    prefillTitle?: string; 
+    prefillContent?: string; 
+    priority?: string; 
+    type?: string;
+  }>();
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, [fetchAnnouncements]);
+
+  useEffect(() => {
+    const compose = String(routeParams?.compose || '').toLowerCase();
+    if (compose === '1' || compose === 'true') {
+      const prefillTitle = (routeParams?.prefillTitle || '').toString();
+      const prefillContent = (routeParams?.prefillContent || '').toString();
+      const prefillPriority = (routeParams?.priority || '').toString();
+      const prefillType = (routeParams?.type || '').toString();
+      setFormData(prev => ({
+        ...prev,
+        title: prefillTitle || prev.title,
+        content: prefillContent || prev.content,
+        priority: (['low','medium','high','urgent'].includes(prefillPriority) ? prefillPriority : prev.priority) as any,
+        type: (['info','warning','alert','maintenance','feature'].includes(prefillType) ? prefillType : prev.type) as any,
+      }));
+      setShowCreateModal(true);
+    }
+  }, [routeParams]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAnnouncements();
+    setRefreshing(false);
+  }, [fetchAnnouncements]);
+
+  const resetForm = useCallback(() => {
+    setFormData(INITIAL_FORM_STATE);
+  }, []);
+
+  const openCreateModal = useCallback(() => {
+    resetForm();
+    setShowCreateModal(true);
+  }, [resetForm]);
+
+  const closeModal = useCallback(() => {
+    setShowCreateModal(false);
+    setShowEditModal(false);
+    setSelectedAnnouncement(null);
+    resetForm();
+  }, [resetForm]);
+
+  const openEditModal = useCallback((announcement: PlatformAnnouncement) => {
+    setSelectedAnnouncement(announcement);
+    setFormData({
+      title: announcement.title,
+      content: announcement.content,
+      type: announcement.type,
+      priority: announcement.priority,
+      target_audience: announcement.target_audience,
+      target_schools: [...announcement.target_schools],
+      is_active: announcement.is_active,
+      is_pinned: announcement.is_pinned,
+      show_banner: announcement.show_banner,
+      send_push_notification: false, // Default to false when editing
+      scheduled_at: announcement.scheduled_at,
+      expires_at: announcement.expires_at,
+    });
+    setShowEditModal(true);
+  }, []);
+
+  const updateFormField = useCallback(<K extends keyof AnnouncementForm>(
+    field: K,
+    value: AnnouncementForm[K]
+  ) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const createAnnouncement = useCallback(async () => {
+    if (!formData.title || !formData.content) {
+      Alert.alert('Validation Error', 'Please fill in title and content');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Persist announcement to database
+      const supabase = assertSupabase();
+      const { data: dbAnnouncement, error: insertError } = await supabase
+        .from('platform_announcements')
+        .insert({
+          title: formData.title,
+          content: formData.content,
+          type: formData.type,
+          priority: formData.priority,
+          target_audience: formData.target_audience,
+          target_schools: formData.target_schools,
+          is_active: formData.is_active,
+          is_pinned: formData.is_pinned,
+          show_banner: formData.show_banner,
+          scheduled_at: formData.scheduled_at || null,
+          expires_at: formData.expires_at || null,
+          created_by: profile?.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to insert announcement:', insertError);
+        throw new Error(insertError.message);
+      }
+
+      const newAnnouncement: PlatformAnnouncement = {
+        id: dbAnnouncement?.id || Date.now().toString(),
+        ...formData,
+        created_at: dbAnnouncement?.created_at || new Date().toISOString(),
+        updated_at: dbAnnouncement?.updated_at || new Date().toISOString(),
+        created_by: profile?.id || 'unknown',
+        views_count: 0,
+        click_count: 0,
+      };
+
+      setAnnouncements(prev => [newAnnouncement, ...prev]);
+
+      track('superadmin_announcement_created', {
+        announcement_type: formData.type,
+        priority: formData.priority,
+        target_audience: formData.target_audience,
+        has_banner: formData.show_banner,
+        is_pinned: formData.is_pinned,
+        send_push: formData.send_push_notification,
+      });
+
+      // Send push notifications if enabled
+      if (formData.send_push_notification) {
+        try {
+          // Build the target role filter based on target_audience
+          let targetRoles: string[] = [];
+          if (formData.target_audience === 'all') {
+            targetRoles = ['principal', 'teacher', 'parent'];
+          } else if (formData.target_audience === 'principals') {
+            targetRoles = ['principal'];
+          } else if (formData.target_audience === 'teachers') {
+            targetRoles = ['teacher'];
+          } else if (formData.target_audience === 'parents') {
+            targetRoles = ['parent'];
+          }
+
+          // Insert push notifications for users with push tokens
+          // Uses push_devices table (current) — NOT the legacy push_tokens table
+          const { data: pushDevices, error: tokenError } = await supabase
+            .from('push_devices')
+            .select('user_id, expo_push_token, profiles!inner(role, preschool_id)')
+            .in('profiles.role', targetRoles.length > 0 ? targetRoles : ['principal', 'teacher', 'parent'])
+            .eq('is_active', true);
+
+          if (tokenError) {
+            console.warn('Failed to fetch push devices:', tokenError);
+          } else if (pushDevices && pushDevices.length > 0) {
+            // Deduplicate by user_id (keep first = most recent due to default ordering)
+            const seenUsers = new Set<string>();
+            const uniqueDevices = pushDevices.filter((d: any) => {
+              if (seenUsers.has(d.user_id)) return false;
+              seenUsers.add(d.user_id);
+              return true;
+            });
+
+            // Filter by specific schools if needed
+            let filteredTokens = uniqueDevices;
+            if (formData.target_audience === 'specific_schools' && formData.target_schools.length > 0) {
+              filteredTokens = uniqueDevices.filter((t: any) => 
+                formData.target_schools.includes(t.profiles?.preschool_id)
+              );
+            }
+
+            // Insert notifications into push_notifications table
+            const notifications = filteredTokens.map((t: any) => ({
+              user_id: t.user_id,
+              title: formData.title,
+              body: formData.content.substring(0, 200) + (formData.content.length > 200 ? '...' : ''),
+              data: JSON.stringify({ 
+                type: 'announcement', 
+                announcement_id: newAnnouncement.id,
+                priority: formData.priority,
+              }),
+              status: 'pending',
+            }));
+
+            if (notifications.length > 0) {
+              const { error: notifyError } = await supabase
+                .from('push_notifications')
+                .insert(notifications);
+
+              if (notifyError) {
+                console.warn('Failed to queue push notifications:', notifyError);
+              } else {
+                console.log(`Queued ${notifications.length} push notifications`);
+              }
+            }
+          }
+        } catch (pushError) {
+          console.warn('Push notification error (non-fatal):', pushError);
+          // Don't fail the announcement creation if push fails
+        }
+      }
+
+      await supabase
+        .from('audit_logs')
+        .insert({
+          admin_user_id: profile?.id,
+          action: 'platform_announcement_created',
+          details: {
+            announcement_id: newAnnouncement.id,
+            announcement_title: formData.title,
+            announcement_type: formData.type,
+            priority: formData.priority,
+            target_audience: formData.target_audience,
+            is_active: formData.is_active,
+            send_push: formData.send_push_notification,
+          },
+        });
+
+      Alert.alert(
+        'Success', 
+        formData.send_push_notification 
+          ? 'Announcement created and push notifications queued!'
+          : 'Announcement created successfully'
+      );
+      closeModal();
+    } catch (error) {
+      console.error('Failed to create announcement:', error);
+      Alert.alert('Error', 'Failed to create announcement');
+    } finally {
+      setSaving(false);
+    }
+  }, [formData, profile?.id, closeModal]);
+
+  const updateAnnouncement = useCallback(async () => {
+    if (!selectedAnnouncement || !formData.title || !formData.content) {
+      Alert.alert('Validation Error', 'Please fill in title and content');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const updatedAnnouncement: PlatformAnnouncement = {
+        ...selectedAnnouncement,
+        ...formData,
+        updated_at: new Date().toISOString(),
+      };
+
+      setAnnouncements(prev => prev.map(a => 
+        a.id === selectedAnnouncement.id ? updatedAnnouncement : a
+      ));
+
+      track('superadmin_announcement_updated', {
+        announcement_id: selectedAnnouncement.id,
+        announcement_type: formData.type,
+        priority: formData.priority,
+      });
+
+      await assertSupabase()
+        .from('audit_logs')
+        .insert({
+          admin_user_id: profile?.id,
+          action: 'platform_announcement_updated',
+          details: {
+            announcement_id: selectedAnnouncement.id,
+            announcement_title: formData.title,
+            changes: formData,
+          },
+        });
+
+      Alert.alert('Success', 'Announcement updated successfully');
+      closeModal();
+    } catch (error) {
+      console.error('Failed to update announcement:', error);
+      Alert.alert('Error', 'Failed to update announcement');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedAnnouncement, formData, profile?.id, closeModal]);
+
+  const deleteAnnouncement = useCallback((announcement: PlatformAnnouncement) => {
+    Alert.alert(
+      'Delete Announcement',
+      `Are you sure you want to delete "${announcement.title}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setAnnouncements(prev => prev.filter(a => a.id !== announcement.id));
+
+              track('superadmin_announcement_deleted', {
+                announcement_id: announcement.id,
+                announcement_type: announcement.type,
+                priority: announcement.priority,
+              });
+
+              await assertSupabase()
+                .from('audit_logs')
+                .insert({
+                  admin_user_id: profile?.id,
+                  action: 'platform_announcement_deleted',
+                  details: {
+                    announcement_id: announcement.id,
+                    announcement_title: announcement.title,
+                    announcement_type: announcement.type,
+                  },
+                });
+
+              Alert.alert('Success', 'Announcement deleted successfully');
+            } catch (error) {
+              console.error('Failed to delete announcement:', error);
+              Alert.alert('Error', 'Failed to delete announcement');
+            }
+          }
+        }
+      ]
+    );
+  }, [profile?.id]);
+
+  const toggleAnnouncementStatus = useCallback(async (announcement: PlatformAnnouncement) => {
+    const newStatus = !announcement.is_active;
+    
+    try {
+      setAnnouncements(prev => prev.map(a => 
+        a.id === announcement.id ? { ...a, is_active: newStatus } : a
+      ));
+
+      track('superadmin_announcement_toggled', {
+        announcement_id: announcement.id,
+        new_status: newStatus,
+      });
+
+      await assertSupabase()
+        .from('audit_logs')
+        .insert({
+          admin_user_id: profile?.id,
+          action: 'platform_announcement_toggled',
+          details: {
+            announcement_id: announcement.id,
+            announcement_title: announcement.title,
+            old_status: announcement.is_active,
+            new_status: newStatus,
+          },
+        });
+    } catch (error) {
+      console.error('Failed to toggle announcement:', error);
+      Alert.alert('Error', 'Failed to update announcement status');
+      setAnnouncements(prev => prev.map(a => 
+        a.id === announcement.id ? { ...a, is_active: !newStatus } : a
+      ));
+    }
+  }, [profile?.id]);
+
+  return {
+    // State
+    announcements,
+    loading,
+    refreshing,
+    saving,
+    showCreateModal,
+    showEditModal,
+    selectedAnnouncement,
+    formData,
+    isAuthorized,
+    
+    // Computed
+    activeCount: announcements.filter(a => a.is_active).length,
+    
+    // Actions
+    onRefresh,
+    openCreateModal,
+    closeModal,
+    openEditModal,
+    updateFormField,
+    createAnnouncement,
+    updateAnnouncement,
+    deleteAnnouncement,
+    toggleAnnouncementStatus,
+  };
+}

@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    "lib/security/**/*",
+    "lib/logger.ts",
+    "lib/debug.ts",
+    "lib/perf.ts",
+    "lib/global-errors.ts",
+    "lib/routeAfterLogin.ts",
+    "lib/smart-memo.ts",
+    "lib/monitoring.ts",
+    "lib/rbac/**/*",
+    "lib/voice/openaiWhisperProvider.ts",
+    "lib/voice/openaiWhisperStreamingProvider.ts",
+    "hooks/**/*"
+  ],
+  "exclude": [
+    "scripts/**/*",
+    "docs/**/*",
+    "temp/**/*",
+    "archive/**/*",
+    "test-*",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ]
+}

@@ -1,0 +1,741 @@
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import { Platform, Linking } from 'react-native';
+import { assertSupabase } from './supabase';
+import { getFCMToken, onFCMTokenRefresh } from './calls/CallHeadlessTask';
+import { getStableDeviceId } from './notifications';
+
+const EXPO_PROJECT_ID =
+  Constants.easConfig?.projectId ||
+  Constants.expoConfig?.extra?.eas?.projectId ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  null;
+
+export interface NotificationData {
+  id: string;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+  categoryId?: string;
+  priority?: 'min' | 'low' | 'default' | 'high' | 'max';
+  sound?: boolean | string;
+  vibrate?: boolean | number[];
+  badge?: number;
+  color?: string;
+  channelId?: string;
+}
+
+export interface PushToken {
+  userId: string;
+  token: string;
+  platform: 'ios' | 'android' | 'web';
+  deviceInfo: {
+    deviceId?: string;
+    deviceName?: string;
+    osVersion?: string;
+    appVersion: string;
+    expoProjectId?: string | null;
+  };
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Configure notification handler
+Notifications.setNotificationHandler({
+  handleNotification: async (notification) => {
+    console.log('Notification received:', notification);
+    
+    const data = notification.request.content.data;
+    const type = data?.type as string | undefined;
+    
+    // Types that should NOT show as foreground banners (suppress list)
+    // Everything else defaults to showing — this prevents new notification
+    // types from being silently swallowed
+    const suppressedTypes = new Set<string>([
+      // Add types here that should be silent in foreground
+      // e.g. 'presence_update', 'typing_indicator'
+    ]);
+    
+    const shouldSuppress = type ? suppressedTypes.has(type) : false;
+    const shouldShow = !shouldSuppress;
+    
+    // Priority: calls are MAX, messages are HIGH, everything else DEFAULT
+    const isIncomingCall = type === 'incoming_call';
+    const isMessage = type === 'message' || type === 'chat';
+    
+    return {
+      shouldShowAlert: shouldShow,
+      shouldPlaySound: shouldShow,
+      shouldSetBadge: true,
+      // SDK >= 51 supports banner/list behavior on iOS
+      shouldShowBanner: shouldShow,
+      shouldShowList: shouldShow,
+      priority: isIncomingCall 
+        ? Notifications.AndroidNotificationPriority.MAX 
+        : isMessage
+        ? Notifications.AndroidNotificationPriority.HIGH
+        : Notifications.AndroidNotificationPriority.DEFAULT,
+    };
+  },
+});
+
+class NotificationService {
+  private static instance: NotificationService;
+  private pushToken: string | null = null;
+  private fcmToken: string | null = null;
+  private fcmTokenRefreshUnsubscribe: (() => void) | null = null;
+  private isInitialized = false;
+  
+  public static getInstance(): NotificationService {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
+    }
+    return NotificationService.instance;
+  }
+
+  /**
+   * Initialize notification service and request permissions
+   */
+  public async initialize(): Promise<boolean> {
+    if (this.isInitialized) {
+      return true;
+    }
+
+    try {
+      // Check if device supports push notifications
+      if (!Device.isDevice) {
+        console.log('Must use physical device for Push Notifications');
+        return false;
+      }
+
+      // Request permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+          },
+        });
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('Push notification permission denied');
+        return false;
+      }
+
+      // Configure notification channels for Android
+      if (Platform.OS === 'android') {
+        await this.setupAndroidChannels();
+      }
+
+      // Set up notification categories
+      await this.setupNotificationCategories();
+
+      this.isInitialized = true;
+      console.log('Notification service initialized successfully');
+      return true;
+
+    } catch (error) {
+      console.error('Failed to initialize notification service:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Register device for push notifications and store token
+   * Registers both Expo Push Token (for general notifications) and 
+   * FCM Token (for wake-on-call when app is killed)
+   */
+  public async registerForPushNotifications(userId: string, appVersion: string): Promise<string | null> {
+    try {
+      if (!this.isInitialized) {
+        const initialized = await this.initialize();
+        if (!initialized) {
+          throw new Error('Failed to initialize notification service');
+        }
+      }
+
+      if (!EXPO_PROJECT_ID) {
+        console.error('Missing Expo project ID; cannot register push token');
+        return null;
+      }
+
+      // Get Expo push token (for general notifications)
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: EXPO_PROJECT_ID,
+      });
+
+      this.pushToken = tokenData.data;
+
+      // Get FCM token (for wake-on-call when app is killed) - Android only
+      if (Platform.OS === 'android') {
+        try {
+          this.fcmToken = await getFCMToken();
+          if (this.fcmToken) {
+            console.log('[NotificationService] ✅ FCM token obtained for wake-on-call');
+            
+            // Subscribe to FCM token refresh
+            this.fcmTokenRefreshUnsubscribe = onFCMTokenRefresh(async (newToken) => {
+              this.fcmToken = newToken;
+              // Update FCM token in database
+              await this.updateFCMToken(userId, newToken);
+            });
+          } else {
+            console.warn('[NotificationService] ⚠️ FCM token not available - wake-on-call may not work');
+          }
+        } catch (fcmError) {
+          console.warn('[NotificationService] FCM token retrieval failed:', fcmError);
+        }
+      }
+
+      // Get device info
+      const deviceInfo = {
+        deviceId: Device.osBuildId || undefined,
+        deviceName: Device.deviceName || undefined,
+        osVersion: Device.osVersion || undefined,
+        appVersion,
+        expoProjectId: EXPO_PROJECT_ID,
+      };
+
+      // Get device installation ID for upsert conflict key
+      // Use getStableDeviceId() to match lib/notifications.ts and lib/calls/setupPushNotifications.ts
+      // This prevents duplicate push_devices rows from different registration paths
+      const deviceInstallationId = await getStableDeviceId();
+
+      const deviceData = {
+        user_id: userId,
+        expo_push_token: this.pushToken,
+        platform: Platform.OS as 'ios' | 'android' | 'web',
+        device_installation_id: deviceInstallationId,
+        device_metadata: deviceInfo,
+        is_active: true,
+        fcm_token: this.fcmToken || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Upsert push token in database with correct column names
+      let { error } = await assertSupabase()
+        .from('push_devices')
+        .upsert(deviceData, { 
+          onConflict: 'user_id,device_installation_id',
+        });
+
+      // Handle 409 conflict - try delete + insert as fallback
+      if (error && (error.code === '23505' || error.message?.includes('409') || error.message?.includes('conflict'))) {
+        console.log('[NotificationService] Conflict detected, trying delete + insert fallback...');
+        
+        // Delete existing record for this user+device
+        await assertSupabase()
+          .from('push_devices')
+          .delete()
+          .eq('user_id', userId)
+          .eq('device_installation_id', deviceInstallationId);
+        
+        // Insert fresh record
+        const insertResult = await assertSupabase()
+          .from('push_devices')
+          .insert(deviceData);
+        
+        error = insertResult.error;
+      }
+
+      if (error) {
+        console.error('Failed to save push token:', error);
+        throw error;
+      }
+
+      if (__DEV__) console.log('Push token registered successfully');
+      return this.pushToken;
+
+    } catch (error) {
+      console.error('Failed to register for push notifications:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update FCM token in database (called on token refresh)
+   */
+  private async updateFCMToken(userId: string, fcmToken: string): Promise<void> {
+    try {
+      const { error } = await assertSupabase()
+        .from('push_devices')
+        .update({
+          fcm_token: fcmToken,
+          updated_at: new Date().toISOString(),
+        })
+        .match({
+          user_id: userId,
+          token: this.pushToken,
+        });
+
+      if (error) {
+        console.warn('[NotificationService] Failed to update FCM token:', error);
+      } else {
+        console.log('[NotificationService] FCM token updated successfully');
+      }
+    } catch (error) {
+      console.warn('[NotificationService] FCM token update error:', error);
+    }
+  }
+
+  /**
+   * Get current FCM token (for wake-on-call)
+   */
+  public getFCMToken(): string | null {
+    return this.fcmToken;
+  }
+
+  /**
+   * Setup Android notification channels with system sounds
+   * Each channel uses appropriate system notification/ringtone sounds
+   */
+  private async setupAndroidChannels(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+
+    // Default channel - standard system notification sound
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'General Notifications',
+      description: 'General app notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#00f5ff',
+      sound: 'default', // Uses system default notification sound
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Messages channel - for chat messages (matches backend channelId)
+    await Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages',
+      description: 'Chat messages from teachers and parents',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#4ade80',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Urgent notifications - high priority with distinct vibration
+    await Notifications.setNotificationChannelAsync('urgent', {
+      name: 'Urgent Notifications',
+      description: 'Critical alerts that require immediate attention',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 200, 500, 200, 500],
+      lightColor: '#ff4444',
+      sound: 'default', // Uses system default (consider custom alarm sound)
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+
+    // Educational content - softer, less intrusive
+    await Notifications.setNotificationChannelAsync('educational', {
+      name: 'Educational Content',
+      description: 'Learning activities and educational updates',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 150],
+      lightColor: '#00f5ff',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Social/communication - message-like notifications (legacy, keep for backwards compatibility)
+    await Notifications.setNotificationChannelAsync('social', {
+      name: 'Communication',
+      description: 'Messages and communication from teachers/parents',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#4ade80',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Incoming calls - highest priority for full-screen intent
+    // Uses MAX importance and bypasses DND for critical calls
+    await Notifications.setNotificationChannelAsync('calls', {
+      name: 'Incoming Calls',
+      description: 'Voice and video call notifications',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
+      lightColor: '#00f5ff',
+      sound: 'default', // System will use ringtone for call-like notifications
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: false,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    });
+
+    // Announcements channel - school announcements
+    await Notifications.setNotificationChannelAsync('announcements', {
+      name: 'School Announcements',
+      description: 'Important announcements from your school',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 400, 200, 400],
+      lightColor: '#3b82f6',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Homework channel - assignments and grading
+    await Notifications.setNotificationChannelAsync('homework', {
+      name: 'Homework & Assignments',
+      description: 'Assignment submissions and grading notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 150, 300],
+      lightColor: '#10b981',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Reminders channel - for scheduled tasks and homework due dates
+    await Notifications.setNotificationChannelAsync('reminders', {
+      name: 'Reminders',
+      description: 'Scheduled reminders for homework, events, and deadlines',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 400, 200, 400],
+      lightColor: '#f59e0b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Progress updates - learning milestones and achievements
+    await Notifications.setNotificationChannelAsync('progress', {
+      name: 'Progress Updates',
+      description: 'Learning milestones, achievements, and progress reports',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#8b5cf6',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Billing channel - payments and subscriptions
+    await Notifications.setNotificationChannelAsync('billing', {
+      name: 'Billing & Payments',
+      description: 'Payment confirmations and subscription updates',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#22c55e',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Invoices channel - invoice notifications
+    await Notifications.setNotificationChannelAsync('invoices', {
+      name: 'Invoices',
+      description: 'Invoice notifications and payment reminders',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#f59e0b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Admin channel - administrative notifications
+    await Notifications.setNotificationChannelAsync('admin', {
+      name: 'Administrative',
+      description: 'Administrative notifications for principals',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#ef4444',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // General channel - fallback for other notifications
+    await Notifications.setNotificationChannelAsync('general', {
+      name: 'General',
+      description: 'General notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#64748b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    console.log('Android notification channels configured with 14 channels');
+  }
+
+  /**
+   * Setup notification categories with actions
+   */
+  private async setupNotificationCategories(): Promise<void> {
+    await Notifications.setNotificationCategoryAsync('MESSAGE', [
+      {
+        identifier: 'REPLY',
+        buttonTitle: 'Reply',
+        options: {
+          opensAppToForeground: true,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: 'MARK_READ',
+        buttonTitle: 'Mark Read',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+        },
+      },
+    ]);
+
+    await Notifications.setNotificationCategoryAsync('REMINDER', [
+      {
+        identifier: 'SNOOZE',
+        buttonTitle: 'Snooze',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: 'COMPLETE',
+        buttonTitle: 'Mark Complete',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+        },
+      },
+    ]);
+
+    // Incoming call category with answer/decline actions
+    await Notifications.setNotificationCategoryAsync('INCOMING_CALL', [
+      {
+        identifier: 'ANSWER',
+        buttonTitle: 'Answer',
+        options: {
+          opensAppToForeground: true,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: 'DECLINE',
+        buttonTitle: 'Decline',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+          isDestructive: true,
+        },
+      },
+    ]);
+
+    console.log('Notification categories configured');
+  }
+
+  /**
+   * Schedule a local notification
+   */
+  public async scheduleLocalNotification(
+    notificationData: NotificationData,
+    trigger?: Notifications.NotificationTriggerInput
+  ): Promise<string> {
+    try {
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: notificationData.title,
+          body: notificationData.body,
+          data: notificationData.data,
+          categoryIdentifier: notificationData.categoryId,
+          priority: this.mapPriorityToExpo(notificationData.priority),
+          sound: notificationData.sound === false ? false : (notificationData.sound || 'default'),
+          vibrate: Array.isArray(notificationData.vibrate) ? notificationData.vibrate : undefined,
+          badge: notificationData.badge,
+          color: notificationData.color || '#00f5ff',
+        },
+        trigger: trigger || null,
+        identifier: notificationData.id,
+      });
+
+      console.log('Local notification scheduled:', identifier);
+      return identifier;
+
+    } catch (error) {
+      console.error('Failed to schedule local notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a scheduled notification
+   */
+  public async cancelNotification(identifier: string): Promise<void> {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(identifier);
+      console.log('Notification cancelled:', identifier);
+    } catch (error) {
+      console.error('Failed to cancel notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel all scheduled notifications
+   */
+  public async cancelAllNotifications(): Promise<void> {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('All notifications cancelled');
+    } catch (error) {
+      console.error('Failed to cancel all notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all scheduled notifications
+   */
+  public async getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
+    try {
+      return await Notifications.getAllScheduledNotificationsAsync();
+    } catch (error) {
+      console.error('Failed to get scheduled notifications:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Set app badge count
+   */
+  public async setBadgeCount(count: number): Promise<void> {
+    try {
+      await Notifications.setBadgeCountAsync(count);
+      console.log('Badge count set to:', count);
+    } catch (error) {
+      console.error('Failed to set badge count:', error);
+    }
+  }
+
+  /**
+   * Clear app badge
+   */
+  public async clearBadge(): Promise<void> {
+    await this.setBadgeCount(0);
+  }
+
+  /**
+   * Get current permissions status
+   */
+  public async getPermissionStatus(): Promise<Notifications.NotificationPermissionsStatus> {
+    return await Notifications.getPermissionsAsync();
+  }
+
+  /**
+   * Open app notification settings
+   */
+  public async openSettings(): Promise<void> {
+    try {
+      if (Platform.OS === 'ios') {
+        await Linking.openSettings();
+      } else {
+        await Linking.openSettings();
+      }
+    } catch (error) {
+      console.error('Failed to open notification settings:', error);
+    }
+  }
+
+  /**
+   * Update push token status (activate/deactivate)
+   */
+  public async updateTokenStatus(userId: string, isActive: boolean): Promise<void> {
+    try {
+      if (!this.pushToken) {
+        throw new Error('No push token available');
+      }
+
+      const { error } = await assertSupabase()
+        .from('push_tokens')
+        .update({
+          is_active: isActive,
+          updated_at: new Date().toISOString(),
+        })
+        .match({
+          user_id: userId,
+          token: this.pushToken,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Push token status updated:', isActive);
+
+    } catch (error) {
+      console.error('Failed to update push token status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Map priority to Expo priority format
+   */
+  private mapPriorityToExpo(priority?: 'min' | 'low' | 'default' | 'high' | 'max'): string {
+    switch (priority) {
+      case 'min': return 'min';
+      case 'low': return 'low';
+      case 'high': return 'high';
+      case 'max': return 'max';
+      default: return 'default';
+    }
+  }
+
+  /**
+   * Get current push token
+   */
+  public getPushToken(): string | null {
+    return this.pushToken;
+  }
+
+  /**
+   * Handle notification response (when user taps notification)
+   */
+  public addNotificationResponseListener(
+    listener: (response: Notifications.NotificationResponse) => void
+  ): Notifications.EventSubscription {
+    return Notifications.addNotificationResponseReceivedListener(listener);
+  }
+
+  /**
+   * Handle incoming notifications
+   */
+  public addNotificationReceivedListener(
+    listener: (notification: Notifications.Notification) => void
+  ): Notifications.EventSubscription {
+    return Notifications.addNotificationReceivedListener(listener);
+  }
+}
+
+export default NotificationService;

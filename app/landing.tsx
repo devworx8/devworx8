@@ -1,0 +1,397 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, Platform, TouchableOpacity } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import { assertSupabase } from '@/lib/supabase';
+import { useTranslation } from 'react-i18next';
+import { setPasswordRecoveryInProgress, signOut as signOutSession } from '@/lib/sessionManager';
+import { logger } from '@/lib/logger';
+
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
+// Central landing handler for deep links
+// Supports flows:
+// - Email confirmation: .../landing?type=email&token_hash=XYZ or .../landing?flow=email-confirm&token_hash=XYZ
+// - Parent invite: .../landing?flow=invite-parent&code=ABCD1234
+// - Generic: If opened inside the app, route to appropriate screen
+export default function LandingHandler() {
+  const params = useLocalSearchParams<any>();
+  const [status, setStatus] = useState<'loading'|'ready'|'error'|'done'>('loading');
+  const [message, setMessage] = useState<string>('');
+  const [openAppPath, setOpenAppPath] = useState<string>('/');
+  const { t } = useTranslation();
+
+  const isWeb = Platform.OS === 'web';
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.edudashpro';
+
+  const query = useMemo(() => {
+    const q: Record<string, string> = {};
+    // Normalize incoming params (expo-router passes them as strings | string[])
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (Array.isArray(v)) q[k] = String(v[0]);
+      else if (v != null) q[k] = String(v);
+    });
+    return q;
+  }, [params]);
+
+  // Attempt to open the native app via custom scheme with fallback to Play Store on web
+  const tryOpenApp = (pathAndQuery: string) => {
+    if (!isWeb) return; // Native environment already inside app
+    // IMPORTANT: Use triple-slash so Android doesn't treat the first segment as hostname.
+    // Example: `edudashpro:///screens/payments/return?...`
+    const schemeUrl = `edudashpro:///${pathAndQuery.replace(/^\//, '')}`;
+
+    let didHide = false;
+    const visibilityHandler = () => {
+      if (document.hidden) didHide = true;
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+
+    // Immediate redirect via location.replace (more reliable than href on mobile)
+    window.location.replace(schemeUrl);
+
+    // After a short delay, if we are still visible, keep the page in a "ready" state.
+    // NOTE: On Android, an "Open with" chooser may not immediately hide the page,
+    // so we should avoid falsely claiming the app isn't installed.
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', visibilityHandler);
+      if (!didHide) {
+        setStatus('ready');
+        setMessage(
+          t('landing.open_prompt', {
+            defaultValue: 'If prompted, choose EduDash Pro to open. If nothing happens, you can install the app from Google Play.',
+          })
+        );
+      }
+    }, 6000);
+  };
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const flow = (query.flow || query.type || '').toLowerCase();
+        
+        // PASSWORD RECOVERY: Route to native recovery flow when inside the app.
+        if (flow === 'recovery' || query.type === 'recovery') {
+          logger.info('Landing', 'Password recovery flow detected');
+          setMessage(t('landing.opening_password_reset', { defaultValue: 'Opening password reset...' }));
+
+          // Build params once so we can reuse them for web and native routing.
+          const recoveryParams = new URLSearchParams();
+          Object.entries(query).forEach(([k, v]) => {
+            if (v) recoveryParams.set(k, v);
+          });
+          if (!recoveryParams.has('type')) {
+            recoveryParams.set('type', 'recovery');
+          }
+          const recoveryQuery = recoveryParams.toString();
+          const recoveryPath = `auth-callback${recoveryQuery ? `?${recoveryQuery}` : ''}`;
+
+          if (!isWeb) {
+            // Ensure AuthContext does not auto-route away from recovery.
+            try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+            router.replace(`/${recoveryPath}` as `/${string}`);
+            return;
+          }
+          
+          // Web: attempt to open the native app via deep link.
+          setStatus('ready');
+          setOpenAppPath(`/${recoveryPath}`);
+          tryOpenApp(`/${recoveryPath}`);
+          return;
+        }
+        
+        // Extract invite code from query params (may come from redirect_to after 303 redirect)
+        const inviteCode = query.code || query.invitationCode || '';
+        
+        // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
+        let redirectTo = query.redirect_to || '';
+        if (redirectTo && typeof redirectTo === 'string') {
+          try {
+            const redirectUrl = new URL(decodeURIComponent(redirectTo));
+            const redirectCode = redirectUrl.searchParams.get('code') || redirectUrl.searchParams.get('invitationCode');
+            if (redirectCode && !inviteCode) {
+              // Preserve invite code from redirect_to
+              const updatedQuery = { ...query, code: redirectCode };
+              // Re-run with updated query (will be handled in next render)
+              Object.assign(query, updatedQuery);
+            }
+          } catch (e) {
+            // Invalid URL, ignore
+          }
+        }
+        
+        // Default target for the "Open app" CTA (can be overridden by flows below)
+        const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
+        setOpenAppPath(query.token_hash ? `(auth)/sign-in?emailVerified=true${inviteParam}` : '/');
+
+        // EMAIL FLOWS: verify via token_hash if provided
+        const tokenHash = query.token_hash || query.token || '';
+
+        // EMAIL CHANGE: confirm and then force a clean sign-in.
+        if ((flow === 'email-change' || query.type === 'email_change') && tokenHash) {
+          setMessage(
+            t('landing.verifying_email_change', {
+              defaultValue: 'Confirming your new email address...',
+            })
+          );
+          try {
+            const supabase = assertSupabase();
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'email_change',
+            });
+            if (error) throw error;
+
+            if (data.user?.id && data.user.email) {
+              // Keep profiles.email aligned with auth email.
+              await supabase
+                .from('profiles')
+                .update({ email: data.user.email, updated_at: new Date().toISOString() })
+                .eq('id', data.user.id);
+            }
+
+            setMessage(
+              t('landing.email_change_success', {
+                defaultValue: 'Email updated. Please sign in again.',
+              })
+            );
+            setStatus('done');
+
+            await signOutSession();
+
+            const nextEmail = data.user?.email || '';
+            const emailParam = nextEmail ? `&email=${encodeURIComponent(nextEmail)}` : '';
+
+            if (!isWeb) {
+              setTimeout(() => {
+                router.replace(`/(auth)/sign-in?emailChanged=true${emailParam}` as `/${string}`);
+              }, 800);
+              return;
+            }
+
+            setTimeout(() => {
+              window.location.href = `/sign-in?emailChanged=true${emailParam}`;
+            }, 600);
+            return;
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error
+                ? e.message
+                : t('landing.email_change_failed', {
+                    defaultValue: 'Email change failed. Please try again.',
+                  });
+            setStatus('error');
+            setMessage(message);
+            if (isWeb) {
+              setTimeout(() => {
+                setOpenAppPath('(auth)/sign-in?emailChangeFailed=true');
+                tryOpenApp('(auth)/sign-in?emailChangeFailed=true');
+              }, 2000);
+            }
+            return;
+          }
+        }
+
+        // EMAIL CONFIRMATION: verify via token_hash if provided
+        if ((flow === 'email-confirm' || query.type === 'email' || query.type === 'signup') && tokenHash) {
+          setMessage(t('landing.verifying_email', { defaultValue: 'Verifying your email...' }));
+          try {
+            const { data, error } = await assertSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
+            if (error) throw error;
+            
+            // Activate any pending_verification memberships for this user
+            // Also sync profile data to membership record if missing
+            if (data.user?.id) {
+              const supabase = assertSupabase();
+              
+              // Get profile data
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name, email, phone')
+                .eq('id', data.user.id)
+                .single();
+              
+              // Parse full name into first/last
+              const nameParts = (profile?.full_name || '').trim().split(' ');
+              const firstName = nameParts[0] || '';
+              const lastName = nameParts.slice(1).join(' ') || '';
+              
+              // Update membership: activate and sync profile data
+              await supabase
+                .from('organization_members')
+                .update({ 
+                  membership_status: 'active',
+                  first_name: firstName || undefined,
+                  last_name: lastName || undefined,
+                  email: profile?.email || data.user.email || undefined,
+                  phone: profile?.phone || undefined,
+                })
+                .eq('user_id', data.user.id)
+                .eq('membership_status', 'pending_verification');
+            }
+            
+            setMessage(t('landing.email_verified', { defaultValue: 'Email verified! Redirecting to sign in...' }));
+            setStatus('done');
+            
+            // On native, route to sign-in (preserve invite code if present)
+            if (!isWeb) {
+              // Sign out user first so they need to sign in with verified credentials
+              await signOutSession();
+              // Small delay to show success message
+              setTimeout(() => {
+                const inviteParam = inviteCode ? `?invitationCode=${encodeURIComponent(inviteCode)}` : '';
+                router.replace(`/(auth)/sign-in${inviteParam}` as `/${string}`);
+              }, 1500);
+              return;
+            }
+            
+            // On web/PWA, sign out and redirect to sign-in page (preserve invite code)
+            await signOutSession();
+            setTimeout(() => {
+              const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
+              window.location.href = `/sign-in?verified=true${inviteParam}`;
+            }, 1000);
+            return;
+          } catch (e: any) {
+            setStatus('error');
+            setMessage(e?.message || t('landing.email_verification_failed', { defaultValue: 'Email verification failed.' }));
+            // Still try to open the app so the user can continue there
+            if (isWeb) {
+              setTimeout(() => {
+                setOpenAppPath('(auth)/sign-in?emailVerificationFailed=true');
+                tryOpenApp('(auth)/sign-in?emailVerificationFailed=true');
+              }, 2000);
+            }
+            return;
+          }
+        }
+
+        // PARENT INVITE: code param (use extracted inviteCode from above)
+        if (flow === 'invite-parent' && inviteCode) {
+          // Inside native app: navigate directly to parent registration with code
+          if (!isWeb) {
+            router.replace(`/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}` as `/${string}`);
+            return;
+          }
+          // On web: attempt to open app with deep link to parent registration
+setMessage(t('invite.opening_parent_registration', { defaultValue: 'Opening the app for parent registration...' }));
+          setStatus('ready');
+          const path = `/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}`;
+          setOpenAppPath(path);
+          tryOpenApp(path);
+          return;
+        }
+
+        // STUDENT/MEMBER INVITE
+        if ((flow === 'invite-student' || flow === 'invite-member') && inviteCode) {
+          if (!isWeb) {
+            router.replace(`/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}` as `/${string}`);
+            return;
+          }
+setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to join by code...' }));
+          setStatus('ready');
+          const path = `/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}`;
+          setOpenAppPath(path);
+          tryOpenApp(path);
+          return;
+        }
+
+        // PAYMENT RETURN/CANCEL
+        if (flow === 'payment-return' || flow === 'payment-cancel') {
+          const paymentPath = flow === 'payment-return' ? 'return' : 'cancel';
+          // Build query string from all params except 'flow'
+          const paymentParams = new URLSearchParams();
+          Object.entries(query).forEach(([k, v]) => {
+            if (k !== 'flow') paymentParams.set(k, v);
+          });
+          const queryString = paymentParams.toString() ? `?${paymentParams.toString()}` : '';
+          const path = `/screens/payments/${paymentPath}${queryString}`;
+          
+          if (!isWeb) {
+            // Inside app: route to payment return screen with all params
+            router.replace(path as `/${string}`);
+            return;
+          }
+          // On web: try to open app with deep link
+          setMessage(t('payment.redirecting', { defaultValue: 'Redirecting to app...' }));
+          setStatus('ready');
+          setOpenAppPath(path);
+          tryOpenApp(path);
+          return;
+        }
+
+        // Default: if native, go home; if web, show minimal UI and attempt to open app root
+        if (!isWeb) {
+          router.replace('/');
+          return;
+        }
+setMessage(t('invite.opening_app', { defaultValue: 'Opening the app...' }));
+        setStatus('ready');
+        setOpenAppPath('/');
+        tryOpenApp('/');
+      } catch (e: any) {
+        setStatus('error');
+        setMessage(e?.message || t('common.unexpected_error', { defaultValue: 'Something went wrong.' }));
+      }
+    };
+    run();
+     
+  }, [query.token_hash, query.type, query.flow, query.code, query.invitationCode, query.redirect_to]);
+
+  if (!isWeb) {
+    // On native, we keep a tiny loader, navigation happens above
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f' }}>
+        <EduDashSpinner color="#00f5ff" />
+      </View>
+    );
+  }
+
+  // Minimal web UI (fallback) for when app isn't installed
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: '#0a0a0f' }}>
+      {status === 'loading' || status === 'done' ? (
+        <EduDashSpinner size="large" color="#00f5ff" />
+      ) : null}
+      
+      {!!message && (
+        <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, marginBottom: 8 }}>
+          {message}
+        </Text>
+      )}
+      
+      {status === 'done' && (
+        <Text style={{ color: '#22c55e', textAlign: 'center', fontSize: 14, marginTop: 8 }}>
+          ✓ {t('landing.opening_app_automatically', { defaultValue: 'Opening app automatically...' })}
+        </Text>
+      )}
+      
+      {(status === 'ready' || status === 'error') && (
+        <>
+          <TouchableOpacity 
+            onPress={() => {
+              tryOpenApp(openAppPath);
+            }} 
+            style={{ backgroundColor: '#00f5ff', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginTop: 8 }}
+          >
+            <Text style={{ color: '#000', fontWeight: '800', fontSize: 16 }}>
+              {t('invite.open_app_cta', { defaultValue: 'Open EduDash Pro App' })}
+            </Text>
+          </TouchableOpacity>
+          
+          <View style={{ marginTop: 24, alignItems: 'center' }}>
+            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
+              {t('landing.app_not_installed_yet', { defaultValue: "Don't have the app yet?" })}
+            </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(playStoreUrl)}>
+              <Text style={{ color: '#00f5ff', textDecorationLine: 'underline', fontSize: 14, fontWeight: '600' }}>
+                {t('invite.install_google_play', { defaultValue: 'Install from Google Play' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+    </View>
+  );
+}

@@ -1,0 +1,534 @@
+import * as Notifications from 'expo-notifications'
+import * as Device from 'expo-device'
+import * as Application from 'expo-application'
+import * as Localization from 'expo-localization'
+import { Platform } from 'react-native'
+import Constants from 'expo-constants'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+// Resolve project ID from the active EAS runtime config first.
+// Fallbacks exist for older runtime/config variants, but we intentionally avoid
+// hardcoded legacy project IDs to prevent cross-project token registration.
+const EXPO_PROJECT_ID =
+  Constants.easConfig?.projectId ||
+  Constants.expoConfig?.extra?.eas?.projectId ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  null
+
+// Token version - increment this to force all users to re-register tokens
+// This is useful when the project ID changes or token format updates
+const TOKEN_VERSION = 2
+
+// Storage key for stable device ID (shared with lib/calls/setupPushNotifications.ts)
+const DEVICE_ID_STORAGE_KEY = '@edudash_device_id'
+
+/**
+ * Get or create a stable device ID that persists across app restarts.
+ * This ensures consistency between notification registrations.
+ */
+export async function getStableDeviceId(): Promise<string> {
+  try {
+    // First try to get from storage
+    const storedId = await AsyncStorage.getItem(DEVICE_ID_STORAGE_KEY)
+    if (storedId) {
+      return storedId
+    }
+    
+    // Generate a new stable ID using available device identifiers
+    const baseId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const deviceId = `device_${baseId}`
+    
+    // Store for future use
+    await AsyncStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId)
+    console.log('[Push Registration] Generated new stable device ID:', deviceId)
+    
+    return deviceId
+  } catch (error) {
+    // Fallback if storage fails - use a consistent but session-based ID
+    console.warn('[Push Registration] Failed to get/store device ID:', error)
+    return `device_${Constants.deviceId || Constants.sessionId || Platform.OS}-fallback`
+  }
+}
+
+// NOTE: Notification handler is configured in lib/NotificationService.ts
+// to ensure message notifications show as banners (WhatsApp-style)
+
+export type PushRegistrationResult = {
+  status: 'registered' | 'denied' | 'skipped' | 'error'
+  token?: string
+  reason?: string
+  message?: string
+}
+
+type PushDeviceRPCInput = {
+  expoPushToken?: string | null
+  fcmToken?: string | null
+  platform: 'ios' | 'android' | 'web'
+  deviceInstallationId: string
+  deviceId?: string | null
+  language?: string | null
+  timezone?: string | null
+  deviceMetadata?: Record<string, unknown>
+}
+
+const isMissingUpsertPushDeviceRPCError = (error: any): boolean => {
+  const message = String(error?.message || '')
+  const code = String(error?.code || '')
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    message.includes('Could not find the function public.upsert_push_device') ||
+    message.toLowerCase().includes('schema cache')
+  )
+}
+
+const upsertPushDeviceViaTableFallback = async (
+  supabase: any,
+  input: PushDeviceRPCInput,
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: sessionData, error: sessionError } = await supabase?.auth?.getSession?.()
+    const sessionUserId = sessionData?.session?.user?.id
+    if (sessionError || !sessionUserId) {
+      return { success: false, error: 'no_active_session_for_fallback' }
+    }
+    if (!input.expoPushToken) {
+      return { success: false, error: 'expo_push_token_required_for_fallback' }
+    }
+
+    const payload = {
+      user_id: sessionUserId,
+      expo_push_token: input.expoPushToken,
+      fcm_token: input.fcmToken ?? null,
+      platform: input.platform,
+      is_active: true,
+      device_id: input.deviceId ?? input.deviceInstallationId,
+      device_installation_id: input.deviceInstallationId,
+      device_metadata: input.deviceMetadata ?? {},
+      language: input.language ?? 'en',
+      timezone: input.timezone ?? 'UTC',
+      last_seen_at: new Date().toISOString(),
+      revoked_at: null,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase
+      .from('push_devices')
+      .upsert(payload, {
+        onConflict: 'user_id,device_installation_id',
+      })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error?.message || String(error) }
+  }
+}
+
+export async function upsertPushDeviceViaRPC(
+  supabase: any,
+  input: PushDeviceRPCInput,
+): Promise<{ success: boolean; error?: string; usedFallback?: boolean }> {
+  try {
+    const { error } = await supabase.rpc('upsert_push_device', {
+      p_expo_push_token: input.expoPushToken ?? null,
+      p_fcm_token: input.fcmToken ?? null,
+      p_platform: input.platform,
+      p_device_installation_id: input.deviceInstallationId,
+      p_device_id: input.deviceId ?? input.deviceInstallationId,
+      p_language: input.language ?? null,
+      p_timezone: input.timezone ?? null,
+      p_device_metadata: input.deviceMetadata ?? {},
+    })
+
+    if (error) {
+      if (isMissingUpsertPushDeviceRPCError(error)) {
+        const fallbackResult = await upsertPushDeviceViaTableFallback(supabase, input)
+        if (fallbackResult.success) {
+          return { success: true, usedFallback: true }
+        }
+        return { success: false, error: fallbackResult.error || 'legacy_fallback_failed' }
+      }
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    if (isMissingUpsertPushDeviceRPCError(error)) {
+      const fallbackResult = await upsertPushDeviceViaTableFallback(supabase, input)
+      if (fallbackResult.success) {
+        return { success: true, usedFallback: true }
+      }
+      return { success: false, error: fallbackResult.error || 'legacy_fallback_failed' }
+    }
+    return { success: false, error: error?.message || String(error) }
+  }
+}
+
+export async function registerForPushNotificationsAsync(): Promise<string | null> {
+  // Web or emulators/devices that don't support notifications should return null
+  if (Platform.OS === 'web' || !Device.isDevice) return null
+
+  // Android 8+ requires channel configuration for predictable behavior
+  // HIGH importance ensures notifications wake screen and play sound even when locked/backgrounded
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'General',
+      importance: Notifications.AndroidImportance.HIGH, // HIGH wakes screen and makes sound even when locked
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      sound: 'default', // Ensure sound plays even in background
+      enableVibrate: true,
+      showBadge: true,
+    })
+    
+    // Also create a separate channel for calls with maximum priority
+    // This channel shows on lock screen and wakes the device
+    await Notifications.setNotificationChannelAsync('calls', {
+      name: 'Incoming Calls',
+      description: 'Incoming and missed call notifications',
+      importance: Notifications.AndroidImportance.MAX, // MAX priority - wakes screen
+      vibrationPattern: [0, 250, 250, 250, 250, 250, 250, 250],
+      lightColor: '#6366F1',
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true, // Shows red dot on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, // Shows on lock screen
+      bypassDnd: true, // Shows even in Do Not Disturb mode
+    })
+    
+    // Ongoing calls channel - for the notification shade during active calls
+    // This is what appears when you pull down the notification drawer during a call
+    await Notifications.setNotificationChannelAsync('ongoing-calls', {
+      name: 'Ongoing Calls',
+      description: 'Shows when you have an active call in progress',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0], // No vibration for ongoing notification
+      lightColor: '#6366F1',
+      sound: null, // No sound for ongoing notification
+      enableVibrate: false,
+      showBadge: false,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    })
+    
+    // Missed calls channel - for missed call notifications
+    await Notifications.setNotificationChannelAsync('missed-calls', {
+      name: 'Missed Calls',
+      description: 'Missed call notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#EF4444', // Red for missed calls
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true, // Shows red dot on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    })
+    
+    // Messages channel - for incoming message notifications (WhatsApp-style)
+    await Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages',
+      description: 'New message notifications',
+      importance: Notifications.AndroidImportance.HIGH, // HIGH priority - shows as banner
+      vibrationPattern: [0, 250, 100, 250],
+      lightColor: '#3B82F6', // Blue for messages
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true, // Shows badge on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, // Shows on lock screen
+    })
+  }
+
+  // iOS requires explicit permission prompt; Android shows without prompt
+  const settings = await Notifications.getPermissionsAsync()
+  let status = settings.status
+  if (status !== 'granted') {
+    const req = await Notifications.requestPermissionsAsync()
+    status = req.status
+  }
+  if (status !== 'granted') return null
+
+  try {
+    if (!EXPO_PROJECT_ID) {
+      console.warn('[Push Registration] Missing Expo project ID - skipping token registration')
+      return null
+    }
+
+    // Bind token to this Expo project to ensure it works in internal/dev builds
+    const token = await Notifications.getExpoPushTokenAsync({ projectId: EXPO_PROJECT_ID })
+    return token.data ?? null
+  } catch (error: any) {
+    // Firebase/FCM not configured - gracefully skip in dev mode
+    if (error?.message?.includes('FirebaseApp') || error?.message?.includes('FCM')) {
+      console.log('[Push Registration] FCM not configured - skipping (dev mode)')
+      return null
+    }
+    throw error
+  }
+}
+
+export async function registerPushDevice(supabase: any, user: any): Promise<PushRegistrationResult> {
+  try {
+    console.log('[Push Registration] Starting registration for user:', user?.id)
+    
+    // Skip registration on web or emulators
+    if (Platform.OS === 'web' || !Device.isDevice) {
+      console.log('[Push Registration] Skipping - unsupported platform')
+      return { status: 'skipped', reason: 'unsupported_platform' }
+    }
+    
+    // Skip if no user
+    if (!user?.id) {
+      console.log('[Push Registration] Skipping - no user ID')
+      return { status: 'skipped', reason: 'no_user' }
+    }
+
+    // Guard: ensure the Supabase client is currently authenticated as this user.
+    // If a SIGNED_OUT happens while this async flow is in-flight, `auth.uid()` becomes null
+    // and the RLS policy will reject inserts/updates (42501).
+    try {
+      const { data: sData, error: sErr } = await supabase?.auth?.getSession?.();
+      const sessionUserId = sData?.session?.user?.id;
+      if (sErr || !sessionUserId || sessionUserId !== user.id) {
+        console.log('[Push Registration] Skipping - no active session for user');
+        return { status: 'skipped', reason: 'no_active_session' };
+      }
+    } catch {
+      console.log('[Push Registration] Skipping - could not verify active session');
+      return { status: 'skipped', reason: 'no_active_session' };
+    }
+
+    // Get a stable device ID that persists across app restarts
+    // This ensures consistency between notification registrations and avoids conflicts
+    const stableDeviceId = await getStableDeviceId()
+    console.log('[Push Registration] Using stable device ID:', stableDeviceId)
+
+    // Get device metadata
+    console.log('[Push Registration] Getting device metadata...')
+    const rawLanguageTag = Localization.getLocales?.()?.[0]?.languageTag || 'en'
+    console.log('[Push Registration] Raw language tag:', rawLanguageTag)
+    const deviceMetadata = {
+      platform: Platform.OS,
+      brand: Device.brand,
+      model: Device.modelName,
+      osVersion: Device.osVersion,
+      appVersion: Constants.expoConfig?.version,
+      appBuild: Constants.expoConfig?.runtimeVersion,
+      locale: rawLanguageTag.split('-')[0].toLowerCase(),
+      timezone: Localization.getCalendars?.()?.[0]?.timeZone || 'UTC',
+      installationId: stableDeviceId,
+    }
+    
+    // Validate and normalize language for database constraint
+    const supportedLanguages = ['en', 'af', 'zu', 'st'];
+    const normalizedLanguage = supportedLanguages.includes(deviceMetadata.locale) ? deviceMetadata.locale : 'en';
+    console.log('[Push Registration] Device metadata:', { stableDeviceId, platform: Platform.OS, model: Device.modelName, locale: deviceMetadata.locale, normalizedLanguage })
+
+    // Get push token
+    if (__DEV__) console.log('[Push Registration] Getting push token...')
+    const token = await registerForPushNotificationsAsync()
+    if (!token) {
+      if (__DEV__) console.log('[Push Registration] Failed to get push token - permissions denied')
+      return { status: 'denied', reason: 'permissions_denied', message: 'Push notifications not permitted' }
+    }
+    if (__DEV__) console.log('[Push Registration] Got push token')
+
+    // Upsert via SECURITY DEFINER RPC to avoid RLS race errors when sign-out happens mid-flight.
+    console.log('[Push Registration] Saving to database...')
+
+    const rpcResult = await upsertPushDeviceViaRPC(supabase, {
+      expoPushToken: token,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      deviceId: stableDeviceId,
+      deviceInstallationId: stableDeviceId,
+      language: normalizedLanguage,
+      timezone: deviceMetadata.timezone,
+      deviceMetadata: {
+        ...deviceMetadata,
+        token_version: TOKEN_VERSION,
+        expo_project_id: EXPO_PROJECT_ID,
+      },
+    })
+
+    if (rpcResult.usedFallback) {
+      console.log('[Push Registration] Using legacy push_devices fallback path (upsert_push_device RPC not yet deployed)')
+    }
+
+    if (!rpcResult.success) {
+      console.error('[Push Registration] Database error:', rpcResult.error)
+      return { status: 'error', reason: 'database_error', message: rpcResult.error || 'Unknown database error' }
+    }
+
+    console.log('[Push Registration] Successfully registered device')
+    
+    // Activate this user's tokens and deactivate others on this device (multi-account support)
+    try {
+      const { reactivateUserTokens } = await import('./NotificationRouter');
+      await reactivateUserTokens(user.id);
+      console.log('[Push Registration] Token activation complete');
+    } catch (activationErr) {
+      console.warn('[Push Registration] Token activation failed (non-blocking):', activationErr);
+      // Non-fatal: registration succeeded, activation is a bonus
+    }
+    
+    return { status: 'registered', token }
+  } catch (error: any) {
+    console.error('[Push Registration] Exception:', error?.message || error)
+    // Log full error details in dev mode
+    if (__DEV__) {
+      console.error('[Push Registration] Full error:', error)
+    }
+    return { status: 'error', reason: 'exception', message: error?.message || String(error) }
+  }
+}
+
+export async function deregisterPushDevice(supabase: any, user: any): Promise<void> {
+  try {
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) return
+    
+    // Use the same stable device ID as registration to ensure we deregister the correct device
+    const stableDeviceId = await getStableDeviceId()
+    
+    await supabase
+      .from('push_devices')
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('device_installation_id', stableDeviceId)
+  } catch (error) {
+    console.debug('Push device deregistration failed:', error)
+  }
+}
+
+/**
+ * Force refresh push token for a user.
+ * This should be called:
+ * 1. When the app detects the stored token version is outdated
+ * 2. When the Expo project ID has changed
+ * 3. On app update after project configuration changes
+ * 
+ * Returns true if token was refreshed, false otherwise.
+ */
+export async function forceRefreshPushToken(supabase: any, user: any): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) {
+      return false
+    }
+
+    console.log('[Push Refresh] Force refreshing push token for user:', user.id)
+    
+    // Get a fresh token from Expo
+    const newToken = await registerForPushNotificationsAsync()
+    if (!newToken) {
+      console.log('[Push Refresh] Failed to get new token')
+      return false
+    }
+
+    // Use stable device ID for consistency
+    const stableDeviceId = await getStableDeviceId()
+    
+    const rpcResult = await upsertPushDeviceViaRPC(supabase, {
+      expoPushToken: newToken,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      deviceId: stableDeviceId,
+      deviceInstallationId: stableDeviceId,
+      deviceMetadata: {
+        platform: Platform.OS,
+        brand: Device.brand,
+        model: Device.modelName,
+        osVersion: Device.osVersion,
+        appVersion: Constants.expoConfig?.version,
+        token_version: TOKEN_VERSION,
+        expo_project_id: EXPO_PROJECT_ID,
+        force_refreshed_at: new Date().toISOString(),
+      },
+    })
+
+    if (rpcResult.usedFallback) {
+      console.log('[Push Refresh] Using legacy push_devices fallback path (upsert_push_device RPC not yet deployed)')
+    }
+
+    if (!rpcResult.success) {
+      console.error('[Push Refresh] Database error:', rpcResult.error)
+      return false
+    }
+
+    console.log('[Push Refresh] Token refreshed successfully')
+    return true
+  } catch (error) {
+    console.error('[Push Refresh] Error:', error)
+    return false
+  }
+}
+
+/**
+ * Check if the user's push token needs refreshing.
+ * This checks if the stored token version or project ID differs from current.
+ */
+export async function checkAndRefreshTokenIfNeeded(supabase: any, user: any): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) {
+      return false
+    }
+
+    // Use stable device ID for consistent lookups
+    const stableDeviceId = await getStableDeviceId()
+
+    // Check current stored token metadata
+    const { data: existingDevice } = await supabase
+      .from('push_devices')
+      .select('device_metadata, expo_push_token')
+      .eq('user_id', user.id)
+      .eq('device_installation_id', stableDeviceId)
+      .eq('is_active', true)
+      .single()
+
+    if (!existingDevice) {
+      // No existing device, register new
+      console.log('[Push Check] No existing device found, registering new')
+      await registerPushDevice(supabase, user)
+      return true
+    }
+
+    const metadata = existingDevice.device_metadata || {}
+    const storedVersion = metadata.token_version || 1
+    const storedProjectId = metadata.expo_project_id
+
+    // Check if refresh is needed
+    const needsRefresh = 
+      storedVersion < TOKEN_VERSION || // Token version outdated
+      Boolean(EXPO_PROJECT_ID && storedProjectId && storedProjectId !== EXPO_PROJECT_ID) // Project ID changed
+
+    if (needsRefresh) {
+      console.log('[Push Check] Token refresh needed:', {
+        storedVersion,
+        currentVersion: TOKEN_VERSION,
+        storedProjectId,
+        currentProjectId: EXPO_PROJECT_ID,
+      })
+      return await forceRefreshPushToken(supabase, user)
+    }
+
+    console.log('[Push Check] Token is up to date')
+    return false
+  } catch (error) {
+    console.error('[Push Check] Error checking token:', error)
+    // On error, try to register anyway to be safe
+    await registerPushDevice(supabase, user)
+    return true
+  }
+}
+
+export async function scheduleLocalNotification(title: string, body: string) {
+  return Notifications.scheduleNotificationAsync({
+    content: { title, body },
+    trigger: null, // fire immediately
+  })
+}
+
+export function onNotificationReceived(cb: (n: Notifications.Notification) => void) {
+  const sub = Notifications.addNotificationReceivedListener(cb)
+  return () => sub.remove()
+}

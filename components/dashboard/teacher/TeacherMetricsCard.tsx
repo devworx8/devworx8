@@ -1,0 +1,192 @@
+/**
+ * TeacherMetricsCard - Reusable metric display component
+ * 
+ * Shared by both legacy and new enhanced teacher dashboards.
+ * Displays a metric with icon, value, title, and optional trend indicator.
+ */
+
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '@/contexts/ThemeContext';
+
+const getLayoutMetrics = (width: number) => {
+  const isTablet = width > 768;
+  const isSmallScreen = width < 380;
+  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
+  const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  const containerWidth = width - (cardPadding * 2);
+  const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+  return { isTablet, isSmallScreen, cardPadding, cardGap, containerWidth, cardWidth };
+};
+
+interface TeacherMetricsCardProps {
+  title: string;
+  value: string | number;
+  icon: string;
+  color: string;
+  trend?: string;
+  onPress?: () => void;
+  size?: 'small' | 'medium' | 'large';
+  /** When true, card fills its container (e.g. in a two-column grid row) */
+  fillContainer?: boolean;
+}
+
+export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
+  title,
+  value,
+  icon,
+  color,
+  trend,
+  onPress,
+  size = 'medium',
+  fillContainer = false,
+}) => {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const layout = getLayoutMetrics(width || 0);
+  const styles = getStyles(theme, layout);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.metricCard,
+        size === 'large' && styles.metricCardLarge,
+        size === 'small' && styles.metricCardSmall,
+        fillContainer && styles.metricCardFill,
+        fillContainer && { width: undefined },
+        !fillContainer && { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap },
+      ]}
+      onPress={onPress}
+      disabled={!onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.metricContent}>
+        <View style={styles.metricHeader}>
+          <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
+            <Ionicons
+              name={icon as any}
+              size={layout.isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)}
+              color={color}
+            />
+          </View>
+          {trend && (
+            <View style={styles.trendContainer}>
+              <Text style={[styles.trendText, getTrendColor(trend, theme)]}>
+                {getTrendIcon(trend)} {getTrendText(trend, t)}
+              </Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.metricValue}>{value}</Text>
+        <Text style={styles.metricTitle}>{title}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// Trend helper functions
+export const getTrendColor = (trend: string, theme: any) => {
+  switch (trend) {
+    case 'up': case 'good': case 'excellent': case 'stable': return { color: theme.success };
+    case 'warning': case 'attention': case 'high': return { color: theme.warning };
+    case 'down': case 'low': case 'needs_attention': return { color: theme.error };
+    default: return { color: theme.textSecondary };
+  }
+};
+
+export const getTrendIcon = (trend: string): string => {
+  switch (trend) {
+    case 'up': case 'good': case 'excellent': return '↗️';
+    case 'down': case 'low': return '↘️';
+    case 'warning': case 'attention': case 'needs_attention': return '⚠️';
+    default: return '➡️';
+  }
+};
+
+export const getTrendText = (trend: string, t: any): string => {
+  switch (trend) {
+    case 'up': return t('trends.up', { defaultValue: 'Up' });
+    case 'down': return t('trends.down', { defaultValue: 'Down' });
+    case 'good': return t('trends.good', { defaultValue: 'Good' });
+    case 'excellent': return t('trends.excellent', { defaultValue: 'Excellent' });
+    case 'warning': return t('trends.warning', { defaultValue: 'Warning' });
+    case 'attention': return t('trends.attention', { defaultValue: 'Attention' });
+    case 'needs_attention': return t('trends.needs_attention', { defaultValue: 'Needs attention' });
+    case 'low': return t('trends.low', { defaultValue: 'Low' });
+    case 'stable': return t('trends.stable', { defaultValue: 'Stable' });
+    case 'high': return t('trends.high', { defaultValue: 'High' });
+    default: return trend;
+  }
+};
+
+const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => {
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
+
+  return StyleSheet.create({
+    metricCard: {
+      width: layout.cardWidth,
+      backgroundColor: isNextGenTeacher ? 'rgba(255,255,255,0.05)' : theme.surface,
+      borderRadius: isNextGenTeacher ? 18 : 16,
+      padding: layout.cardPadding,
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : 'transparent',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: isNextGenTeacher ? 14 : 2 },
+      shadowOpacity: isNextGenTeacher ? 0.35 : 0.1,
+      shadowRadius: isNextGenTeacher ? 24 : 8,
+      elevation: isNextGenTeacher ? 10 : 4,
+    },
+    metricCardLarge: {
+      width: layout.containerWidth,
+    },
+    metricCardSmall: {
+      width: (layout.containerWidth - layout.cardGap) / 3,
+    },
+    metricCardFill: {
+      flex: 1,
+      minWidth: 0,
+      marginHorizontal: 0,
+      marginBottom: 0,
+    },
+    metricContent: {
+      flex: 1,
+    },
+    metricHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    iconContainer: {
+      width: layout.isSmallScreen ? 40 : 48,
+      height: layout.isSmallScreen ? 40 : 48,
+      borderRadius: isNextGenTeacher ? (layout.isSmallScreen ? 12 : 14) : (layout.isSmallScreen ? 20 : 24),
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.08)' : 'transparent',
+    },
+    trendContainer: {
+      flexShrink: 1,
+    },
+    trendText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    metricValue: {
+      fontSize: layout.isTablet ? 32 : layout.isSmallScreen ? 24 : 28,
+      fontWeight: '700',
+      color: isNextGenTeacher ? '#EAF0FF' : theme.text,
+      marginBottom: 4,
+    },
+    metricTitle: {
+      fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 13,
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.72)' : theme.textSecondary,
+      fontWeight: '600',
+      lineHeight: layout.isTablet ? 22 : layout.isSmallScreen ? 16 : 18,
+    },
+  });
+};
