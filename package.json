@@ -44,6 +44,7 @@
   },
   "scripts": {
     "postinstall": "patch-package",
+    "install:fix": "bash scripts/install-with-esbuild-fix.sh",
     "ssot:generate": "node scripts/generate-dash-ai-ssot.mjs",
     "ssot:check": "node scripts/check-dash-ai-ssot.mjs",
     "docs:policy:check": "node ./scripts/docs-policy-check.js",
