@@ -585,9 +585,13 @@ export class UnifiedToolRegistry {
     }
 
     if (!this.hasTool(toolName, role, tier)) {
+      const errorMessage =
+        role === 'guest'
+          ? `Guest users cannot execute tools. Tool: ${toolName}`
+          : `Insufficient permissions or tier for tool ${toolName}`;
       return {
         success: false,
-        error: `Insufficient permissions or tier for tool ${toolName}`,
+        error: errorMessage,
         trace_id: traceId,
         metadata: {
           trace_id: traceId,
