@@ -134,7 +134,7 @@ async function getServerVoiceBudget(tier?: string | null): Promise<VoiceBudget |
       hint: (error as any)?.hint,
       tier: normalizeTier(tier),
     });
-    throw error;
+    return null;
   }
   const row = parseServerBudgetRow(data);
   if (!row) return null;
