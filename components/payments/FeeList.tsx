@@ -15,16 +15,31 @@ export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps)
   const styles = createStyles(theme);
   const statusInfo = getFeeStatusColor(fee.due_date, fee.grace_period_days);
   
-  // Handle pending_verification status specially
   const isPendingVerification = fee.status === 'pending_verification';
-  const displayStatus = isPendingVerification ? 'Awaiting Verification' : 
-    fee.status === 'pending' ? 'Pending' : 
-    fee.status === 'paid' ? 'Paid' :
-    fee.status === 'overdue' ? 'Overdue' :
-    fee.status;
-  
-  const statusColor = isPendingVerification ? theme.warning : statusInfo.color;
-  const statusBgColor = isPendingVerification ? theme.warning + '20' : statusInfo.bgColor;
+  const isOverdue = fee.status === 'overdue' || (!isPendingVerification && statusInfo.label.toLowerCase().includes('overdue'));
+  const isPartiallyPaid = fee.status === 'partially_paid';
+
+  const displayStatus = isPendingVerification ? 'Awaiting Verification'
+    : isPartiallyPaid ? 'Partially Paid'
+    : isOverdue ? statusInfo.label
+    : fee.status === 'pending' ? statusInfo.label
+    : fee.status === 'paid' ? 'Paid'
+    : fee.status === 'waived' ? 'Waived'
+    : statusInfo.label;
+
+  const statusColor = isPendingVerification ? theme.warning
+    : isPartiallyPaid ? '#3b82f6'
+    : statusInfo.color;
+  const statusBgColor = isPendingVerification ? theme.warning + '20'
+    : isPartiallyPaid ? 'rgba(59, 130, 246, 0.1)'
+    : statusInfo.bgColor;
+
+  const statusIcon: string = isPendingVerification ? 'hourglass-outline'
+    : isOverdue ? 'alert-circle'
+    : isPartiallyPaid ? 'pie-chart-outline'
+    : fee.status === 'paid' ? 'checkmark-circle'
+    : fee.status === 'waived' ? 'gift-outline'
+    : 'time-outline';
 
   return (
     <View style={[
@@ -43,10 +58,10 @@ export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps)
         <Text style={[styles.feeAmount, isPendingVerification && { opacity: 0.7 }]}>{formatCurrency(fee.amount)}</Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
-        <Ionicons 
-          name={isPendingVerification ? "hourglass-outline" : "time-outline"} 
-          size={12} 
-          color={statusColor} 
+        <Ionicons
+          name={statusIcon as any}
+          size={12}
+          color={statusColor}
         />
         <Text style={[styles.statusText, { color: statusColor }]}>
           {displayStatus}

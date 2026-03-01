@@ -17,34 +17,67 @@ export function formatPaymentDate(dateString: string): string {
 
 export function getFeeStatusColor(dueDate: string, gracePeriodDays: number = 7): FeeStatusInfo {
   const now = new Date();
+  now.setHours(0, 0, 0, 0);
   const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0);
   const diffTime = now.getTime() - due.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays <= 0) {
-    return { 
-      color: '#22c55e', 
-      bgColor: 'rgba(34, 197, 94, 0.1)', 
-      label: 'Due Soon',
+  const daysUntilDue = -diffDays;
+
+  if (daysUntilDue > 14) {
+    return {
+      color: '#22c55e',
+      bgColor: 'rgba(34, 197, 94, 0.1)',
+      label: `Due in ${daysUntilDue} days`,
+    };
+  } else if (daysUntilDue > 7) {
+    return {
+      color: '#22c55e',
+      bgColor: 'rgba(34, 197, 94, 0.1)',
+      label: `Due in ${daysUntilDue} days`,
+    };
+  } else if (daysUntilDue > 3) {
+    return {
+      color: '#eab308',
+      bgColor: 'rgba(234, 179, 8, 0.1)',
+      label: `Due in ${daysUntilDue} days`,
+    };
+  } else if (daysUntilDue > 0) {
+    return {
+      color: '#f97316',
+      bgColor: 'rgba(249, 115, 22, 0.1)',
+      label: daysUntilDue === 1 ? 'Due tomorrow' : `Due in ${daysUntilDue} days`,
+    };
+  } else if (daysUntilDue === 0) {
+    return {
+      color: '#f97316',
+      bgColor: 'rgba(249, 115, 22, 0.15)',
+      label: 'Due today',
     };
   } else if (diffDays <= gracePeriodDays) {
     const daysLeft = gracePeriodDays - diffDays;
-    return { 
-      color: '#fbbf24', 
-      bgColor: 'rgba(251, 191, 36, 0.1)', 
-      label: `Grace Period (${daysLeft}d left)`,
+    return {
+      color: '#f97316',
+      bgColor: 'rgba(249, 115, 22, 0.1)',
+      label: `Grace period (${daysLeft}d left)`,
     };
-  } else if (diffDays <= gracePeriodDays + 3) {
-    return { 
-      color: '#f97316', 
-      bgColor: 'rgba(249, 115, 22, 0.1)', 
-      label: 'Late Payment',
+  } else if (diffDays <= 30) {
+    return {
+      color: '#ef4444',
+      bgColor: 'rgba(239, 68, 68, 0.1)',
+      label: `Overdue (${diffDays} days)`,
+    };
+  } else if (diffDays <= 60) {
+    return {
+      color: '#dc2626',
+      bgColor: 'rgba(220, 38, 38, 0.15)',
+      label: `Overdue (${diffDays} days)`,
     };
   } else {
-    return { 
-      color: '#ef4444', 
-      bgColor: 'rgba(239, 68, 68, 0.1)', 
-      label: 'Overdue',
+    return {
+      color: '#991b1b',
+      bgColor: 'rgba(153, 27, 27, 0.15)',
+      label: `Severely overdue (${diffDays} days)`,
     };
   }
 }
