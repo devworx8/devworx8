@@ -1,0 +1,1192 @@
+'use client';
+
+import { useState, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
+import { getSupabase } from '@/lib/supabase';
+import { generateDeepLink, generateUniversalLink, getPlatformDownloadUrl, isMobileDevice } from '@/lib/deepLinks';
+import {
+  Leaf,
+  ArrowRight,
+  ArrowLeft,
+  MapPin,
+  User,
+  CreditCard,
+  CheckCircle2,
+  Mail,
+  Phone,
+  Calendar,
+  Building2,
+  Users,
+  Shield,
+  AlertCircle,
+  Loader2,
+  Download,
+  ExternalLink,
+  Smartphone,
+  Lock,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+
+// Soil of Africa Organization ID - should be in env var for production
+const SOA_ORGANIZATION_ID = process.env.NEXT_PUBLIC_SOA_ORGANIZATION_ID || '63b6139a-e21f-447c-b322-376fb0828992';
+
+// South African Regions with database IDs
+const regions = [
+  { code: 'GP', name: 'Gauteng', description: 'Johannesburg, Pretoria', id: '7e770bd4-3cad-4755-9b65-f7c0a2974139' },
+  { code: 'WC', name: 'Western Cape', description: 'Cape Town, Stellenbosch', id: 'dd1a7b1a-3ee9-477e-a34d-f0eebac6eca5' },
+  { code: 'KZN', name: 'KwaZulu-Natal', description: 'Durban, Pietermaritzburg', id: 'd9c0da5d-4363-42d8-8d4a-9924af458aa9' },
+  { code: 'EC', name: 'Eastern Cape', description: 'Port Elizabeth, East London', id: '6eee4c35-743d-4907-bbd4-d40c24170baf' },
+  { code: 'LP', name: 'Limpopo', description: 'Polokwane, Tzaneen', id: '2fb5e377-7cf8-42da-9cfc-25fcd3e7e3f1' },
+  { code: 'MP', name: 'Mpumalanga', description: 'Nelspruit, Witbank', id: 'cebc4383-7912-4b80-9037-ec723b05f04a' },
+  { code: 'NW', name: 'North West', description: 'Rustenburg, Mahikeng', id: 'd52fd5fb-1a85-49cc-b60e-3b13919e19b8' },
+  { code: 'FS', name: 'Free State', description: 'Bloemfontein, Welkom', id: 'ccecc955-1edc-441b-9d2b-e638d013001b' },
+  { code: 'NC', name: 'Northern Cape', description: 'Kimberley, Upington', id: 'd0245ae9-8413-4635-b345-b2da8be22282' },
+];
+
+// Member Types (for public registration)
+// Note: Leadership roles (president, ceo, board_member, etc.) are assigned internally
+const memberTypes = [
+  {
+    id: 'learner',
+    name: 'Learner',
+    description: 'New to SOA, eager to learn and grow',
+    icon: User,
+  },
+  {
+    id: 'volunteer',
+    name: 'Volunteer',
+    description: 'Contribute your time and skills',
+    icon: Users,
+  },
+  {
+    id: 'facilitator',
+    name: 'Facilitator',
+    description: 'Experienced member who guides learners',
+    icon: Users,
+  },
+  {
+    id: 'mentor',
+    name: 'Mentor',
+    description: 'Senior member providing leadership',
+    icon: Shield,
+  },
+  {
+    id: 'staff',
+    name: 'Staff Member',
+    description: 'Full-time or part-time SOA employee',
+    icon: Building2,
+  },
+  {
+    id: 'executive',
+    name: 'Executive',
+    description: 'Leadership team member',
+    icon: Shield,
+  },
+];
+
+// Membership Tiers (maps to database: standard, premium, vip, honorary)
+const tiers = [
+  {
+    id: 'standard',
+    name: 'Community',
+    price: 20,
+    description: 'Join the movement and stay connected',
+    features: ['Digital ID Card', 'Community Updates', 'Event Notifications', 'Basic Resources'],
+  },
+  {
+    id: 'premium',
+    name: 'Active Member',
+    price: 350,
+    description: 'Full access to programs and resources',
+    features: ['All Community +', 'Skills Programs', 'Chapter Participation', 'Workshop Priority'],
+    popular: true,
+  },
+  {
+    id: 'vip',
+    name: 'VIP',
+    price: 600,
+    description: 'For coordinators and chapter leaders',
+    features: ['All Active +', 'Leadership Training', 'VIP Events', 'Mentorship Programs'],
+  },
+];
+
+type Step = 'region' | 'personal' | 'membership' | 'payment' | 'complete';
+
+interface FormData {
+  // Region
+  region_code: string;
+  // Personal
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  id_number: string;
+  date_of_birth: string;
+  address: string;
+  city: string;
+  // Password
+  password: string;
+  confirm_password: string;
+  // Emergency Contact
+  emergency_name: string;
+  emergency_phone: string;
+  emergency_relationship: string;
+  // Membership
+  member_type: string;
+  membership_tier: string;
+  // Payment
+  payment_method: string;
+}
+
+function RegisterPageContent() {
+  const searchParams = useSearchParams();
+  const preselectedTier = searchParams.get('tier') || '';
+
+  const [step, setStep] = useState<Step>('region');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [memberNumber, setMemberNumber] = useState('');
+
+  const [formData, setFormData] = useState<FormData>({
+    region_code: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    id_number: '',
+    date_of_birth: '',
+    address: '',
+    city: '',
+    password: '',
+    confirm_password: '',
+    emergency_name: '',
+    emergency_phone: '',
+    emergency_relationship: '',
+    member_type: 'learner',
+    membership_tier: preselectedTier || 'standard',
+    payment_method: 'card',
+  });
+  
+  const [showPassword, setShowPassword] = useState(false);
+
+  const updateField = (field: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setError('');
+  };
+
+  const steps: Step[] = ['region', 'personal', 'membership', 'payment', 'complete'];
+  const currentStepIndex = steps.indexOf(step);
+
+  const validateStep = (): boolean => {
+    switch (step) {
+      case 'region':
+        if (!formData.region_code) {
+          setError('Please select your region');
+          return false;
+        }
+        break;
+      case 'personal':
+        if (!formData.first_name || !formData.last_name) {
+          setError('Please enter your full name');
+          return false;
+        }
+        if (!formData.email || !formData.email.includes('@')) {
+          setError('Please enter a valid email address');
+          return false;
+        }
+        if (!formData.phone) {
+          setError('Please enter your phone number');
+          return false;
+        }
+        // Password validation
+        if (!formData.password) {
+          setError('Please create a password');
+          return false;
+        }
+        if (formData.password.length < 8) {
+          setError('Password must be at least 8 characters');
+          return false;
+        }
+        if (!/[A-Z]/.test(formData.password)) {
+          setError('Password must contain at least one uppercase letter');
+          return false;
+        }
+        if (!/[a-z]/.test(formData.password)) {
+          setError('Password must contain at least one lowercase letter');
+          return false;
+        }
+        if (!/[0-9]/.test(formData.password)) {
+          setError('Password must contain at least one number');
+          return false;
+        }
+        if (formData.password !== formData.confirm_password) {
+          setError('Passwords do not match');
+          return false;
+        }
+        break;
+      case 'membership':
+        if (!formData.member_type) {
+          setError('Please select a member type');
+          return false;
+        }
+        if (!formData.membership_tier) {
+          setError('Please select a membership tier');
+          return false;
+        }
+        break;
+    }
+    return true;
+  };
+
+  const nextStep = () => {
+    if (validateStep()) {
+      const nextIndex = currentStepIndex + 1;
+      if (nextIndex < steps.length) {
+        setStep(steps[nextIndex]);
+      }
+    }
+  };
+
+  const prevStep = () => {
+    const prevIndex = currentStepIndex - 1;
+    if (prevIndex >= 0) {
+      setStep(steps[prevIndex]);
+    }
+  };
+
+  // Helper to convert errors to user-friendly messages
+  const getUserFriendlyError = (err: any): string => {
+    const message = err?.message?.toLowerCase() || '';
+    const code = err?.code?.toLowerCase() || '';
+    
+    // Database unique constraint violations
+    if (code === '23505' || message.includes('duplicate key') || message.includes('unique constraint')) {
+      if (message.includes('id_number') || message.includes('org_id_number')) {
+        return 'This ID number is already registered with Soil of Africa. Each person can only register once.';
+      }
+      if (message.includes('email') || message.includes('org_email')) {
+        return 'This email address is already registered. Please use a different email or login to your existing account.';
+      }
+      return 'You are already registered with Soil of Africa. Please contact support if you need assistance.';
+    }
+    
+    // Custom validation errors (our own throws)
+    if (message.includes('already registered') || message.includes('each person can only register')) {
+      return err.message; // Use our custom message directly
+    }
+    
+    // Auth errors
+    if (message.includes('user already registered')) {
+      return 'An account with this email already exists. Please login instead or use a different email.';
+    }
+    
+    // Network/connection issues
+    if (message.includes('network') || message.includes('fetch') || message.includes('connection') || message.includes('failed to fetch')) {
+      return 'Unable to connect to our servers. Please check your internet connection and try again.';
+    }
+    
+    // Supabase not configured
+    if (message.includes('supabase url') || message.includes('anon key')) {
+      return 'Our registration system is temporarily unavailable. Please try again later or contact support.';
+    }
+    
+    // RLS policy errors
+    if (message.includes('rls') || message.includes('policy') || message.includes('permission denied')) {
+      return 'Registration could not be completed due to a permissions issue. Please contact support.';
+    }
+    
+    // Generic fallback - don't expose technical details
+    console.error('Registration error details:', err);
+    return 'Registration could not be completed. Please try again or contact support at info@soilofafrica.org';
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const supabase = getSupabase();
+      
+      // 1. Check if email is already registered as a member in SOA organization
+      const { data: existingEmail } = await supabase
+        .from('organization_members')
+        .select('id, email, member_number')
+        .eq('organization_id', SOA_ORGANIZATION_ID)
+        .eq('email', formData.email.toLowerCase().trim())
+        .maybeSingle();
+      
+      if (existingEmail) {
+        throw new Error(`This email address is already registered with member number ${existingEmail.member_number}. You cannot register in multiple regions.`);
+      }
+      
+      // 2. Check if ID number is already registered in SOA organization (if provided)
+      if (formData.id_number && formData.id_number.trim()) {
+        const { data: existingIdNumber } = await supabase
+          .from('organization_members')
+          .select('id, id_number, member_number, first_name, last_name')
+          .eq('organization_id', SOA_ORGANIZATION_ID)
+          .eq('id_number', formData.id_number.trim())
+          .maybeSingle();
+        
+        if (existingIdNumber) {
+          throw new Error(`This ID number is already registered with Soil of Africa. Each person can only register once, regardless of region.`);
+        }
+      }
+      
+      // Get the selected region
+      const selectedRegion = regions.find(r => r.code === formData.region_code);
+      if (!selectedRegion) {
+        throw new Error('Please select a valid region');
+      }
+      
+      // 3. Create user in Supabase Auth
+      // User sets their own password during registration - no need for password reset email
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password, // User's chosen password
+        options: {
+          data: {
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            phone: formData.phone,
+          },
+          // Redirect confirmation email to callback - just email verification needed
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+        },
+      });
+
+      if (authError) throw authError;
+      
+      if (!authData.user?.id) {
+        throw new Error('Failed to create user account - no user ID returned');
+      }
+
+      // 3.5. Wait for user to be committed to auth.users (timing issue fix)
+      // Supabase auth.signUp is eventually consistent - the user may not immediately appear in auth.users
+      // Increased from 1s to 2s based on production observation of USER_NOT_FOUND errors
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:333',message:'Waiting for auth.user propagation',data:{userId:authData.user?.id,waitMs:2000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H5'})}).catch(()=>{});
+      // #endregion
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+      // NOTE: Removed resetPasswordForEmail() call - was causing duplicate emails
+      // Users will receive ONLY the confirmation email from signUp()
+      // After email confirmation, they can use "Forgot Password" to set their own password
+      // or login with the temporary password and change it in profile settings
+
+      // 4. Generate member number
+      const year = new Date().getFullYear().toString().slice(-2);
+      const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
+      const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
+
+      // 5. Create membership record using RPC with retry for timing issues
+      // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
+      // Wing is automatically set by RPC function based on member_type
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:357',message:'Before RPC call',data:{userId:authData.user.id,orgId:SOA_ORGANIZATION_ID,memberType:formData.member_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H5'})}).catch(()=>{});
+      // #endregion
+      let rpcResult: any = null;
+      let rpcError: any = null;
+      let retries = 0;
+      const maxRetries = 5; // Increased from 3 to give more time for user propagation
+      
+      while (retries < maxRetries) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:365',message:'RPC call attempt',data:{retry:retries+1,maxRetries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        const { data, error } = await supabase.rpc('register_organization_member', {
+          p_organization_id: SOA_ORGANIZATION_ID,
+          p_user_id: authData.user.id,
+          p_region_id: selectedRegion.id || null,
+          p_member_number: generatedMemberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: formData.membership_tier,
+          p_membership_status: 'pending_verification', // Must match RLS policy requirement
+          p_first_name: formData.first_name,
+          p_last_name: formData.last_name,
+          p_email: formData.email.toLowerCase().trim(),
+          p_phone: formData.phone || null,
+          p_id_number: formData.id_number || null,
+          p_date_of_birth: formData.date_of_birth || null, // Added: pass date_of_birth to RPC
+          p_physical_address: formData.address ? `${formData.address}, ${formData.city}`.trim() : null, // Added: combine address fields for physical_address
+          p_role: 'member',
+          p_invite_code_used: null,
+          p_joined_via: 'direct_registration',
+        });
+        
+        rpcResult = data;
+        rpcError = error;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:388',message:'After RPC call',data:{hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code,error:rpcError?.message,rpcError:rpcResult?.error,retry:retries+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        
+        // If RPC error or user not found, retry after a delay
+        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`[WebRegister] Retry attempt ${retries}/${maxRetries} after delay...`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:391',message:'Retrying RPC after delay',data:{retry:retries,delayMs:1000*retries},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+            continue;
+          }
+        } else {
+          // Success or non-retryable error
+          break;
+        }
+      }
+
+      if (rpcError) throw rpcError;
+      if (!rpcResult?.success) {
+        // Handle USER_NOT_FOUND with helpful message
+        if (rpcResult?.code === 'USER_NOT_FOUND') {
+          throw new Error('Your account is being created. Please wait a moment and try again, or check your email for a confirmation link.');
+        }
+        throw new Error(rpcResult?.error || 'Failed to create membership record');
+      }
+      
+      // Handle existing member case
+      if (rpcResult.action === 'existing') {
+        throw new Error('You are already a member. Please login to your existing account instead.');
+      }
+
+      // Use returned member_number
+      const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
+      const newMemberId = rpcResult.id;
+
+      // 7. Create invoice (only if tier has a price)
+      const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
+      if (selectedTier && selectedTier.price > 0) {
+        const { error: invoiceError } = await supabase.from('member_invoices').insert({
+          organization_id: SOA_ORGANIZATION_ID,
+          member_id: newMemberId, // Use organization_members.id, not user_id
+          invoice_number: `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${Math.floor(Math.random() * 10000).toString().padStart(5, '0')}`,
+          description: `${selectedTier.name} Membership - Annual`,
+          line_items: [{
+            description: `${selectedTier.name} Membership`,
+            quantity: 1,
+            unit_price: selectedTier.price,
+            total: selectedTier.price,
+          }],
+          subtotal: selectedTier.price,
+          tax_amount: 0,
+          discount_amount: 0,
+          total_amount: selectedTier.price,
+          currency: 'ZAR',
+          status: 'draft',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        });
+        
+        if (invoiceError) {
+          console.error('Failed to create invoice:', invoiceError);
+          // Don't throw - invoice creation failure shouldn't block registration
+        }
+      }
+
+      setMemberNumber(finalMemberNumber);
+      setStep('complete');
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      // Show user-friendly error message
+      setError(getUserFriendlyError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const selectedRegion = regions.find((r) => r.code === formData.region_code);
+  const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+
+      <main className="pt-24 pb-20">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Progress Header */}
+          {step !== 'complete' && (
+            <FadeIn>
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-2xl font-bold text-gray-900">Join Soil of Africa</h1>
+                  <span className="text-sm text-gray-500">
+                    Step {currentStepIndex + 1} of {steps.length - 1}
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="flex gap-2">
+                  {steps.slice(0, -1).map((s, i) => (
+                    <motion.div
+                      key={s}
+                      className={`h-2 flex-1 rounded-full transition-colors ${
+                        i <= currentStepIndex ? 'bg-soa-primary' : 'bg-gray-200'
+                      }`}
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ duration: 0.3, delay: i * 0.1 }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </FadeIn>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <motion.div 
+              className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          {/* Step Content */}
+          <motion.div 
+            className="bg-white rounded-2xl shadow-sm p-6 sm:p-8"
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* Step 1: Region Selection */}
+            {step === 'region' && (
+              <div>
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <MapPin className="w-8 h-8 text-soa-primary" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">Select Your Region</h2>
+                  <p className="text-gray-500">Choose the province you're located in</p>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {regions.map((region) => (
+                    <button
+                      key={region.code}
+                      type="button"
+                      onClick={() => updateField('region_code', region.code)}
+                      className={`p-4 rounded-xl border-2 text-left transition ${
+                        formData.region_code === region.code
+                          ? 'border-soa-primary bg-soa-light'
+                          : 'border-gray-200 hover:border-soa-primary/50'
+                      }`}
+                    >
+                      <p className="font-semibold text-gray-900">{region.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">{region.description}</p>
+                      {formData.region_code === region.code && (
+                        <CheckCircle2 className="w-5 h-5 text-soa-primary mt-2" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Personal Information */}
+            {step === 'personal' && (
+              <div>
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <User className="w-8 h-8 text-soa-primary" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">Personal Information</h2>
+                  <p className="text-gray-500">Tell us about yourself</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.first_name}
+                        onChange={(e) => updateField('first_name', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="John"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Last Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.last_name}
+                        onChange={(e) => updateField('last_name', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="Doe"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email Address *
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => updateField('email', e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone Number *
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => updateField('phone', e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="+27 82 123 4567"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        ID Number
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.id_number}
+                        onChange={(e) => updateField('id_number', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="8501015800088"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date of Birth
+                      </label>
+                      <div className="relative">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="date"
+                          value={formData.date_of_birth}
+                          onChange={(e) => updateField('date_of_birth', e.target.value)}
+                          className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Street Address
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.address}
+                        onChange={(e) => updateField('address', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="123 Main Street"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => updateField('city', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        placeholder="Johannesburg"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Section */}
+                  <div className="pt-4 border-t border-gray-100">
+                    <h3 className="font-medium text-gray-900 mb-3">Create Your Password *</h3>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Password *
+                        </label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={formData.password}
+                            onChange={(e) => updateField('password', e.target.value)}
+                            className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="Create a password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Confirm Password *
+                        </label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={formData.confirm_password}
+                            onChange={(e) => updateField('confirm_password', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="Confirm your password"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500 space-y-1">
+                      <p className={formData.password.length >= 8 ? 'text-green-600' : ''}>
+                        • At least 8 characters
+                      </p>
+                      <p className={/[A-Z]/.test(formData.password) ? 'text-green-600' : ''}>
+                        • One uppercase letter
+                      </p>
+                      <p className={/[a-z]/.test(formData.password) ? 'text-green-600' : ''}>
+                        • One lowercase letter
+                      </p>
+                      <p className={/[0-9]/.test(formData.password) ? 'text-green-600' : ''}>
+                        • One number
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  <div className="pt-4 border-t border-gray-100">
+                    <h3 className="font-medium text-gray-900 mb-3">Emergency Contact</h3>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input
+                          type="text"
+                          value={formData.emergency_name}
+                          onChange={(e) => updateField('emergency_name', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone
+                        </label>
+                        <input
+                          type="tel"
+                          value={formData.emergency_phone}
+                          onChange={(e) => updateField('emergency_phone', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Relationship
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.emergency_relationship}
+                          onChange={(e) => updateField('emergency_relationship', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                          placeholder="Parent, Spouse, etc."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Membership Selection */}
+            {step === 'membership' && (
+              <div>
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Building2 className="w-8 h-8 text-soa-primary" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">Choose Membership</h2>
+                  <p className="text-gray-500">Select your member type and tier</p>
+                </div>
+
+                {/* Member Type */}
+                <div className="mb-8">
+                  <h3 className="font-medium text-gray-900 mb-3">I want to join as a:</h3>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    {memberTypes.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => updateField('member_type', type.id)}
+                        className={`p-4 rounded-xl border-2 text-left transition ${
+                          formData.member_type === type.id
+                            ? 'border-soa-primary bg-soa-light'
+                            : 'border-gray-200 hover:border-soa-primary/50'
+                        }`}
+                      >
+                        <type.icon
+                          className={`w-6 h-6 mb-2 ${
+                            formData.member_type === type.id ? 'text-soa-primary' : 'text-gray-400'
+                          }`}
+                        />
+                        <p className="font-semibold text-gray-900">{type.name}</p>
+                        <p className="text-xs text-gray-500 mt-1">{type.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Membership Tier */}
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-3">Membership Tier:</h3>
+                  <div className="space-y-3">
+                    {tiers.map((tier) => (
+                      <button
+                        key={tier.id}
+                        type="button"
+                        onClick={() => updateField('membership_tier', tier.id)}
+                        className={`w-full p-4 rounded-xl border-2 text-left transition relative ${
+                          formData.membership_tier === tier.id
+                            ? 'border-soa-primary bg-soa-light'
+                            : 'border-gray-200 hover:border-soa-primary/50'
+                        }`}
+                      >
+                        {tier.popular && (
+                          <span className="absolute top-2 right-2 bg-soa-primary text-white text-xs px-2 py-1 rounded-full">
+                            Popular
+                          </span>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-gray-900">{tier.name}</p>
+                            <p className="text-sm text-gray-500">{tier.description}</p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {tier.features.map((f, i) => (
+                                <span
+                                  key={i}
+                                  className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded"
+                                >
+                                  {f}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-soa-primary">
+                              R{tier.price.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-gray-500">/year</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Payment */}
+            {step === 'payment' && (
+              <div>
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <CreditCard className="w-8 h-8 text-soa-primary" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">Complete Registration</h2>
+                  <p className="text-gray-500">Review and confirm your membership</p>
+                </div>
+
+                {/* Order Summary */}
+                <div className="bg-gray-50 rounded-xl p-6 mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Order Summary</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Region</span>
+                      <span className="font-medium">{selectedRegion?.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Member Type</span>
+                      <span className="font-medium capitalize">{formData.member_type}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Membership Tier</span>
+                      <span className="font-medium">{selectedTier?.name}</span>
+                    </div>
+                    <div className="border-t border-gray-200 pt-3 flex justify-between text-lg">
+                      <span className="font-semibold">Total</span>
+                      <span className="font-bold text-soa-primary">
+                        R{selectedTier?.price.toLocaleString()}/year
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Method */}
+                <div className="mb-6">
+                  <h3 className="font-medium text-gray-900 mb-3">Payment Method</h3>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateField('payment_method', 'card')}
+                      className={`p-4 rounded-xl border-2 text-left transition ${
+                        formData.payment_method === 'card'
+                          ? 'border-soa-primary bg-soa-light'
+                          : 'border-gray-200 hover:border-soa-primary/50'
+                      }`}
+                    >
+                      <CreditCard className="w-6 h-6 text-soa-primary mb-2" />
+                      <p className="font-semibold">Card Payment</p>
+                      <p className="text-xs text-gray-500">Via PayFast</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateField('payment_method', 'eft')}
+                      className={`p-4 rounded-xl border-2 text-left transition ${
+                        formData.payment_method === 'eft'
+                          ? 'border-soa-primary bg-soa-light'
+                          : 'border-gray-200 hover:border-soa-primary/50'
+                      }`}
+                    >
+                      <Building2 className="w-6 h-6 text-soa-primary mb-2" />
+                      <p className="font-semibold">Bank EFT</p>
+                      <p className="text-xs text-gray-500">Manual transfer</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Terms */}
+                <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-600">
+                  <p>
+                    By completing registration, you agree to Soil of Africa's Terms of Service and
+                    Privacy Policy. Your membership will be activated once payment is confirmed.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 5: Complete */}
+            {step === 'complete' && (
+              <div className="text-center py-8">
+                <motion.div 
+                  className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                >
+                  <CheckCircle2 className="w-10 h-10 text-soa-primary" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Soil of Africa!</h2>
+                <p className="text-gray-600 mb-6">
+                  Your registration is complete. Your membership is pending payment confirmation.
+                </p>
+
+                {/* Member Number */}
+                <div className="bg-soa-light rounded-xl p-6 mb-8 max-w-sm mx-auto">
+                  <p className="text-sm text-soa-dark mb-2">Your Member Number</p>
+                  <p className="text-2xl font-bold text-soa-primary font-mono">{memberNumber}</p>
+                </div>
+
+                {/* What's Next */}
+                <div className="bg-gray-50 rounded-xl p-6 text-left max-w-md mx-auto mb-8">
+                  <h3 className="font-semibold text-gray-900 mb-4">What's Next?</h3>
+                  <ul className="space-y-3">
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        1
+                      </div>
+                      <span className="text-gray-600"><strong>Check your email</strong> for a confirmation link (check spam folder too)</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        2
+                      </div>
+                      <span className="text-gray-600">Click the link to <strong>verify your email</strong></span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        3
+                      </div>
+                      <span className="text-gray-600">
+                        <strong>Sign in</strong> with your email and the password you created
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        4
+                      </div>
+                      <span className="text-gray-600">
+                        Download the Soil of Africa app to access your ID card and more
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Open App / Download CTA */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  {isMobileDevice() ? (
+                    <>
+                  <a
+                        href={generateDeepLink({
+                          flow: 'registration',
+                          email: formData.email.toLowerCase().trim(),
+                          memberNumber: memberNumber,
+                          organizationId: SOA_ORGANIZATION_ID,
+                        })}
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-soa-primary text-white rounded-xl font-medium hover:bg-soa-dark transition"
+                      >
+                        <Smartphone className="w-5 h-5" />
+                        Open in App
+                      </a>
+                      <a
+                        href={getPlatformDownloadUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                  >
+                    <Download className="w-5 h-5" />
+                        Download App
+                      </a>
+                    </>
+                  ) : (
+                    <a
+                      href={getPlatformDownloadUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download the App
+                  </a>
+                  )}
+                  <Link
+                    href="/"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-gray-700 border border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition"
+                  >
+                    Back to Home
+                  </Link>
+                </div>
+
+                {/* EduDash Pro Link */}
+                <p className="mt-8 text-sm text-gray-500">
+                  Manage your membership on{' '}
+                  <a
+                    href="https://edudashpro.org.za"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-edudash-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    EduDash Pro
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            {step !== 'complete' && (
+              <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={currentStepIndex === 0}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
+                    currentStepIndex === 0
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back
+                </button>
+
+                {step === 'payment' ? (
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-soa-primary to-soa-secondary text-white rounded-xl font-semibold hover:opacity-90 transition disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Complete Registration
+                        <CheckCircle2 className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={nextStep}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-soa-primary text-white rounded-xl font-semibold hover:bg-soa-dark transition"
+                  >
+                    Continue
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Have a code? */}
+          {step !== 'complete' && (
+            <p className="text-center mt-6 text-gray-500">
+              Have an invite code?{' '}
+              <Link href="/join" className="text-soa-primary hover:underline font-medium">
+                Join with code
+              </Link>
+            </p>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+// Loading fallback for Suspense
+function RegisterPageLoading() {
+  return (
+    <div className="min-h-screen bg-soa-cream flex items-center justify-center">
+      <div className="animate-pulse text-soa-primary">Loading...</div>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterPageLoading />}>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}

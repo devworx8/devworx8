@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Modal, Image } from
 import { useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/AuthContext';
 import { signOutAndRedirect } from '@/lib/authActions';
@@ -77,6 +78,7 @@ export function RoleBasedHeader({
   const permissions = usePermissions();
   const { theme, mode, toggleTheme } = useTheme();
   const { tier } = useSubscription();
+  const { t } = useTranslation();
   
   // Get role label for current role (hook must be called at top-level)
   const currentRole = permissions?.enhancedProfile?.role || 'teacher';
@@ -396,12 +398,12 @@ export function RoleBasedHeader({
 
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); router.push(getSettingsRoute(permissions?.enhancedProfile?.role)); }}>
                 <Ionicons name="settings-outline" size={18} color={theme.textSecondary} />
-                <Text style={[styles.menuItemText, { color: theme.text }]}>Settings</Text>
+                <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.title', { defaultValue: 'Settings' })}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); router.push('/screens/account'); }}>
                 <Ionicons name="person-circle-outline" size={18} color={theme.textSecondary} />
-                <Text style={[styles.menuItemText, { color: theme.text }]}>Account Settings</Text>
+                <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.account', { defaultValue: 'Account Settings' })}</Text>
               </TouchableOpacity>
 
               {(permissions?.enhancedProfile?.role === 'principal' || permissions?.enhancedProfile?.role === 'principal_admin' || permissions?.enhancedProfile?.role === 'super_admin') && (
@@ -414,20 +416,20 @@ export function RoleBasedHeader({
                   }}
                 >
                   <Ionicons name="pricetags-outline" size={18} color={theme.textSecondary} />
-                  <Text style={[styles.menuItemText, { color: theme.text }]}>Manage Subscription</Text>
+                  <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.manage_subscription', { defaultValue: 'Manage Subscription' })}</Text>
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setLanguageVisible(true); }}>
                 <Ionicons name="language" size={18} color={theme.textSecondary} />
-                <Text style={[styles.menuItemText, { color: theme.text }]}>Language</Text>
+                <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.language.title', { defaultValue: 'Language' })}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); toggleTheme(); }}>
                 <Ionicons name={mode === 'dark' ? 'sunny' : 'moon'} size={18} color={theme.textSecondary} />
-                <Text style={[styles.menuItemText, { color: theme.text }]}>Theme</Text>
+                <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.theme', { defaultValue: 'Theme' })}</Text>
                 <Text style={[styles.themeIndicator, { color: theme.textTertiary }]}>
-                  {mode === 'dark' ? 'Dark' : mode === 'light' ? 'Light' : 'System'}
+                  {mode === 'dark' ? t('settings.dark', { defaultValue: 'Dark' }) : mode === 'light' ? t('settings.light', { defaultValue: 'Light' }) : t('settings.system', { defaultValue: 'System' })}
                 </Text>
               </TouchableOpacity>
 
@@ -442,7 +444,7 @@ export function RoleBasedHeader({
                 }}
               >
                 <Ionicons name="swap-horizontal" size={18} color={theme.textSecondary} />
-                <Text style={[styles.menuItemText, { color: theme.text }]}>Switch account</Text>
+                <Text style={[styles.menuItemText, { color: theme.text }]}>{t('settings.switch_account', { defaultValue: 'Switch account' })}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -455,7 +457,7 @@ export function RoleBasedHeader({
                 }}
               >
                 <Ionicons name="log-out-outline" size={18} color={theme.error} />
-                <Text style={[styles.menuItemText, { color: theme.error }]}>Sign out</Text>
+                <Text style={[styles.menuItemText, { color: theme.error }]}>{t('parent.profile.sign_out', { defaultValue: 'Sign out' })}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -467,7 +469,7 @@ export function RoleBasedHeader({
         <Modal visible animationType="slide" onRequestClose={() => setLanguageVisible(false)}>
           <View style={[styles.langModalContainer, { backgroundColor: theme.background }]}>
             <View style={[styles.langModalHeader, { backgroundColor: theme.surface, borderBottomColor: theme.divider }]}>
-              <Text style={[styles.langModalTitle, { color: theme.text }]}>Language Settings</Text>
+              <Text style={[styles.langModalTitle, { color: theme.text }]}>{t('settings.language.title', { defaultValue: 'Language' })}</Text>
               <TouchableOpacity onPress={() => setLanguageVisible(false)} style={styles.langCloseButton}>
                 <Ionicons name="close" size={22} color={theme.text} />
               </TouchableOpacity>

@@ -12,6 +12,7 @@ import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -27,6 +28,7 @@ export default function PaymentFlowScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   
   // Type the params
@@ -68,9 +70,11 @@ export default function PaymentFlowScreen() {
   });
 
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const uploadButtonLabel = launchState === 'idle' ? 'Complete Step 1 First' : 'Upload Proof of Payment';
+  const uploadButtonLabel = t('payments.upload_proof', { defaultValue: 'Upload Proof of Payment' });
   const manualConfirmLabel =
-    launchState === 'manual_confirmed' ? 'Manual Payment Confirmed' : 'I Paid Manually';
+    launchState === 'manual_confirmed' 
+      ? t('payments.manual_confirmed', { defaultValue: 'Manual Payment Confirmed' }) 
+      : t('payments.i_paid_manually', { defaultValue: 'I Paid Manually' });
 
   useEffect(() => {
     if (openUpload === '1') {
@@ -80,9 +84,9 @@ export default function PaymentFlowScreen() {
 
   const handleUploadSuccess = () => {
     Alert.alert(
-      'Payment Submitted! 🎉',
-      'Your proof of payment has been uploaded. The school will verify and confirm your payment within 24-48 hours.',
-      [{ text: 'Done', onPress: () => router.back() }]
+      t('payments.submitted_title', { defaultValue: 'Payment Submitted! 🎉' }),
+      t('payments.submitted_message', { defaultValue: 'Your proof of payment has been uploaded. The school will verify and confirm your payment within 24-48 hours.' }),
+      [{ text: t('common.done', { defaultValue: 'Done' }), onPress: () => router.back() }]
     );
   };
 
@@ -99,10 +103,10 @@ export default function PaymentFlowScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <ScreenHeader title="Make Payment" />
+        <ScreenHeader title={t('payments.make_payment', { defaultValue: 'Make Payment' })} />
         <View style={styles.loadingContainer}>
           <EduDashSpinner size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>Loading payment details...</Text>
+          <Text style={styles.loadingText}>{t('payments.loading', { defaultValue: 'Loading payment details...' })}</Text>
         </View>
       </SafeAreaView>
     );
@@ -110,7 +114,7 @@ export default function PaymentFlowScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScreenHeader title="Make Payment" subtitle={preschoolName} />
+      <ScreenHeader title={t('payments.make_payment', { defaultValue: 'Make Payment' })} subtitle={preschoolName} />
 
       <ScrollView 
         style={styles.scrollView}
@@ -121,21 +125,21 @@ export default function PaymentFlowScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <Ionicons name="receipt-outline" size={24} color={theme.primary} />
-            <Text style={styles.summaryTitle}>Payment Summary</Text>
+            <Text style={styles.summaryTitle}>{t('payments.payment_summary', { defaultValue: 'Payment Summary' })}</Text>
           </View>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>For</Text>
-            <Text style={styles.summaryValue}>{feeDescription || 'School Fees'}</Text>
+            <Text style={styles.summaryLabel}>{t('payments.for', { defaultValue: 'For' })}</Text>
+            <Text style={styles.summaryValue}>{feeDescription || t('payments.school_fees', { defaultValue: 'School Fees' })}</Text>
           </View>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Child</Text>
+            <Text style={styles.summaryLabel}>{t('payments.child', { defaultValue: 'Child' })}</Text>
             <Text style={styles.summaryValue}>{childName || 'N/A'}</Text>
           </View>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Reference</Text>
+            <Text style={styles.summaryLabel}>{t('payments.reference', { defaultValue: 'Reference' })}</Text>
             <View style={styles.referenceRow}>
               <Text style={[styles.summaryValue, styles.referenceText]}>{studentCode || 'N/A'}</Text>
               <TouchableOpacity 
@@ -152,7 +156,7 @@ export default function PaymentFlowScreen() {
           </View>
           
           <View style={[styles.summaryRow, styles.amountRow]}>
-            <Text style={styles.amountLabel}>Amount Due</Text>
+            <Text style={styles.amountLabel}>{t('payments.amount_due', { defaultValue: 'Amount Due' })}</Text>
             <Text style={styles.amountValue}>{formattedAmount}</Text>
           </View>
         </View>
@@ -161,7 +165,7 @@ export default function PaymentFlowScreen() {
         <View style={styles.noticeCard}>
           <Ionicons name="information-circle" size={20} color={theme.warning} />
           <Text style={styles.noticeText}>
-            Always use your child's reference code ({studentCode}) when making payment
+            {t('payments.reference_notice', { code: studentCode, defaultValue: `Always use your child's reference code (${studentCode}) when making payment` })}
           </Text>
         </View>
 
@@ -169,7 +173,7 @@ export default function PaymentFlowScreen() {
         <View style={styles.bankCard}>
           <View style={styles.bankHeader}>
             <Ionicons name="business-outline" size={24} color={theme.text} />
-            <Text style={styles.bankTitle}>School Banking Details</Text>
+            <Text style={styles.bankTitle}>{t('payments.school_bank_details', { defaultValue: 'School Banking Details' })}</Text>
           </View>
 
           {bankDetails ? (
@@ -218,7 +222,7 @@ export default function PaymentFlowScreen() {
             <View style={styles.noBankDetails}>
               <Ionicons name="alert-circle-outline" size={32} color={theme.textSecondary} />
               <Text style={styles.noBankDetailsText}>
-                Bank details not available. Please contact the school directly for payment information.
+                {t('payments.no_bank_details', { defaultValue: 'Bank details not available. Please contact the school directly for payment information.' })}
               </Text>
             </View>
           )}
@@ -226,21 +230,21 @@ export default function PaymentFlowScreen() {
           {/* Share Button */}
           <TouchableOpacity style={styles.shareButton} onPress={sharePaymentDetails}>
             <Ionicons name="share-outline" size={18} color={theme.primary} />
-            <Text style={[styles.shareButtonText, { color: theme.primary }]}>Share Payment Details</Text>
+            <Text style={[styles.shareButtonText, { color: theme.primary }]}>{t('payments.share_details', { defaultValue: 'Share Payment Details' })}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Steps */}
         <View style={styles.stepsCard}>
-          <Text style={styles.stepsTitle}>How to Pay</Text>
+          <Text style={styles.stepsTitle}>{t('payments.how_to_pay', { defaultValue: 'How to Pay' })}</Text>
           
           <View style={styles.step}>
             <View style={[styles.stepNumber, { backgroundColor: theme.primary }]}>
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Open Your Banking App</Text>
-              <Text style={styles.stepDesc}>Use your bank's app or internet banking</Text>
+              <Text style={styles.stepTitle}>{t('payments.step1_title', { defaultValue: 'Open Your Banking App' })}</Text>
+              <Text style={styles.stepDesc}>{t('payments.step1_desc', { defaultValue: "Use your bank's app or internet banking" })}</Text>
             </View>
           </View>
           
@@ -249,8 +253,8 @@ export default function PaymentFlowScreen() {
               <Text style={styles.stepNumberText}>2</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Make EFT Payment</Text>
-              <Text style={styles.stepDesc}>Use the bank details above and your reference code</Text>
+              <Text style={styles.stepTitle}>{t('payments.step2_title', { defaultValue: 'Make EFT Payment' })}</Text>
+              <Text style={styles.stepDesc}>{t('payments.step2_desc', { defaultValue: 'Use the bank details above and your reference code' })}</Text>
             </View>
           </View>
           
@@ -259,8 +263,8 @@ export default function PaymentFlowScreen() {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Upload Proof of Payment</Text>
-              <Text style={styles.stepDesc}>Share or screenshot your payment confirmation</Text>
+              <Text style={styles.stepTitle}>{t('payments.step3_title', { defaultValue: 'Upload Proof of Payment' })}</Text>
+              <Text style={styles.stepDesc}>{t('payments.step3_desc', { defaultValue: 'Share or screenshot your payment confirmation' })}</Text>
             </View>
           </View>
         </View>
@@ -272,7 +276,7 @@ export default function PaymentFlowScreen() {
             onPress={() => openBankingApp()}
           >
             <Ionicons name="wallet-outline" size={20} color="#fff" />
-            <Text style={styles.primaryButtonText}>Open Banking App</Text>
+            <Text style={styles.primaryButtonText}>{t('payments.open_bank_app', { defaultValue: 'Open Banking App' })}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -333,17 +337,16 @@ export default function PaymentFlowScreen() {
         <BankingAppsPanel
           banks={bankApps}
           onSelect={(bank) => openBankingApp(bank)}
-          emptyMessage="No banking apps available in the catalog. Open your banking app manually and return to upload POP."
+          emptyMessage={t('payments.no_banking_apps', { defaultValue: 'No banking apps available in the catalog. Open your banking app manually and return to upload POP.' })}
         />
 
         <Text style={styles.bankHelperText}>
-          Not seeing your bank? Open it manually and return here to upload proof of payment.
+          {t('payments.not_seeing_bank', { defaultValue: 'Not seeing your bank? Open it manually and return here to upload proof of payment.' })}
         </Text>
 
         {/* Help Text */}
         <Text style={styles.helpText}>
-          After making payment, upload your proof of payment (screenshot or PDF). 
-          The school will verify and update your account within 24-48 hours.
+          {t('payments.help_text', { defaultValue: 'After making payment, upload your proof of payment (screenshot or PDF). The school will verify and update your account within 24-48 hours.' })}
         </Text>
       </ScrollView>
 

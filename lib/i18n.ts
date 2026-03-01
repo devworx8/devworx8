@@ -150,6 +150,24 @@ if (!i18n.isInitialized) {
       pluralSeparator: '_',
       saveMissing: process.env.NODE_ENV === 'development',
     });
+
+  // Restore persisted language from AsyncStorage after init
+  // This runs asynchronously and will switch language if user previously chose a non-default one
+  (async () => {
+    try {
+      const { storage } = await import('@/lib/storage');
+      const persisted = await storage.getItem('@edudash_language');
+      if (persisted && persisted in SUPPORTED_LANGUAGES && persisted !== i18n.language) {
+        // Set the global so future detectLanguage() calls pick it up
+        (global as any).__EDUDASH_LANG__ = persisted;
+        await lazyLoadLanguage(persisted as SupportedLanguage);
+        await i18n.changeLanguage(persisted);
+        if (__DEV__) console.log('[i18n] Restored persisted language:', persisted);
+      }
+    } catch (e) {
+      console.debug('[i18n] Could not restore persisted language:', e);
+    }
+  })();
 }
 
 /**

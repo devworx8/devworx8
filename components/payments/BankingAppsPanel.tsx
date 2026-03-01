@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { ResolvedBankApp } from '@/lib/payments/bankingApps';
 
@@ -20,19 +21,24 @@ const getBadgeFontSize = (label: string) => {
 export function BankingAppsPanel({
   banks,
   onSelect,
-  title = 'Banking Apps',
-  subtitle = 'Open your banking app to complete payment',
-  emptyMessage = 'No banking apps are configured for this payment flow.',
+  title,
+  subtitle,
+  emptyMessage,
 }: BankingAppsPanelProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  
+  const displayTitle = title ?? t('payments.select_bank', { defaultValue: 'Banking Apps' });
+  const displaySubtitle = subtitle ?? t('payments.select_bank_desc', { defaultValue: 'Open your banking app to complete payment' });
+  const displayEmpty = emptyMessage ?? t('payments.no_banking_apps', { defaultValue: 'No banking apps are configured for this payment flow.' });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>{displayTitle}</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{displaySubtitle}</Text>
 
       {banks.length === 0 ? (
-        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{emptyMessage}</Text>
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{displayEmpty}</Text>
       ) : (
         <View style={styles.grid}>
           {banks.map((bank) => (
@@ -62,7 +68,7 @@ export function BankingAppsPanel({
                   { color: bank.detected ? theme.primary : theme.textSecondary },
                 ]}
               >
-                {bank.detected ? 'Detected' : 'Manual Open'}
+                {bank.detected ? t('payments.detected', { defaultValue: 'Detected' }) : t('payments.manual_open', { defaultValue: 'Manual Open' })}
               </Text>
             </TouchableOpacity>
           ))}

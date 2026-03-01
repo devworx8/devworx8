@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { getCurrentLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LanguageSelector } from './LanguageSelector';
@@ -36,6 +37,7 @@ export const LanguagePickerButton: React.FC<LanguagePickerButtonProps> = ({
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const currentLang = getCurrentLanguage();
   const flag = LANGUAGE_FLAGS[currentLang] || '🌍';
 
@@ -77,7 +79,7 @@ export const LanguagePickerButton: React.FC<LanguagePickerButtonProps> = ({
         )}
         {showLabel && (
           <Text style={[styles.label, { color: theme.textSecondary }]}>
-            Language
+            {t('settings.language.title', { defaultValue: 'Language' })}
           </Text>
         )}
         <Ionicons name="chevron-down" size={12} color={theme.textTertiary} />
@@ -97,7 +99,7 @@ export const LanguagePickerButton: React.FC<LanguagePickerButtonProps> = ({
             ]}
           >
             <Text style={[styles.modalTitle, { color: theme.text }]}>
-              Choose Language
+              {t('settings.language.title', { defaultValue: 'Language' })}
             </Text>
             <TouchableOpacity
               onPress={() => setModalVisible(false)}
