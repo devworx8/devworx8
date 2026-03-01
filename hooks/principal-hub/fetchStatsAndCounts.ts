@@ -207,12 +207,13 @@ export async function fetchStatsAndCounts(
   try {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    // Use the same dual-ID filter as the receivables service so students stored
-    // under preschool_id are not excluded from the income calculation.
+    // student_fees is tenant-scoped through the related student row.
+    // Filter using the joined student tenant columns to support both
+    // legacy preschool_id and new organization_id storage.
     const { data: monthFees } = await supabase
       .from('student_fees')
-      .select('final_amount, amount, amount_paid, status')
-      .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`)
+      .select('final_amount, amount, amount_paid, status, students!inner(organization_id, preschool_id)')
+      .or(`organization_id.eq.${preschoolId},preschool_id.eq.${preschoolId}`, { foreignTable: 'students' })
       .eq('billing_month', currentMonth)
       .neq('status', 'waived')
       .limit(2000);
@@ -225,7 +226,11 @@ export async function fetchStatsAndCounts(
       collectedTuitionAmount = monthFees
         .filter((f: any) => f.status === 'paid')
         .reduce((sum: number, f: any) => {
-          const paid = Number(f.amount_paid || f.final_amount || f.amount || 0);
+          // Use amount_paid when explicitly set (even if 0); fall back to billed amount
+          const paid =
+            f.amount_paid != null
+              ? Number(f.amount_paid)
+              : Number(f.final_amount ?? f.amount ?? 0);
           return sum + (Number.isFinite(paid) ? paid : 0);
         }, 0);
     }

@@ -63,28 +63,20 @@ export default function ParentProgressScreen() {
     });
   }, [refetchChildren, refetchDetails]);
   
-  // Re-sync when the global context updates (e.g. user had not yet visited the
-  // dashboard before tapping Grades — context hydrates from AsyncStorage later)
+  // Once childrenProgress loads, pick the right child.
+  // Priority: globalActiveChildId (AsyncStorage-backed) > first child.
+  // Also self-corrects if current selection is stale (not in list).
   React.useEffect(() => {
-    if (globalActiveChildId && globalActiveChildId !== selectedChildId) {
-      // Only honour the context update if it points to a child we actually have
-      // data for, or if we haven't made a selection yet.
-      if (!selectedChildId) {
-        setSelectedChildId(globalActiveChildId);
-      }
-    }
-  }, [globalActiveChildId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fallback: if still no selection once children load, pick the stored/context
-  // child first, then fall back to the first in the list.
-  React.useEffect(() => {
-    if (!selectedChildId && childrenProgress.length > 0) {
-      const preferred = globalActiveChildId
-        ? childrenProgress.find(c => c.studentId === globalActiveChildId)
-        : null;
-      setSelectedChildId(preferred?.studentId ?? childrenProgress[0].studentId);
-    }
-  }, [childrenProgress]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (childrenProgress.length === 0) return;
+    const currentIsValid = childrenProgress.some(c => c.studentId === selectedChildId);
+    if (currentIsValid) return;
+    // Current selection is missing from the list — pick the best available
+    const preferred = globalActiveChildId
+      ? childrenProgress.find(c => c.studentId === globalActiveChildId)
+      : null;
+    setSelectedChildId(preferred?.studentId ?? childrenProgress[0].studentId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childrenProgress, globalActiveChildId]);
   
   const selectedChild = childrenProgress.find(c => c.studentId === selectedChildId);
   
@@ -171,13 +163,21 @@ export default function ParentProgressScreen() {
         )}
         
         {/* No Children State */}
-        {childrenProgress.length === 0 && (
+        {childrenProgress.length === 0 && !isLoadingChildren && (
           <View style={styles.emptyContainer}>
             <Ionicons name="school-outline" size={64} color={theme.textSecondary} />
             <Text style={styles.emptyTitle}>No Children Enrolled</Text>
             <Text style={styles.emptyText}>
               Your children's progress will appear here once they are enrolled.
             </Text>
+          </View>
+        )}
+
+        {/* Selecting child (context / AsyncStorage not yet resolved) */}
+        {childrenProgress.length > 0 && !selectedChild && (
+          <View style={[styles.emptyContainer, { paddingVertical: 40 }]}>
+            <EduDashSpinner size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { marginTop: 12 }]}>Loading progress…</Text>
           </View>
         )}
         

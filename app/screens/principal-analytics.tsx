@@ -22,6 +22,7 @@ import {
 } from '@/hooks/usePrincipalAnalytics';
 import { exportAnalyticsPdf } from '@/lib/services/analytics/exportAnalyticsPdf';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { getAgeGroupColor } from '@/hooks/student-management/studentHelpers';
 // Period options for analytics
 const PERIODS = ['week', 'month', 'quarter', 'year'] as const;
 
@@ -194,30 +195,43 @@ const MetricCard: React.FC<{ value: string; label: string; change: string; chang
   </View>
 );
 
-const EnrollmentSection: React.FC<{ analytics: AnalyticsData; theme: any }> = ({ analytics, theme }) => (
-  <View style={[styles_static.section, { backgroundColor: theme.surface }]}>
-    <Text style={[styles_static.sectionTitle, { color: theme.text }]}>Enrollment Analytics</Text>
-    <View style={styles_static.analyticsGrid}>
-      <AnalyticsCard value={`${analytics.enrollment.retentionRate.toFixed(1)}%`} label="Retention Rate" theme={theme} />
-      <AnalyticsCard value={analytics.enrollment.newEnrollments.toString()} label="New Enrollments" theme={theme} />
-      <AnalyticsCard value={analytics.enrollment.withdrawals.toString()} label="Withdrawals" theme={theme} />
-    </View>
-    
-    <Text style={[styles_static.subsectionTitle, { color: theme.text }]}>Age Group Distribution</Text>
-    {analytics.enrollment.ageGroupDistribution.map((group, index) => (
-      <View key={index} style={styles_static.distributionRow}>
-        <Text style={[styles_static.distributionLabel, { color: theme.text }]}>{group.ageGroup}</Text>
-        <View style={[styles_static.distributionBar, { backgroundColor: theme.border }]}>
-          <View style={[styles_static.distributionFill, { 
-            width: `${(group.count / analytics.enrollment.totalStudents) * 100}%`,
-            backgroundColor: theme.primary 
-          }]} />
-        </View>
-        <Text style={[styles_static.distributionValue, { color: theme.text }]}>{group.count}</Text>
+const EnrollmentSection: React.FC<{ analytics: AnalyticsData; theme: any }> = ({ analytics, theme }) => {
+  const activeTotal = analytics.enrollment.ageGroupDistribution.reduce((s, g) => s + g.count, 0) || 1;
+  return (
+    <View style={[styles_static.section, { backgroundColor: theme.surface }]}>
+      <Text style={[styles_static.sectionTitle, { color: theme.text }]}>Enrollment Analytics</Text>
+      <View style={styles_static.analyticsGrid}>
+        <AnalyticsCard value={`${analytics.enrollment.retentionRate.toFixed(1)}%`} label="Retention Rate" theme={theme} />
+        <AnalyticsCard value={analytics.enrollment.newEnrollments.toString()} label="New Enrollments" theme={theme} />
+        <AnalyticsCard value={analytics.enrollment.withdrawals.toString()} label="Withdrawals" theme={theme} />
       </View>
-    ))}
-  </View>
-);
+
+      <Text style={[styles_static.subsectionTitle, { color: theme.text }]}>Age Group Distribution</Text>
+      {analytics.enrollment.ageGroupDistribution.length === 0 ? (
+        <Text style={[styles_static.analyticsLabel, { color: theme.textSecondary, marginTop: 8 }]}>
+          No age group data available. Configure age groups in Settings.
+        </Text>
+      ) : (
+        analytics.enrollment.ageGroupDistribution.map((group, index) => {
+          const color = getAgeGroupColor(group.ageGroup, 'preschool');
+          const pct = Math.round((group.count / activeTotal) * 100);
+          return (
+            <View key={index} style={[styles_static.distributionRow, { marginBottom: 10 }]}>
+              <View style={[styles_static.ageGroupDot, { backgroundColor: color }]} />
+              <Text style={[styles_static.distributionLabel, { color: theme.text, flex: 1 }]}>{group.ageGroup}</Text>
+              <View style={[styles_static.distributionBar, { backgroundColor: theme.border, flex: 2 }]}>
+                <View style={[styles_static.distributionFill, { width: `${pct}%`, backgroundColor: color }]} />
+              </View>
+              <Text style={[styles_static.distributionValue, { color: theme.text, minWidth: 36, textAlign: 'right' }]}>
+                {group.count} <Text style={{ color: theme.textSecondary, fontSize: 11 }}>({pct}%)</Text>
+              </Text>
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+};
 
 const AnalyticsCard: React.FC<{ value: string; label: string; theme: any; color?: string }> = ({
   value, label, theme, color
@@ -338,6 +352,7 @@ const styles_static = StyleSheet.create({
   distributionBar: { flex: 1, height: 8, borderRadius: 4, marginHorizontal: 8 },
   distributionFill: { height: '100%', borderRadius: 4 },
   distributionValue: { width: 30, fontSize: 12, textAlign: 'right' },
+  ageGroupDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   insightCard: { padding: 16, borderRadius: 8, borderLeftWidth: 4 },
   insightTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
   insightText: { fontSize: 14, marginBottom: 6, lineHeight: 20 },

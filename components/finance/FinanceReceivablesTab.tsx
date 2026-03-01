@@ -36,10 +36,8 @@ export function FinanceReceivablesTab({
       const { data } = await supabase
         .from('student_fees')
         .select('student_id, status, final_amount, amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status)')
-        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`, { foreignTable: 'students' })
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
         .eq('billing_month', monthIso)
-        .eq('students.is_active', true)
-        .eq('students.status', 'active')
         .limit(5000);
 
       if (!data) return null;
@@ -51,6 +49,8 @@ export function FinanceReceivablesTab({
       const byStudent = new Map<string, { name: string; studentId: string; totalDue: number; totalPaid: number; status: 'paid' | 'partial' | 'unpaid' }>();
       for (const fee of data as any[]) {
         const s = fee.students;
+        // Skip inactive/non-active students (filter client-side since DB filter was applied to wrong table)
+        if (s && (s.is_active === false || s.status === 'withdrawn')) continue;
         const sid = fee.student_id;
         const existing = byStudent.get(sid) || { name: `${s?.first_name || ''} ${s?.last_name || ''}`.trim(), studentId: sid, totalDue: 0, totalPaid: 0, status: 'paid' as const };
         existing.totalDue += Number(fee.final_amount || fee.amount || 0);
