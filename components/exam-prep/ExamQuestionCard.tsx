@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
 import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
+import { containsMathDelimiters, parseMathSegments } from '@/components/exam-prep/mathSegments';
 
 type WorkspaceTab = 'answer' | 'work';
 
@@ -95,6 +96,66 @@ export function ExamQuestionCard({
   const feedbackMath = parseStandaloneMath(studentAnswer?.feedback || '');
   const correctAnswerMath = parseStandaloneMath(question.correctAnswer || '');
 
+  const renderRichMathText = (
+    value: string,
+    textStyle: any,
+    textColor: string,
+  ): React.ReactNode => {
+    const segments = parseMathSegments(value);
+    const hasBlock = segments.some((segment) => segment.type === 'block');
+
+    if (segments.length === 0 || !containsMathDelimiters(value)) {
+      return (
+        <Text style={[textStyle, { color: textColor }]}>
+          {value}
+        </Text>
+      );
+    }
+
+    if (hasBlock) {
+      return (
+        <View style={styles.mathBlockWrap}>
+          {segments.map((segment, index) => {
+            if (segment.type === 'text') {
+              return (
+                <Text key={`segment-${index}`} style={[textStyle, { color: textColor }]}>
+                  {segment.value}
+                </Text>
+              );
+            }
+
+            return (
+              <MathRenderer
+                key={`segment-${index}`}
+                expression={segment.value}
+                displayMode={segment.type === 'block'}
+              />
+            );
+          })}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.mathInlineWrap}>
+        {segments.map((segment, index) => {
+          if (segment.type === 'text') {
+            return (
+              <Text key={`segment-${index}`} style={[textStyle, { color: textColor }]}>
+                {segment.value}
+              </Text>
+            );
+          }
+          return (
+            <View key={`segment-${index}`} style={styles.mathInlineItem}>
+              <MathRenderer expression={segment.value} displayMode={false} />
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <>
       {/* Section Title */}
@@ -108,6 +169,8 @@ export function ExamQuestionCard({
               expression={sectionInstructionsMath.expression}
               displayMode={sectionInstructionsMath.displayMode}
             />
+          ) : containsMathDelimiters(section.instructions || '') ? (
+            renderRichMathText(section.instructions || '', styles.sectionInstructions, theme.textSecondary)
           ) : (
             <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
               {section.instructions}
@@ -127,6 +190,8 @@ export function ExamQuestionCard({
         </View>
           {readingPassageMath ? (
             <MathRenderer expression={readingPassageMath.expression} displayMode={readingPassageMath.displayMode} />
+          ) : containsMathDelimiters(section.readingPassage || '') ? (
+            renderRichMathText(section.readingPassage || '', styles.readingPassageText, theme.text)
           ) : (
             <Text style={[styles.readingPassageText, { color: theme.text }]}>
               {section.readingPassage}
@@ -157,6 +222,8 @@ export function ExamQuestionCard({
 
         {questionMath ? (
           <MathRenderer expression={questionMath.expression} displayMode={questionMath.displayMode} />
+        ) : containsMathDelimiters(question.question || '') ? (
+          renderRichMathText(question.question || '', styles.questionText, theme.text)
         ) : (
           <Text style={[styles.questionText, { color: theme.text }]}>
             {question.question}
@@ -258,6 +325,14 @@ export function ExamQuestionCard({
                         expression={optionMath.expression}
                         displayMode={false}
                       />
+                    ) : containsMathDelimiters(cleanedOption) ? (
+                      renderRichMathText(
+                        cleanedOption,
+                        styles.optionText,
+                        isLocked
+                          ? lockedTextColor
+                          : isSelected ? theme.primary : theme.text,
+                      )
                     ) : (
                       <Text
                         style={[
@@ -510,6 +585,8 @@ export function ExamQuestionCard({
             </View>
             {feedbackMath ? (
               <MathRenderer expression={feedbackMath.expression} displayMode={feedbackMath.displayMode} />
+            ) : containsMathDelimiters(studentAnswer.feedback || '') ? (
+              renderRichMathText(studentAnswer.feedback || '', styles.feedbackText, theme.text)
             ) : (
               <Text style={[styles.feedbackText, { color: theme.text }]}>
                 {studentAnswer.feedback}
@@ -522,6 +599,8 @@ export function ExamQuestionCard({
                 </Text>
                 {correctAnswerMath ? (
                   <MathRenderer expression={correctAnswerMath.expression} displayMode={false} />
+                ) : containsMathDelimiters(question.correctAnswer || '') ? (
+                  renderRichMathText(question.correctAnswer || '', styles.correctAnswerValue, theme.text)
                 ) : (
                   <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
                     {question.correctAnswer}
@@ -548,6 +627,19 @@ const styles = StyleSheet.create({
   sectionInstructions: {
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  mathBlockWrap: {
+    gap: 8,
+  },
+  mathInlineWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: 4,
+    rowGap: 4,
+  },
+  mathInlineItem: {
+    minWidth: 32,
   },
   readingPassageCard: {
     borderRadius: 12,

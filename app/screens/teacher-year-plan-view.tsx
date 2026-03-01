@@ -1,8 +1,14 @@
-// filepath: /media/king/5e026cdc-594e-4493-bf92-c35c231beea3/home/king/Desktop/dashpro/app/screens/principal-year-planner.tsx
-// Principal Year Planner Screen - Refactored for WARP.md compliance (≤500 lines)
+// Teacher read-only Year Plan view – terms and monthly entries (no edit/publish)
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+} from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -10,18 +16,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 import { useYearPlanner } from '@/hooks/principal/useYearPlanner';
-import { useTermSuggestionAI } from '@/hooks/useTermSuggestionAI';
 import {
   TermCard,
-  TermFormModal,
-  getDefaultTermFormData,
-  termFormDataFromTerm,
   groupTermsByYear,
-  type AcademicTerm,
-  type TermFormData,
   type YearPlanMonthlyEntryRow,
 } from '@/components/principal/year-planner';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -37,7 +36,7 @@ const MONTH_COLORS = [
   '#14B8A6', '#F97316', '#6366F1', '#84CC16', '#E11D48', '#0EA5E9',
 ];
 
-export default function PrincipalYearPlannerScreen() {
+export default function TeacherYearPlanViewScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
   const styles = createStyles(theme);
@@ -50,10 +49,6 @@ export default function PrincipalYearPlannerScreen() {
     loading,
     refreshing,
     handleRefresh,
-    handleSubmit,
-    handleDelete,
-    handleTogglePublish,
-    handlePublishPlan,
   } = useYearPlanner({ orgId, userId: user?.id });
 
   const [viewTab, setViewTab] = useState<'terms' | 'monthly'>('terms');
@@ -79,48 +74,14 @@ export default function PrincipalYearPlannerScreen() {
     return byYearMonth;
   }, [monthlyEntries]);
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingTerm, setEditingTerm] = useState<AcademicTerm | null>(null);
-  const [formData, setFormData] = useState<TermFormData>(getDefaultTermFormData());
-
-  const {
-    suggest: aiSuggest,
-    isBusy: aiBusy,
-    error: aiError,
-    lastResult: aiLastResult,
-    applyToNativeForm: aiApplyToNativeForm,
-  } = useTermSuggestionAI({ context: 'ecd' });
-
-  const handleAISuggest = useCallback(async () => {
-    const result = await aiSuggest(formData);
-    if (result) aiApplyToNativeForm(formData, setFormData);
-  }, [formData, aiSuggest, aiApplyToNativeForm]);
-
   const groupedTerms = groupTermsByYear(terms);
 
-  const openCreateModal = () => {
-    setFormData(getDefaultTermFormData());
-    setEditingTerm(null);
-    setShowCreateModal(true);
-  };
-
-  const openEditModal = (term: AcademicTerm) => {
-    setFormData(termFormDataFromTerm(term));
-    setEditingTerm(term);
-    setShowCreateModal(true);
-  };
-
-  const onSubmit = async () => {
-    const success = await handleSubmit(formData, editingTerm);
-    if (success) {
-      setShowCreateModal(false);
-    }
-  };
+  const noop = () => {};
 
   return (
     <DesktopLayout
-      role="principal"
-      title="Year Planner"
+      role="teacher"
+      title="Year Plan"
       showBackButton
       mobileHeaderTopInsetOffset={4}
     >
@@ -144,16 +105,6 @@ export default function PrincipalYearPlannerScreen() {
               <Text style={[styles.tabBtnText, viewTab === 'monthly' && styles.tabBtnTextActive]}>Monthly</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.publishButton} onPress={() => handlePublishPlan()}>
-              <Ionicons name="megaphone-outline" size={20} color={theme.primary} />
-              <Text style={[styles.publishButtonText, { color: theme.primary }]}>Publish plan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addButton} onPress={openCreateModal}>
-              <Ionicons name="add" size={24} color="#fff" />
-              <Text style={styles.addButtonText}>New Term</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {loading ? (
@@ -170,7 +121,7 @@ export default function PrincipalYearPlannerScreen() {
                 <View style={styles.empty}>
                   <Ionicons name="calendar-outline" size={64} color={theme.textSecondary} />
                   <Text style={styles.emptyText}>No Monthly Entries</Text>
-                  <Text style={styles.emptySubtext}>Save a plan from AI Year Planner to see monthly entries here</Text>
+                  <Text style={styles.emptySubtext}>Your principal can add monthly entries from the AI Year Planner</Text>
                 </View>
               );
             }
@@ -195,9 +146,7 @@ export default function PrincipalYearPlannerScreen() {
                             <TouchableOpacity
                               style={[styles.monthTile, isExpanded && styles.monthTileExpanded]}
                               onPress={() =>
-                                setExpandedMonth(
-                                  isExpanded ? null : { year, month }
-                                )
+                                setExpandedMonth(isExpanded ? null : { year, month })
                               }
                               activeOpacity={0.8}
                             >
@@ -246,10 +195,7 @@ export default function PrincipalYearPlannerScreen() {
           <View style={styles.empty}>
             <Ionicons name="calendar-outline" size={64} color={theme.textSecondary} />
             <Text style={styles.emptyText}>No Terms Planned</Text>
-            <Text style={styles.emptySubtext}>Start by creating your first academic term</Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={openCreateModal}>
-              <Text style={styles.emptyButtonText}>Create First Term</Text>
-            </TouchableOpacity>
+            <Text style={styles.emptySubtext}>Your principal can add terms from the Year Planner</Text>
           </View>
         ) : (
           Object.entries(groupedTerms)
@@ -261,29 +207,16 @@ export default function PrincipalYearPlannerScreen() {
                   <TermCard
                     key={term.id}
                     term={term}
-                    onEdit={() => openEditModal(term)}
-                    onDelete={() => handleDelete(term)}
-                    onTogglePublish={() => handleTogglePublish(term)}
+                    onEdit={noop}
+                    onDelete={noop}
+                    onTogglePublish={noop}
                     theme={theme}
+                    readOnly
                   />
                 ))}
               </View>
             ))
         )}
-
-        <TermFormModal
-          visible={showCreateModal}
-          isEditing={!!editingTerm}
-          formData={formData}
-          setFormData={setFormData}
-          onSubmit={onSubmit}
-          onClose={() => setShowCreateModal(false)}
-          theme={theme}
-          onAISuggest={handleAISuggest}
-          aiBusy={aiBusy}
-          aiError={aiError}
-          aiTips={aiLastResult?.tips}
-        />
       </ScrollView>
     </DesktopLayout>
   );
@@ -327,39 +260,6 @@ const createStyles = (theme: any) =>
     tabBtnTextActive: {
       color: '#fff',
     },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    publishButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.primary,
-      gap: 6,
-    },
-    publishButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    addButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 8,
-      gap: 8,
-    },
-    addButtonText: {
-      color: '#fff',
-      fontWeight: '600',
-      fontSize: 16,
-    },
     center: {
       flex: 1,
       alignItems: 'center',
@@ -383,16 +283,6 @@ const createStyles = (theme: any) =>
       color: theme.textSecondary,
       marginBottom: 24,
       textAlign: 'center',
-    },
-    emptyButton: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 8,
-    },
-    emptyButtonText: {
-      color: '#fff',
-      fontWeight: '600',
     },
     yearSection: {
       marginBottom: 24,

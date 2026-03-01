@@ -65,6 +65,8 @@ export interface YearPlannerActions {
   handleSubmit: (formData: TermFormData, editingTerm: AcademicTerm | null) => Promise<boolean>;
   handleDelete: (term: AcademicTerm) => void;
   handleTogglePublish: (term: AcademicTerm) => Promise<void>;
+  /** Publish year plan (terms + themes) for an academic year so teachers can use themes for lesson alignment. */
+  handlePublishPlan: (academicYear?: number) => Promise<void>;
 }
 
 /**

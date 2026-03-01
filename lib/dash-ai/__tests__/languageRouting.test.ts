@@ -10,6 +10,8 @@ describe('languageRouting', () => {
   it('normalizes locale values', () => {
     expect(normalizeDashLocale('af')).toBe('af-ZA');
     expect(normalizeDashLocale('zu-ZA')).toBe('zu-ZA');
+    expect(normalizeDashLocale('xh')).toBe('xh-ZA');
+    expect(normalizeDashLocale('sepedi')).toBe('nso-ZA');
     expect(normalizeDashLocale('fr-FR')).toBeNull();
   });
 
@@ -21,6 +23,7 @@ describe('languageRouting', () => {
   it('detects likely language from response text', () => {
     expect(detectLanguageFromText('Dankie asseblief verduidelik hierdie som')).toBe('af-ZA');
     expect(detectLanguageFromText('Sawubona ngiyacela ngiyabonga mfundi')).toBe('zu-ZA');
+    expect(detectLanguageFromText('Molo ndicela undincede mfundi')).toBe('xh-ZA');
   });
 
   it('resolves explicit override before auto detect or preference', () => {

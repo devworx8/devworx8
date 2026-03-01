@@ -85,6 +85,7 @@
     "benchmark:voice:import-wispr": "tsx scripts/voice/import-wispr-headtohead.ts",
     "benchmark:voice:score": "tsx scripts/voice/score-dictation-parity.ts",
     "benchmark:voice:check": "tsx scripts/voice/check-benchmark-gates.ts",
+    "benchmark:voice:tts-gate": "tsx scripts/voice/check-tts-latency-gates.ts",
     "benchmark:voice:full": "tsx scripts/voice/run-full-benchmark.ts",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=8192 tsc --noEmit",
     "typecheck:strict": "NODE_OPTIONS=--max-old-space-size=8192 tsc -p tsconfig.strict.json --noEmit",

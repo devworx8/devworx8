@@ -424,6 +424,62 @@ export interface ExamStudyCoachPack {
   testDayChecklist: string[];
 }
 
+export type ExamArtifactType =
+  | 'practice_test'
+  | 'flashcards'
+  | 'revision_notes'
+  | 'study_guide';
+
+export interface FlashcardItem {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string;
+}
+
+export interface FlashcardsArtifact {
+  title: string;
+  cards: FlashcardItem[];
+}
+
+export interface RevisionNotesSection {
+  title: string;
+  bullets: string[];
+}
+
+export interface RevisionNotesArtifact {
+  title: string;
+  keyPoints: string[];
+  sections: RevisionNotesSection[];
+}
+
+export interface StudyGuideDay {
+  day: string;
+  focus: string;
+  tasks: string[];
+}
+
+export interface StudyGuideArtifact {
+  title: string;
+  days: StudyGuideDay[];
+  checklist: string[];
+}
+
+export type ExamArtifact =
+  | { type: 'flashcards'; flashcards: FlashcardsArtifact }
+  | { type: 'revision_notes'; revisionNotes: RevisionNotesArtifact }
+  | { type: 'study_guide'; studyGuide: StudyGuideArtifact };
+
+export interface ExamScopeDiagnostics {
+  requestedStudentId: string | null;
+  requestedClassId: string | null;
+  requestedSchoolId: string | null;
+  effectiveStudentId: string | null;
+  effectiveClassId: string | null;
+  effectiveSchoolId: string | null;
+  useTeacherContext: boolean;
+}
+
 export interface ExamGenerationRequest {
   grade: string;
   subject: string;
@@ -446,6 +502,9 @@ export interface ExamGenerationResponse {
   success: boolean;
   examId: string;
   exam?: unknown;
+  artifactType?: ExamArtifactType;
+  artifact?: ExamArtifact;
+  scopeDiagnostics?: ExamScopeDiagnostics;
   contextSummary?: ExamContextSummary;
   teacherAlignment?: ExamTeacherAlignmentSummary;
   examBlueprintAudit?: ExamBlueprintAudit;

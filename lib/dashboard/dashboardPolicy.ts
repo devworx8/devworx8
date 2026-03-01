@@ -133,6 +133,8 @@ const POLICY: PolicyMap = {
       'assign_playground_activity',
       'assign_homework',
       'my_class',
+      'daily_program',
+      'year_plan',
       'view_timetable',
       'activity_samples',
       'room_display_connect',

@@ -15,10 +15,20 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { parseExamMarkdown, type ParsedExam } from '@/lib/examParser';
 import { ExamInteractiveView, type ExamResults } from '@/components/exam-prep/ExamInteractiveView';
+import { ExamFlashcardsView } from '@/components/exam-prep/ExamFlashcardsView';
+import { ExamRevisionNotesView } from '@/components/exam-prep/ExamRevisionNotesView';
+import { ExamStudyGuideView } from '@/components/exam-prep/ExamStudyGuideView';
+import {
+  coerceExamArtifactType,
+  parseExamGenerationPayload,
+} from '@/components/exam-prep/examArtifactHelpers';
 import type {
+  ExamArtifact,
+  ExamArtifactType,
   ExamBlueprintAudit,
   ExamContextSummary,
   ExamGenerationResponse,
+  ExamScopeDiagnostics,
   ExamStudyCoachPack,
   ExamTeacherAlignmentSummary,
 } from '@/components/exam-prep/types';
@@ -71,8 +81,11 @@ export default function ExamGenerationScreen() {
   const [state, setState] = useState<GenerationState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [exam, setExam] = useState<ParsedExam | null>(null);
+  const [artifactType, setArtifactType] = useState<ExamArtifactType>('practice_test');
+  const [artifact, setArtifact] = useState<ExamArtifact | null>(null);
   const [examId, setExamId] = useState<string>('');
   const [contextSummary, setContextSummary] = useState<ExamContextSummary | null>(null);
+  const [scopeDiagnostics, setScopeDiagnostics] = useState<ExamScopeDiagnostics | null>(null);
   const [teacherAlignment, setTeacherAlignment] = useState<ExamTeacherAlignmentSummary | null>(null);
   const [blueprintAudit, setBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
   const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
@@ -82,6 +95,7 @@ export default function ExamGenerationScreen() {
   // audit + study coach collapsed by default on small screens.
   const [showAudit, setShowAudit] = useState(false);
   const hasGenerationWarning = useMemo(() => Boolean(persistenceWarning && persistenceWarning.trim().length > 0), [persistenceWarning]);
+  const isPracticeArtifact = artifactType === 'practice_test';
 
   const generationLabel = useMemo(() => {
     if (!grade || !subject) return 'Preparing generation request...';
@@ -157,22 +171,42 @@ export default function ExamGenerationScreen() {
       }
 
       const response = data as ExamGenerationResponse;
-      if (!response?.success || !response?.exam) {
+      if (!response?.success) {
         throw new Error(response?.error || 'Generation failed. Please try again.');
       }
 
-      const parsed = parseExamPayload(response.exam);
-      if (!parsed || !parsed.sections?.length) {
-        throw new Error('Generated exam format was invalid. Please retry.');
+      const parsedPayload = parseExamGenerationPayload(
+        {
+          artifactType: response.artifactType,
+          artifact: response.artifact,
+          exam: response.exam,
+        },
+        parseExamPayload,
+        coerceExamArtifactType(response.artifactType, coerceExamArtifactType(examType, 'practice_test')),
+      );
+
+      if (parsedPayload.artifactType === 'practice_test') {
+        if (!parsedPayload.exam || !parsedPayload.exam.sections?.length) {
+          throw new Error('Generated exam format was invalid. Please retry.');
+        }
+        setExam({
+          ...parsedPayload.exam,
+          grade: parsedPayload.exam.grade || grade,
+          subject: parsedPayload.exam.subject || subject,
+        });
+        setArtifact(null);
+      } else {
+        if (!parsedPayload.artifact) {
+          throw new Error('Generated study artifact format was invalid. Please retry.');
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(parsedPayload.artifact);
       }
 
-      setExam({
-        ...parsed,
-        grade: parsed.grade || grade,
-        subject: parsed.subject || subject,
-      });
+      setArtifactType(parsedPayload.artifactType);
       setExamId(response.examId || `temp-${Date.now()}`);
       setContextSummary(response.contextSummary || null);
+      setScopeDiagnostics(response.scopeDiagnostics || null);
       setTeacherAlignment(response.teacherAlignment || null);
       setBlueprintAudit(response.examBlueprintAudit || null);
       setStudyCoachPack(response.studyCoachPack || null);
@@ -203,14 +237,31 @@ export default function ExamGenerationScreen() {
         return;
       }
 
-      const parsed = parseExamPayload(data.generated_content);
-      if (!parsed || parsed.sections.length === 0) {
-        setError('Exam content could not be parsed.');
-        setState('error');
-        return;
+      const parsedPayload = parseExamGenerationPayload(
+        data.generated_content,
+        parseExamPayload,
+        coerceExamArtifactType(data.exam_type, 'practice_test'),
+      );
+
+      if (parsedPayload.artifactType === 'practice_test') {
+        if (!parsedPayload.exam || parsedPayload.exam.sections.length === 0) {
+          setError('Exam content could not be parsed.');
+          setState('error');
+          return;
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(null);
+      } else {
+        if (!parsedPayload.artifact) {
+          setError('Study artifact content could not be parsed.');
+          setState('error');
+          return;
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(parsedPayload.artifact);
       }
 
-      setExam(parsed);
+      setArtifactType(parsedPayload.artifactType);
       setExamId(data.id);
       setState('ready');
     } catch (err) {
@@ -238,7 +289,15 @@ export default function ExamGenerationScreen() {
     []
   );
 
-  if (state === 'ready' && exam) {
+  const readyWithPayload =
+    state === 'ready' &&
+    ((isPracticeArtifact && !!exam) || (!isPracticeArtifact && !!artifact));
+
+  if (readyWithPayload) {
+    const canShowAuditToggle =
+      Boolean(contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) &&
+      (isPracticeArtifact ? Boolean(completionSummary) : true);
+
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -249,7 +308,7 @@ export default function ExamGenerationScreen() {
               <Text style={[styles.warningText, { color: theme.warning }]}>{persistenceWarning}</Text>
             </View>
           ) : null}
-          {completionSummary ? (
+          {isPracticeArtifact && completionSummary ? (
             <View style={[styles.completionBanner, { borderColor: `${theme.success}55`, backgroundColor: `${theme.success}18` }]}>
               <View style={styles.completionBannerLeft}>
                 <Ionicons name="checkmark-circle" size={18} color={theme.success} />
@@ -261,7 +320,7 @@ export default function ExamGenerationScreen() {
             </View>
           ) : null}
           {/* Compact toggle — only shown after exam is completed so it doesn't distract during the test */}
-          {completionSummary && (contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) && (
+          {canShowAuditToggle && (
             <View style={[styles.auditToggleRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
               <TouchableOpacity
                 style={styles.auditToggleButton}
@@ -302,6 +361,11 @@ export default function ExamGenerationScreen() {
                   Blueprint: {blueprintAudit.actualQuestions} questions ({blueprintAudit.minQuestions}-{blueprintAudit.maxQuestions}) • {blueprintAudit.totalMarks} marks
                 </Text>
               ) : null}
+              {scopeDiagnostics ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Scope: student {scopeDiagnostics.effectiveStudentId || 'none'} • class {scopeDiagnostics.effectiveClassId || 'none'} • school {scopeDiagnostics.effectiveSchoolId || 'none'}
+                </Text>
+              ) : null}
             </View>
           ) : null}
           {showAudit && studyCoachPack ? (
@@ -332,15 +396,27 @@ export default function ExamGenerationScreen() {
             </View>
           ) : null}
           <View style={styles.examViewWrap}>
-            <ExamInteractiveView
-              exam={exam}
-              examId={examId}
-              studentId={studentId}
-              classId={classId}
-              schoolId={schoolId}
-              onComplete={handleComplete}
-              onExit={handleBack}
-            />
+            {isPracticeArtifact && exam ? (
+              <ExamInteractiveView
+                exam={exam}
+                examId={examId}
+                studentId={studentId}
+                classId={classId}
+                schoolId={schoolId}
+                onComplete={handleComplete}
+                onExit={handleBack}
+              />
+            ) : artifact?.type === 'flashcards' ? (
+              <ExamFlashcardsView artifact={artifact.flashcards} theme={theme} />
+            ) : artifact?.type === 'revision_notes' ? (
+              <ExamRevisionNotesView artifact={artifact.revisionNotes} theme={theme} />
+            ) : artifact?.type === 'study_guide' ? (
+              <ExamStudyGuideView artifact={artifact.studyGuide} theme={theme} />
+            ) : (
+              <View style={styles.centerBlock}>
+                <Text style={[styles.errorText, { color: theme.muted }]}>No study artifact to display.</Text>
+              </View>
+            )}
           </View>
         </View>
       </SafeAreaView>

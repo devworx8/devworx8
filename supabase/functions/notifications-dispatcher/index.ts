@@ -2580,7 +2580,7 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
 
       case 'pop_uploaded':
         if (request.pop_upload_id) {
-          const { data: upload } = await supabase
+          const { data: upload, error: uploadError } = await supabase
             .from('pop_uploads')
             .select(`
               id,
@@ -2590,17 +2590,17 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
               preschool_id,
               student_id,
               uploaded_by,
-              student:student_id (
-                first_name,
-                last_name
-              ),
-              uploader:uploaded_by (
+              student:students (
                 first_name,
                 last_name
               )
             `)
             .eq('id', request.pop_upload_id)
-            .single();
+            .maybeSingle();
+
+          if (uploadError) {
+            console.warn('[pop_uploaded] failed to load upload context:', uploadError.message);
+          }
 
           if (upload) {
             context.pop_upload_id = upload.id;
@@ -2611,8 +2611,26 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
             if (upload.student) {
               context.student_name = `${upload.student.first_name || ''} ${upload.student.last_name || ''}`.trim();
             }
-            if (upload.uploader) {
-              context.parent_name = `${upload.uploader.first_name || ''} ${upload.uploader.last_name || ''}`.trim();
+            if (upload.uploaded_by) {
+              const { data: uploaderById } = await supabase
+                .from('profiles')
+                .select('first_name, last_name')
+                .eq('id', upload.uploaded_by)
+                .maybeSingle();
+
+              const uploaderProfile = uploaderById
+                ? uploaderById
+                : (
+                    await supabase
+                      .from('profiles')
+                      .select('first_name, last_name')
+                      .eq('auth_user_id', upload.uploaded_by)
+                      .maybeSingle()
+                  ).data;
+
+              if (uploaderProfile) {
+                context.parent_name = `${uploaderProfile.first_name || ''} ${uploaderProfile.last_name || ''}`.trim();
+              }
             }
           }
         }

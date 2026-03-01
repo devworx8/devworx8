@@ -161,6 +161,42 @@ type StudyCoachPack = {
   testDayChecklist: string[];
 };
 
+type ExamArtifactType = 'practice_test' | 'flashcards' | 'revision_notes' | 'study_guide';
+
+type FlashcardItem = {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string;
+};
+
+type FlashcardsArtifact = {
+  title: string;
+  cards: FlashcardItem[];
+};
+
+type RevisionNotesSection = {
+  title: string;
+  bullets: string[];
+};
+
+type RevisionNotesArtifact = {
+  title: string;
+  keyPoints: string[];
+  sections: RevisionNotesSection[];
+};
+
+type StudyGuideArtifact = {
+  title: string;
+  days: Array<{ day: string; focus: string; tasks: string[] }>;
+  checklist: string[];
+};
+
+type ExamArtifact =
+  | { type: 'flashcards'; flashcards: FlashcardsArtifact }
+  | { type: 'revision_notes'; revisionNotes: RevisionNotesArtifact }
+  | { type: 'study_guide'; studyGuide: StudyGuideArtifact };
+
 type AuthorizedRequestScope = {
   profile: ProfileRow;
   role: string;
@@ -168,6 +204,16 @@ type AuthorizedRequestScope = {
   effectiveClassId: string | null;
   effectiveSchoolId: string | null;
   effectiveStudentId: string | null;
+};
+
+type ScopeDiagnostics = {
+  requestedStudentId: string | null;
+  requestedClassId: string | null;
+  requestedSchoolId: string | null;
+  effectiveStudentId: string | null;
+  effectiveClassId: string | null;
+  effectiveSchoolId: string | null;
+  useTeacherContext: boolean;
 };
 
 const STAFF_ROLES = new Set([
@@ -520,6 +566,148 @@ function getQuestionCountPolicy(grade: string, examType: string): { min: number;
 
 function getMinimumQuestionCount(grade: string, examType: string): number {
   return getQuestionCountPolicy(grade, examType).min;
+}
+
+function resolveArtifactType(examType: string): ExamArtifactType {
+  const normalized = String(examType || 'practice_test').toLowerCase();
+  if (normalized === 'flashcards') return 'flashcards';
+  if (normalized === 'revision_notes') return 'revision_notes';
+  if (normalized === 'study_guide') return 'study_guide';
+  return 'practice_test';
+}
+
+function flattenExamQuestionsForArtifact(exam: any): Array<{
+  id: string;
+  question: string;
+  answer: string;
+  explanation: string;
+}> {
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  const out: Array<{ id: string; question: string; answer: string; explanation: string }> = [];
+
+  sections.forEach((section: any, sectionIndex: number) => {
+    const questions = Array.isArray(section?.questions) ? section.questions : [];
+    questions.forEach((question: any, questionIndex: number) => {
+      const id = String(question?.id || `q_${sectionIndex + 1}_${questionIndex + 1}`);
+      const questionText = String(question?.question || question?.text || '').trim();
+      const answer = String(question?.correctAnswer || question?.answer || '').trim();
+      const explanation = String(question?.explanation || '').trim();
+      out.push({
+        id,
+        question: questionText || `Concept ${questionIndex + 1}`,
+        answer,
+        explanation,
+      });
+    });
+  });
+
+  return out;
+}
+
+function buildArtifactFromExam(params: {
+  artifactType: ExamArtifactType;
+  exam: any;
+  grade: string;
+  subject: string;
+  contextSummary: ExamContextSummary;
+  studyCoachPack: StudyCoachPack;
+}): ExamArtifact | null {
+  if (params.artifactType === 'practice_test') return null;
+
+  const questions = flattenExamQuestionsForArtifact(params.exam);
+
+  if (params.artifactType === 'flashcards') {
+    const cards: FlashcardItem[] = questions.slice(0, 40).map((item, index) => ({
+      id: item.id || `card_${index + 1}`,
+      front: item.question,
+      back: item.answer || item.explanation || 'Review this concept with class notes.',
+      hint: item.explanation || undefined,
+    }));
+
+    return {
+      type: 'flashcards',
+      flashcards: {
+        title: `${params.subject} Flashcards`,
+        cards,
+      },
+    };
+  }
+
+  if (params.artifactType === 'revision_notes') {
+    const sections = (Array.isArray(params.exam?.sections) ? params.exam.sections : []).map((section: any, sectionIndex: number) => {
+      const sectionQuestions = Array.isArray(section?.questions) ? section.questions : [];
+      const bullets = sectionQuestions
+        .slice(0, 6)
+        .map((question: any) => String(question?.explanation || question?.correctAnswer || question?.question || '').trim())
+        .filter(Boolean);
+
+      return {
+        title: String(section?.title || section?.name || `Topic ${sectionIndex + 1}`),
+        bullets: bullets.length > 0 ? bullets : ['Review this topic using classwork and homework examples.'],
+      };
+    });
+
+    const keyPoints = questions
+      .slice(0, 10)
+      .map((item) => item.answer || item.explanation || item.question)
+      .filter(Boolean);
+
+    return {
+      type: 'revision_notes',
+      revisionNotes: {
+        title: `${params.subject} Revision Notes`,
+        keyPoints,
+        sections,
+      },
+    };
+  }
+
+  const fallbackChecklist = [
+    'Revise key formulas/definitions',
+    'Practice at least one timed section daily',
+    'Review mistakes from homework and classwork',
+    'Sleep early before exam day',
+  ];
+
+  const daysFromCoach = Array.isArray(params.studyCoachPack?.days)
+    ? params.studyCoachPack.days.map((day) => ({
+        day: String(day.day || ''),
+        focus: String(day.focus || ''),
+        tasks: [
+          `Reading: ${day.readingPiece || 'Read topic summary notes.'}`,
+          `Paper drill: ${day.paperWritingDrill || 'Write one timed practice section.'}`,
+          `Memory: ${day.memoryActivity || 'Summarize core terms from memory.'}`,
+          `Parent tip: ${day.parentTip || 'Review progress and ask confidence questions.'}`,
+        ],
+      }))
+    : [];
+
+  const derivedDays = daysFromCoach.length > 0
+    ? daysFromCoach
+    : ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5'].map((dayLabel, index) => {
+        const question = questions[index] || questions[0];
+        const weakTopic = params.contextSummary.weakTopics[index] || params.contextSummary.focusTopics[index];
+        return {
+          day: dayLabel,
+          focus: weakTopic || `Reinforce ${params.subject} core concepts`,
+          tasks: [
+            `Practice: ${question?.question || `Complete one ${params.subject} mixed practice set.`}`,
+            `Memo check: ${question?.answer || question?.explanation || 'Mark and correct one section.'}`,
+            'Review your notes and write a short summary from memory.',
+          ],
+        };
+      });
+
+  return {
+    type: 'study_guide',
+    studyGuide: {
+      title: `${params.subject} Study Guide`,
+      days: derivedDays,
+      checklist: params.studyCoachPack?.testDayChecklist?.length
+        ? params.studyCoachPack.testDayChecklist
+        : fallbackChecklist,
+    },
+  };
 }
 
 function buildSupplementQuestion(
@@ -2065,9 +2253,9 @@ serve(async (req: Request) => {
     const rawModelOverride = body?.model ? String(body.model).trim() : undefined;
     const modelOverride = rawModelOverride ? normalizeAnthropicModel(rawModelOverride) : undefined;
     const language = normalizeLanguageLocale(body?.language ? String(body.language) : 'en-ZA');
-    const studentId = body?.studentId ? String(body.studentId) : undefined;
-    const classId = body?.classId ? String(body.classId) : undefined;
-    const schoolId = body?.schoolId ? String(body.schoolId) : undefined;
+    const studentId = body?.studentId ? String(body.studentId).trim() : undefined;
+    const classId = body?.classId ? String(body.classId).trim() : undefined;
+    const schoolId = body?.schoolId ? String(body.schoolId).trim() : undefined;
     const useTeacherContext = body?.useTeacherContext !== false;
     const previewContext = body?.previewContext === true;
     const lookbackDays = Number.isFinite(Number(body?.lookbackDays))
@@ -2097,6 +2285,16 @@ serve(async (req: Request) => {
       useTeacherContext,
     });
 
+    const scopeDiagnostics: ScopeDiagnostics = {
+      requestedStudentId: studentId || null,
+      requestedClassId: classId || null,
+      requestedSchoolId: schoolId || null,
+      effectiveStudentId: scope.effectiveStudentId || null,
+      effectiveClassId: scope.effectiveClassId || null,
+      effectiveSchoolId: scope.effectiveSchoolId || null,
+      useTeacherContext,
+    };
+
     const contextSummary = await resolveTeacherContext(supabase, scope, {
       subject,
       useTeacherContext,
@@ -2109,7 +2307,9 @@ serve(async (req: Request) => {
         {
           success: true,
           examId: 'preview-only',
+          artifactType: resolveArtifactType(examType),
           contextSummary,
+          scopeDiagnostics,
         },
         200,
         corsHeaders,
@@ -2378,6 +2578,15 @@ serve(async (req: Request) => {
     const teacherAlignment = computeTeacherAlignmentSummary(contextSummary);
     const examBlueprintAudit = computeBlueprintAudit(normalizedExam, grade, examType);
     const studyCoachPack = buildStudyCoachPack(grade, subject, language, contextSummary);
+    const artifactType = resolveArtifactType(examType);
+    const artifact = buildArtifactFromExam({
+      artifactType,
+      exam: normalizedExam,
+      grade,
+      subject,
+      contextSummary,
+      studyCoachPack,
+    });
 
     const metadata = {
       source: localFallbackReason
@@ -2385,7 +2594,9 @@ serve(async (req: Request) => {
         : useTeacherContext
         ? 'teacher_artifact_context'
         : 'caps_baseline',
+      artifactType,
       contextSummary,
+      scopeDiagnostics,
       teacherAlignment,
       examBlueprintAudit,
       studyCoachPack,
@@ -2401,6 +2612,21 @@ serve(async (req: Request) => {
     let persistedExamId = `temp-${Date.now()}`;
     const warningParts: string[] = [];
     if (localFallbackReason) warningParts.push(localFallbackReason);
+    if (useTeacherContext && !scopeDiagnostics.effectiveSchoolId) {
+      warningParts.push('Teacher context ran without a resolved school scope. Results may be generic.');
+    }
+    if (useTeacherContext && contextSummary.assignmentCount + contextSummary.lessonCount === 0) {
+      warningParts.push('No recent teacher artifacts were found. Generated content leans on CAPS baseline.');
+    }
+
+    const persistedGeneratedContent =
+      artifactType === 'practice_test'
+        ? normalizedExam
+        : {
+            artifactType,
+            artifact,
+            exam: normalizedExam,
+          };
 
     const { data: savedExam, error: saveError } = await supabase
       .from('exam_generations')
@@ -2410,7 +2636,7 @@ serve(async (req: Request) => {
         subject,
         exam_type: examType,
         display_title: normalizedExam.title,
-        generated_content: JSON.stringify(normalizedExam),
+        generated_content: JSON.stringify(persistedGeneratedContent),
         status: 'completed',
         model_used: modelUsed,
         metadata,
@@ -2444,8 +2670,11 @@ serve(async (req: Request) => {
     return jsonResponse(
       {
         success: true,
-        exam: normalizedExam,
+        exam: artifactType === 'practice_test' ? normalizedExam : undefined,
+        artifactType,
+        artifact,
         examId: persistedExamId,
+        scopeDiagnostics,
         contextSummary,
         teacherAlignment,
         examBlueprintAudit,

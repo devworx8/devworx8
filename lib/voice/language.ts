@@ -66,7 +66,7 @@ interface VoicePreference {
  */
 export const AZURE_VOICE_MAP: Record<SouthAfricanLanguage, { male: string; female: string }> = {
   'en-ZA': { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
-  'af-ZA': { male: 'en-ZA-WillemNeural', female: 'af-ZA-AdriNeural' },
+  'af-ZA': { male: 'af-ZA-WillemNeural', female: 'af-ZA-AdriNeural' },
   'zu-ZA': { male: 'zu-ZA-ThembaNeural', female: 'zu-ZA-ThandoNeural' },
   'xh-ZA': { male: 'xh-ZA-LungeloNeural', female: 'xh-ZA-NomalungaNeural' },
   'nso-ZA': { male: 'nso-ZA-OupaNeural', female: 'nso-ZA-DidiNeural' },

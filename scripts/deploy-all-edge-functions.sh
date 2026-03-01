@@ -37,86 +37,41 @@ echo ""
 echo "📋 Edge Functions to Deploy:"
 echo "----------------------------"
 
-# Core AI Functions
-CORE_AI_FUNCTIONS=(
-    "ai-proxy"
-    "ai-gateway"
-    "ai-usage"
-)
+# Discover functions from directories so inventory stays current.
+mapfile -t DISCOVERED_FUNCTIONS < <(find supabase/functions -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | grep -v '^_shared$' | sort)
 
-# AI Feature Functions
-AI_FEATURE_FUNCTIONS=(
-    "generate-exam"
-    "grade-exam"
-    "explain-answer"
-    "rag-answer"
-    "rag-search"
-    "web-search"
-    "ingest-file"
-)
-
-# Voice & Transcription Functions
-VOICE_FUNCTIONS=(
-    "azure-speech-token"
-    "transcribe-audio"
+# Priority deployment order for critical exam/voice flow reliability.
+PRIORITY_FUNCTIONS=(
     "stt-proxy"
+    "transcribe-audio"
+    "transcribe-chunk"
+    "generate-exam"
+    "grade-exam-attempt"
     "tts-proxy"
-    "openai-realtime-token"
 )
 
-# Payment Functions
-PAYMENT_FUNCTIONS=(
-    "payfast-create-payment"
-    "payfast-webhook"
-    "payments-bridge"
-    "payments-create-checkout"
-    "payments-webhook"
-    "webhooks-payfast"
-    "revenuecat-webhook"
-)
+ALL_FUNCTIONS=()
 
-# Communication Functions
-COMMUNICATION_FUNCTIONS=(
-    "send-email"
-    "send-push"
-    "notifications-dispatcher"
-    "whatsapp-send"
-    "whatsapp-webhook"
-    "sms-webhook"
-)
+append_unique() {
+    local fn="$1"
+    local existing
+    for existing in "${ALL_FUNCTIONS[@]}"; do
+        if [[ "$existing" == "$fn" ]]; then
+            return 0
+        fi
+    done
+    ALL_FUNCTIONS+=("$fn")
+}
 
-# Integration Functions
-INTEGRATION_FUNCTIONS=(
-    "google-calendar-sync"
-    "dash-context-sync"
-    "dash-reminders-create"
-)
+for fn in "${PRIORITY_FUNCTIONS[@]}"; do
+    if [ -d "supabase/functions/$fn" ]; then
+        append_unique "$fn"
+    fi
+done
 
-# Utility Functions
-UTILITY_FUNCTIONS=(
-    "delete-account"
-    "get-secrets"
-    "compute-progress-metrics"
-    "cost-aggregator"
-    "service-health-monitor"
-    "principal-hub-api"
-    "social-facebook-connect"
-    "social-agent-generate"
-    "social-facebook-publish"
-    "social-agent-daily-cron"
-    "social-publisher-cron"
-)
-
-# Combine all functions
-ALL_FUNCTIONS=(
-    "${CORE_AI_FUNCTIONS[@]}"
-    "${AI_FEATURE_FUNCTIONS[@]}"
-    "${VOICE_FUNCTIONS[@]}"
-    "${PAYMENT_FUNCTIONS[@]}"
-    "${COMMUNICATION_FUNCTIONS[@]}"
-    "${INTEGRATION_FUNCTIONS[@]}"
-    "${UTILITY_FUNCTIONS[@]}"
-)
+for fn in "${DISCOVERED_FUNCTIONS[@]}"; do
+    append_unique "$fn"
+done
 
 echo ""
 echo "Total functions: ${#ALL_FUNCTIONS[@]}"

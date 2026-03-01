@@ -62,8 +62,8 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
   const attendanceRate = stats?.attendanceRate?.percentage ?? 0;
   const expectedTuition = stats?.expectedTuitionIncome?.total ?? 0;
   const collectedTuition = stats?.collectedTuitionAmount?.total ?? 0;
-  const outstandingAmount = stats?.pendingPayments?.amount ?? 0;
-  const overdueAmount = stats?.pendingPayments?.overdueAmount ?? 0;
+  const outstandingAmount = stats?.pendingPaymentsAmount?.total ?? 0;
+  const overdueAmount = stats?.pendingPaymentsOverdueAmount?.total ?? 0;
   const collectionRate = expectedTuition > 0 ? Math.round((collectedTuition / expectedTuition) * 100) : 0;
 
   // ═══════════════════════════════════════════════════════════════

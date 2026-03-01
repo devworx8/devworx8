@@ -354,11 +354,11 @@ export default function ParentProgressScreen() {
                   </View>
                 )}
 
-                {selectedProgress?.domainBreakdown?.length > 0 && (
+                {selectedProgress?.domainBreakdown && selectedProgress.domainBreakdown.length > 0 && (
                   <View style={styles.topSubjectsContainer}>
                     <Text style={styles.topSubjectsTitle}>Domain Progress</Text>
                     <View style={styles.domainBreakdownContainer}>
-                      {selectedProgress.domainBreakdown.slice(0, 4).filter(Boolean).map((domain) => (
+                      {(selectedProgress?.domainBreakdown ?? []).slice(0, 4).filter(Boolean).map((domain) => (
                         <View key={domain?.domain ?? 'unknown'} style={styles.domainItem}>
                           <View style={styles.domainLabelRow}>
                             <Text style={styles.domainLabel}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
@@ -15,9 +15,12 @@ import type {
 export type { UseSuperAdminDashboardReturn, ShowAlertFn, AlertSeverity };
 export type { PasswordModalState, DashboardStats, RecentAlert, SystemStatus, FeatureFlag, QuickAction } from './types';
 
+const SENTRY_ISSUES_URL = process.env.EXPO_PUBLIC_SENTRY_ISSUES_URL || 'https://sentry.io';
+
 /** Build the quick-actions list (badges depend on live stats) */
 function buildQuickActions(stats: DashboardStats | null): QuickAction[] {
   return [
+    { id: 'sentry-errors', title: 'Sentry / Errors', description: 'View runtime errors and fix priorities', icon: 'bug', route: '/screens/super-admin-dashboard', color: '#ef4444', badge: stats?.pending_issues || 0, externalUrl: SENTRY_ISSUES_URL },
     { id: 'ai-command-center', title: 'Dash AI Command Center', description: 'Admin controls for agentic AI operations', icon: 'flash', route: '/screens/super-admin-ai-command-center', color: '#00f5ff', badge: 0 },
     { id: 'voice-orb', title: 'Voice Orb', description: 'Hands-free voice commands (full screen)', icon: 'mic', route: '/screens/dash-voice?mode=ops', color: '#8b5cf6', badge: 0 },
     { id: 'organizations', title: 'Organizations', description: 'View & manage all registered organizations', icon: 'business', route: '/screens/super-admin-organizations', color: '#10b981', badge: stats?.total_organizations || 0 },
@@ -111,6 +114,10 @@ export function useSuperAdminDashboard(showAlert: ShowAlertFn): UseSuperAdminDas
 
   const handleQuickAction = useCallback((action: QuickAction) => {
     track('edudash.superadmin.quick_action', { user_id: user?.id, action_id: action.id, route: action.route });
+    if (action.externalUrl) {
+      Linking.openURL(action.externalUrl).catch(() => {});
+      return;
+    }
     router.push(action.route as any);
   }, [user?.id]);
 

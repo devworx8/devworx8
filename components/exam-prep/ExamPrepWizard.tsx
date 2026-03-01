@@ -367,6 +367,7 @@ export function ExamPrepWizard(): React.ReactElement {
             selectedExamTypeLabel={selectedExamTypeLabel}
             selectedExamType={selectedExamType}
             selectedLanguage={selectedLanguage}
+            generateButtonLabel={`Generate ${selectedExamTypeLabel}`}
             useTeacherContext={useTeacherContext}
             contextPreview={contextPreview}
             contextLoading={contextLoading}

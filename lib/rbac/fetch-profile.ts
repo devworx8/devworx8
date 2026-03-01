@@ -289,7 +289,8 @@ export async function fetchEnhancedUserProfile(
       const sessionToken = session?.access_token || storedSession?.access_token || '';
       const sessionId = sessionToken ? sessionToken.substring(0, 32) : '';
       if (!sessionId || !shouldAllowFallback(sessionId)) {
-        logError('SECURITY: Fallback profile not allowed - returning null');
+        // Log as warn so it does not create a high-severity Sentry issue; recovery happens in handleSignedIn
+        warn('SECURITY: Fallback profile not allowed - returning null');
         return null;
       }
       

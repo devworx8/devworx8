@@ -24,7 +24,7 @@ interface SavedExam {
   display_title: string;
   grade: string;
   subject: string;
-  generated_content: string;
+  generated_content: unknown;
   created_at: string;
   exam_type: string;
   progress?: {

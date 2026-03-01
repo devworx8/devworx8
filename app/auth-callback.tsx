@@ -74,6 +74,19 @@ export default function AuthCallback() {
     if (handled.current) return;
     handled.current = true;
 
+    const safeRedirectToSignIn = () => {
+      try {
+        router.replace('/(auth)/sign-in');
+      } catch {
+        try {
+          router.replace('/(auth)/sign-in' as any);
+        } catch {
+          // last resort: reload so user can sign in from landing
+          if (typeof window !== 'undefined') window.location.href = '/sign-in';
+        }
+      }
+    };
+
     try {
       setMessage('Processing authentication...');
       
@@ -442,7 +455,9 @@ export default function AuthCallback() {
         }
         
       logger.error('AuthCallback', 'OAuth error:', error, error_description);
-        throw new Error(error_description || error || 'Authentication failed');
+        setMessage(error_description || error || 'Authentication failed');
+        setTimeout(safeRedirectToSignIn, 2500);
+        return;
       }
 
       // No recognized callback pattern
@@ -450,18 +465,17 @@ export default function AuthCallback() {
         logger.warn('AuthCallback', 'Unrecognized callback pattern, URL:', sanitizeCallbackUrl(urlStr));
       }
       setMessage('Could not process authentication. Redirecting to sign-in...');
-      setTimeout(() => {
-        router.replace('/(auth)/sign-in');
-      }, 2000);
+      setTimeout(safeRedirectToSignIn, 2000);
 
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Authentication failed. Please try again.';
       logger.error('AuthCallback', 'Error:', e);
-      setMessage(e?.message || 'Authentication failed. Please try again.');
-      
-      // Redirect to sign-in after error
-      setTimeout(() => {
-        router.replace('/(auth)/sign-in');
-      }, 3000);
+      try {
+        setMessage(msg || 'Something went wrong. Redirecting to sign-in...');
+      } catch {
+        // ignore state update errors
+      }
+      setTimeout(safeRedirectToSignIn, 2500);
     }
   }
 
