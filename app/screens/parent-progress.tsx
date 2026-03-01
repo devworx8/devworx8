@@ -8,7 +8,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,8 +28,10 @@ export default function ParentProgressScreen() {
   const headerGradientColors: [string, string] = isNextGenParentTheme
     ? ['#23214D', '#5A409D']
     : ['#10B981', '#059669'];
-  
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+
+  const params = useLocalSearchParams<{ childId?: string }>();
+  const initialChildId = Array.isArray(params.childId) ? params.childId[0] : params.childId;
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(initialChildId || null);
   const [refreshing, setRefreshing] = useState(false);
   
   // Fetch all children's progress summary
@@ -57,12 +59,14 @@ export default function ParentProgressScreen() {
     });
   }, [refetchChildren, refetchDetails]);
   
-  // Auto-select first child if none selected
   React.useEffect(() => {
     if (!selectedChildId && childrenProgress.length > 0) {
-      setSelectedChildId(childrenProgress[0].studentId);
+      const matchingChild = initialChildId
+        ? childrenProgress.find(c => c.studentId === initialChildId)
+        : null;
+      setSelectedChildId(matchingChild?.studentId || childrenProgress[0].studentId);
     }
-  }, [childrenProgress, selectedChildId]);
+  }, [childrenProgress, selectedChildId, initialChildId]);
   
   const selectedChild = childrenProgress.find(c => c.studentId === selectedChildId);
   
