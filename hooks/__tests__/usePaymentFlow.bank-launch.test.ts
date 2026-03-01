@@ -96,4 +96,21 @@ describe('usePaymentFlow bank launch behavior', () => {
     expect(result.current.launchState).toBe('manual_confirmed');
     expect(result.current.canUploadProof).toBe(true);
   });
+
+  it('avoids raw scheme launch when selected bank is not detected', async () => {
+    (IntentLauncher.startActivityAsync as jest.Mock).mockRejectedValue(new Error('package missing'));
+    (Linking.canOpenURL as jest.Mock).mockImplementation(async (url: string) =>
+      url.startsWith('intent://') ? false : url.startsWith('fnbbanking://')
+    );
+
+    const { result } = renderHook(() => usePaymentFlow({}));
+
+    await act(async () => {
+      await flushPromises();
+      await result.current.openBankingApp(SA_BANKING_APPS[0]);
+    });
+
+    expect(Linking.openURL).not.toHaveBeenCalledWith(expect.stringMatching(/^fnbbanking:\/\//));
+    expect(Alert.alert).toHaveBeenCalled();
+  });
 });

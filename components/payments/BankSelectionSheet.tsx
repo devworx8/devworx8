@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { logger } from '@/lib/logger';
-import { SA_BANKING_APPS, type BankApp } from '@/lib/payments/bankingApps';
+import { SA_BANKING_APPS, buildAndroidIntentUrls, type BankApp } from '@/lib/payments/bankingApps';
 
 // Lazy load IntentLauncher - will be null if not available (pre-rebuild)
 // This prevents OTA crashes while still enabling the feature after rebuild
@@ -80,6 +80,19 @@ export function BankSelectionSheet({
       return true;
     } catch (error) {
       logger.warn('BankSelectionSheet', `IntentLauncher failed for ${packageName}`, error);
+      return false;
+    }
+  };
+
+  const tryOpenIntentUrl = async (intentUrl: string) => {
+    if (Platform.OS !== 'android') return false;
+    try {
+      const canOpen = await Linking.canOpenURL(intentUrl);
+      if (!canOpen) return false;
+      await Linking.openURL(intentUrl);
+      return true;
+    } catch (error) {
+      logger.warn('BankSelectionSheet', `Intent URL open failed for ${intentUrl}`, error);
       return false;
     }
   };
@@ -160,11 +173,21 @@ export function BankSelectionSheet({
         }
       }
 
-      for (const scheme of bank.schemes) {
-        const opened = await tryOpenScheme(scheme);
-        if (opened) {
-          logger.debug('BankSelectionSheet', `Opened ${bank.name} via scheme: ${scheme}`);
-          return;
+      if (Platform.OS === 'android') {
+        for (const intentUrl of buildAndroidIntentUrls(bank)) {
+          const opened = await tryOpenIntentUrl(intentUrl);
+          if (opened) {
+            logger.debug('BankSelectionSheet', `Opened ${bank.name} via intent URL`);
+            return;
+          }
+        }
+      } else {
+        for (const scheme of bank.schemes) {
+          const opened = await tryOpenScheme(scheme);
+          if (opened) {
+            logger.debug('BankSelectionSheet', `Opened ${bank.name} via scheme: ${scheme}`);
+            return;
+          }
         }
       }
 

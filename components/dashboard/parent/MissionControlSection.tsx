@@ -7,14 +7,11 @@
  * ≤150 lines — WARP-compliant presentational component.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MetricCard } from '../shared';
-
-const { width: screenWidth } = Dimensions.get('window');
-const isSmallScreen = screenWidth < 380;
 
 export interface QuickAction {
   id: string;
@@ -46,6 +43,16 @@ export const MissionControlSection: React.FC<MissionControlSectionProps> = ({
   onUpgrade,
 }) => {
   const { theme } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isSmallScreen = windowWidth < 380;
+  const gridGap = isSmallScreen ? 6 : 8;
+  const [gridWidth, setGridWidth] = useState(0);
+
+  const cardWidth = useMemo(() => {
+    const fallbackWidth = Math.max(windowWidth - 32, 240);
+    const effectiveGridWidth = gridWidth > 0 ? gridWidth : fallbackWidth;
+    return Math.max(88, Math.floor((effectiveGridWidth - gridGap * 2) / 3));
+  }, [gridGap, gridWidth, windowWidth]);
 
   return (
     <>
@@ -71,9 +78,24 @@ export const MissionControlSection: React.FC<MissionControlSectionProps> = ({
                 {section.title}
               </Text>
             </View>
-            <View style={styles.actionsGrid}>
+            <View
+              style={[styles.actionsGrid, { gap: gridGap }]}
+              onLayout={(event) => {
+                const nextWidth = Math.floor(event.nativeEvent.layout.width);
+                if (nextWidth > 0 && nextWidth !== gridWidth) {
+                  setGridWidth(nextWidth);
+                }
+              }}
+            >
               {actions.map((action) => (
-                <View key={action.id} style={action.disabled ? { opacity: 0.5 } : undefined}>
+                <View
+                  key={action.id}
+                  style={[
+                    styles.gridItem,
+                    { flexBasis: cardWidth, maxWidth: cardWidth },
+                    action.disabled ? styles.disabledItem : undefined,
+                  ]}
+                >
                   <MetricCard
                     title={action.disabled ? `${action.title} 🔒` : action.title}
                     subtitle={action.subtitle}
@@ -81,6 +103,7 @@ export const MissionControlSection: React.FC<MissionControlSectionProps> = ({
                     icon={action.icon}
                     color={action.disabled ? theme.textSecondary : action.color}
                     size="small"
+                    cardWidth={cardWidth}
                     glow={Boolean(action.glow)}
                     onPress={() => {
                       if (action.disabled) {
@@ -125,8 +148,13 @@ const styles = StyleSheet.create({
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: isSmallScreen ? -3 : -4,
+    alignItems: 'stretch',
   },
+  gridItem: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  disabledItem: { opacity: 0.5 },
 });
 
 export default MissionControlSection;

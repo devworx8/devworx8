@@ -59,19 +59,60 @@ export function FinanceOverviewTab({
       {renderSectionError(pickSectionError(bundle?.errors, 'expenses'))}
 
       {/* Hero: Expected vs Collected */}
-      <View style={[styles.metricCard, { borderLeftWidth: 4, borderLeftColor: theme.primary, marginBottom: 16 }]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-          <Text style={[styles.metricLabel, { fontSize: 14 }]}>Expected Income</Text>
-          <Text style={[styles.metricValue, { fontSize: 22 }]}>{formatCurrency(derivedOverview.due)}</Text>
+      <View
+        style={[
+          styles.metricCard,
+          {
+            width: '100%',
+            borderLeftWidth: 4,
+            borderLeftColor: theme.primary,
+            marginBottom: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+          },
+        ]}
+      >
+        <View style={{ marginBottom: 12 }}>
+          <Text style={[styles.metricLabel, { fontSize: 14, marginBottom: 4 }]}>Expected Income</Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+            style={[styles.metricValue, { fontSize: 34, lineHeight: 40 }]}
+          >
+            {formatCurrency(derivedOverview.due)}
+          </Text>
         </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-          <Text style={[styles.metricLabel, { fontSize: 14 }]}>Collected</Text>
-          <Text style={[styles.metricValue, { fontSize: 22, color: theme.success }]}>{formatCurrency(derivedOverview.collected)}</Text>
+        <View style={{ height: 1, backgroundColor: theme.border + 'AA', marginBottom: 12 }} />
+        <View style={{ marginBottom: 10 }}>
+          <Text style={[styles.metricLabel, { fontSize: 14, marginBottom: 4 }]}>Collected</Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+            style={[styles.metricValue, { fontSize: 34, lineHeight: 40, color: theme.success }]}
+          >
+            {formatCurrency(derivedOverview.collected)}
+          </Text>
         </View>
-        <View style={{ height: 8, backgroundColor: theme.border, borderRadius: 4, overflow: 'hidden', marginTop: 4 }}>
-          <View style={{ width: `${Math.min(collectionRate, 100)}%`, height: '100%', backgroundColor: collectionRate >= 80 ? theme.success : collectionRate >= 50 ? theme.warning || '#F59E0B' : theme.error, borderRadius: 4 }} />
+        <View style={{ height: 10, backgroundColor: theme.border, borderRadius: 6, overflow: 'hidden', marginTop: 2 }}>
+          <View
+            style={{
+              width: `${Math.min(collectionRate, 100)}%`,
+              height: '100%',
+              backgroundColor:
+                collectionRate >= 80
+                  ? theme.success
+                  : collectionRate >= 50
+                    ? theme.warning || '#F59E0B'
+                    : theme.error,
+              borderRadius: 6,
+            }}
+          />
         </View>
-        <Text style={[styles.metricLabel, { marginTop: 6, textAlign: 'right' }]}>{collectionRate}% collected</Text>
+        <Text style={[styles.metricLabel, { marginTop: 8, marginBottom: 0, textAlign: 'right', fontSize: 13 }]}>
+          {collectionRate}% collected
+        </Text>
       </View>
 
       {/* Key numbers grid */}

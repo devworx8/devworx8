@@ -7,7 +7,7 @@
  * Styles extracted → parent-proof-of-payment.styles.ts
  */
 import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
@@ -115,7 +115,19 @@ export default function ProofOfPaymentScreen() {
                 <Text style={styles.datePickerText}>{h.paymentForMonth ? h.paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }) : t('pop.selectMonth', { defaultValue: 'Select month' })}</Text>
                 <Ionicons name="calendar" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
-              {h.showPaymentForPicker && <DateTimePicker value={h.paymentForMonth || new Date()} mode="date" onChange={(_, d) => { h.setShowPaymentForPicker(false); if (d) h.setPaymentForMonth(new Date(d.getFullYear(), d.getMonth(), 1)); }} />}
+              {h.showPaymentForPicker && (
+                <DateTimePicker
+                  value={h.paymentForMonth || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, date) => {
+                    if (Platform.OS !== 'ios') h.setShowPaymentForPicker(false);
+                    if (event.type === 'dismissed' || !date) return;
+                    h.setPaymentForMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+                    if (Platform.OS === 'ios') h.setShowPaymentForPicker(false);
+                  }}
+                />
+              )}
 
               {/* Advance Months Selector */}
               <Text style={styles.label}>Number of Months</Text>
@@ -150,7 +162,19 @@ export default function ProofOfPaymentScreen() {
             <Text style={styles.datePickerText}>{h.paymentDate.toLocaleDateString()}</Text>
             <Ionicons name="calendar" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
-          {h.showDatePicker && <DateTimePicker value={h.paymentDate} mode="date" onChange={(_, d) => { h.setShowDatePicker(false); if (d) h.setPaymentDate(d); }} />}
+          {h.showDatePicker && (
+            <DateTimePicker
+              value={h.paymentDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(event, date) => {
+                if (Platform.OS !== 'ios') h.setShowDatePicker(false);
+                if (event.type === 'dismissed' || !date) return;
+                h.setPaymentDate(date);
+                if (Platform.OS === 'ios') h.setShowDatePicker(false);
+              }}
+            />
+          )}
 
           <Text style={styles.label}>{t('pop.reference')}</Text>
           <TextInput style={styles.input} value={h.paymentReference} onChangeText={h.setPaymentReference} placeholder={t('pop.referencePlaceholder')} placeholderTextColor={theme.textSecondary} />

@@ -866,6 +866,17 @@ function isLanguageSubject(subject: string): boolean {
   );
 }
 
+function isMathSubject(subject: string): boolean {
+  const normalized = normalizeText(subject);
+  return (
+    normalized.includes('mathematic') ||
+    normalized.includes('algebra') ||
+    normalized.includes('geometry') ||
+    normalized.includes('trigonometry') ||
+    normalized.includes('calculus')
+  );
+}
+
 const LANGUAGE_ALIASES_TO_BCP47: Record<string, string> = {
   en: 'en-ZA',
   'en-za': 'en-ZA',
@@ -920,6 +931,10 @@ const LANGUAGE_MARKERS: Record<string, string[]> = {
   'nso-ZA': ['bala', 'kanegelo', 'dipotso', 'gomme', 'bona', 'ka', 'go', 'le'],
   'tn-ZA': ['bala', 'potso', 'mme', 'bona', 'go', 'le', 'leina', 'palo'],
   'st-ZA': ['bala', 'dipotso', 'mme', 'bona', 'ho', 'le', 'pale', 'kahoo'],
+  'nr-ZA': ['funda', 'ibali', 'imibuzo', 'kanye', 'ngaphambi', 'ekhaya', 'bahleka', 'ndawonye'],
+  'ss-ZA': ['fundza', 'indzaba', 'imibuto', 'kanye', 'babuya', 'ekhaya', 'bahleka', 'ndzawonye'],
+  've-ZA': ['vhala', 'bugu', 'mbudziso', 'na', 'hayani', 'murahu', 'vho', 'fhedza'],
+  'ts-ZA': ['hlaya', 'xitori', 'swivutiso', 'naswona', 'ekhaya', 'va', 'endzhaku', 'hlekile'],
 };
 const STRICT_LANGUAGE_VALIDATION_LOCALES = new Set(Object.keys(LANGUAGE_MARKERS));
 
@@ -1009,6 +1024,42 @@ Mia le mogolowe Tumi ba ne ba ya ka moso ka Matlhatso go thusa kwa polasing ya r
 
 Mia le ngwanabo Tumi ba ile hoseng ka Moqebelo ho ya thusa polasing ya ntatemoholo. Ba ile ba qala ka ho fepa dikgoho, ba nto jala meroho, mme hamorao ba hloekisa lesaka le Ntatemoholo. Ha pula e qala motshehare, ba dula tlasa veranda ba mametse dipale. Pele ba kgutlela hae, Nkgono o ba file sopho e chesang mme bohle ba tsheha mmoho.`,
       instruction: 'Bala temana ka hloko ebe o araba ka Sesotho.',
+    };
+  }
+
+  if (locale === 'nr-ZA') {
+    return {
+      passage: `Funda indatjana engezansi bese uphendula imibuzo elandelako.
+
+UMia nomfowabo uTumi baphume ekuseni ngoMgqibelo bayokusiza epulazini likabamkhulu. Bathome ngokondla iinkukhu, ngemva kwalokho batjala imifino, begodu kamuva bahlanza isibaya noBamkhulu. Emini kwaqala ukuna, ngakho bahlala ngaphasi kweveranda balalela iindatjana. Ngaphambi kokubuyela ekhaya, uGogo wabanikela isobho esifuthumeleko, boke bahleka ndawonye.`,
+      instruction: 'Funda umbhalo kuhle bese uphendula ngesiNdebele.',
+    };
+  }
+
+  if (locale === 'ss-ZA') {
+    return {
+      passage: `Fundza indzaba lengentasi bese uphendvula imibuto lelandzelako.
+
+UMia nemfowabo Tumi bavuke ekuseni ngaMgcibelo bayewusita epulazini lakabomkhulu. Bacale ngokondla tinkhukhu, base batjala imifino, bese kamuva bahlanza sibaya naMkhulu. Emini kwacala lina, ngako bahlala ngaphansi kweveranda balalela tindzaba. Ngaphambi kwekubuyela ekhaya, Gogo wabanika sobho lesishisako, bonkhe bahleka ndzawonye.`,
+      instruction: 'Fundza umbhalo kahle bese uphendvula ngesiSwati.',
+    };
+  }
+
+  if (locale === 've-ZA') {
+    return {
+      passage: `Vhalani tshiṱori tshi re fhasi ni dovhe ni fhindule mbudziso dzi tevhelaho.
+
+Mia na murathu wawe Tumi vho vuwa nga matsheloni nga Mugivhela vha ya u thusa polasini ya makhulu wavho. Vho thoma nga u ṋea huku zwiliwa, nga murahu vha ṱavha miroho, vha dovha vha kunakisa tshisima na Makhulu. Nga masiari mvula ya thoma, ngauralo vha dzula fhasi ha veranda vha tshi thetshelesa zwiṱori. Musi vha sa athu u humela hayani, Gogo o vha ṋea suphu i dudaho, vhoṱhe vha sea vho takala.`,
+      instruction: 'Vhalani zwavhuḓi ni fhindule nga Tshivenda.',
+    };
+  }
+
+  if (locale === 'ts-ZA') {
+    return {
+      passage: `Hlaya xitori lexi nga laha hansi kutani u hlamula swivutiso leswi landzelaka.
+
+Mia na makwavo Tumi va pfuke nimixo hi Mugqivela va ya pfuna epurasini ra kokwana wa vona. Va sungule hi ku phamela tihuku, endzhaku va byala miroho, kutani va tlhela va basisa xibaya na Kokwana. Hi nkarhi wa nhlikanhi mpfula yi sungule ku na, hikwalaho va tshamile ehansi ka veranda va yingisela switori. Va nga si tlhela ekaya, Gogo u va nyike supu yo hisa, kutani hinkwavo va hleka swin'we.`,
+      instruction: 'Hlaya rungula hi vukheta kutani u hlamula hi Xitsonga.',
     };
   }
 
@@ -1916,6 +1967,7 @@ function buildUserPrompt(payload: {
     `Generate a ${payload.examType} exam for ${payload.grade}.`,
     `Subject: ${payload.subject}.`,
     `Language: ${languageName} (${locale}).`,
+    `Write ALL learner-facing content in ${languageName} only (questions, options, section headings, instructions, and memorandum text).`,
     `Minimum total questions required: ${countPolicy.min}.`,
     `Maximum total questions allowed: ${countPolicy.max}.`,
     'Align strictly to CAPS/DBE outcomes and cognitive level for this grade.',
@@ -1929,6 +1981,14 @@ function buildUserPrompt(payload: {
     'Do not duplicate option letters inside option strings.',
     'Always include explanation for each answer key item.',
   ];
+
+  if (isMathSubject(payload.subject)) {
+    base.push(
+      'For mathematical notation, wrap inline maths in $...$ and display maths in $$...$$.',
+      'Use KaTeX-compatible LaTeX (e.g., \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \\div).',
+      'Do not place plain-language words inside math delimiters.',
+    );
+  }
 
   const subjectStructure = getSubjectSectionStructure(payload.subject, payload.grade, payload.examType);
   if (subjectStructure) {

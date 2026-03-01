@@ -52,6 +52,8 @@ interface NotificationContext {
   invite_link?: string;
   student_code?: string;
   donation_amount?: number;
+  reminder_kind?: string;
+  pop_upload_prompt?: string;
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
@@ -1084,17 +1086,37 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
     },
     fee_due_soon: {
       title: '💳 Fee Due Soon',
-      body: context.child_name && context.due_date
-        ? `${context.child_name}'s fees are due on ${context.due_date}.`
-        : context.due_date
-          ? `Fees are due on ${context.due_date}.`
-          : 'Fees are due soon.',
+      body: (() => {
+        const dueText = context.child_name
+          ? (context.days_until === 0
+            ? `${context.child_name}'s school fee is due today.`
+            : context.due_date
+              ? `${context.child_name}'s school fee is due on ${context.due_date}.`
+              : `${context.child_name}'s school fee is due soon.`)
+          : (context.days_until === 0
+            ? 'School fee is due today.'
+            : context.due_date
+              ? `School fee is due on ${context.due_date}.`
+              : 'School fee is due soon.');
+
+        const amountText =
+          typeof context.amount === 'number' && Number.isFinite(context.amount)
+            ? ` Amount: R${context.amount.toFixed(2)}.`
+            : '';
+
+        const popText =
+          context.pop_upload_prompt || 'If you already paid, please upload your POP in the app.';
+
+        return `${dueText}${amountText} ${popText}`.replace(/\s+/g, ' ').trim();
+      })(),
       data: {
         type: 'billing',
         screen: 'parent-payments',
         student_id: context.student_id,
         due_date: context.due_date,
         amount: context.amount,
+        reminder_kind: context.reminder_kind || (context.days_until === 0 ? 'due_today' : 'due_soon'),
+        pop_upload_reminder: true,
       },
       sound: 'default',
       badge: 1,
@@ -2771,6 +2793,8 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         context.due_date = (request.custom_payload?.due_date as string | undefined) ?? context.due_date;
         context.amount = (request.custom_payload?.amount as number | undefined) ?? context.amount;
         context.days_until = (request.custom_payload?.days_until as number | undefined) ?? context.days_until;
+        context.reminder_kind = (request.custom_payload?.reminder_kind as string | undefined) ?? context.reminder_kind;
+        context.pop_upload_prompt = (request.custom_payload?.pop_upload_prompt as string | undefined) ?? context.pop_upload_prompt;
         context.school_name = (request.custom_payload?.school_name as string | undefined) ?? context.school_name;
         break;
       }

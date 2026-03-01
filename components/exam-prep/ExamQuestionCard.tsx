@@ -48,7 +48,30 @@ function questionTypeIcon(type: ExamQuestion['type']): { name: string; label: st
 const MATH_HINT = 'Use LaTeX for maths: \\frac{1}{2}  \\sqrt{x}  x^2  \\times  \\div';
 
 const isOpenAnswer = (type: ExamQuestion['type']) =>
-  type === 'short_answer' || type === 'essay' || type === 'fill_blank';
+  type === 'short_answer' || type === 'essay' || type === 'fill_blank' || type === 'fill_in_blank';
+
+function parseStandaloneMath(value: string): { expression: string; displayMode: boolean } | null {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  const blockMatch = trimmed.match(/^\$\$([\s\S]+)\$\$$/);
+  if (blockMatch?.[1]) {
+    return {
+      expression: blockMatch[1].trim(),
+      displayMode: true,
+    };
+  }
+
+  const inlineMatch = trimmed.match(/^\$([^$\n]+)\$$/);
+  if (inlineMatch?.[1]) {
+    return {
+      expression: inlineMatch[1].trim(),
+      displayMode: false,
+    };
+  }
+
+  return null;
+}
 
 export function ExamQuestionCard({
   section,
@@ -66,6 +89,11 @@ export function ExamQuestionCard({
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('answer');
   const [workText, setWorkText] = useState('');
   const [showMathPreview, setShowMathPreview] = useState(false);
+  const sectionInstructionsMath = parseStandaloneMath(section.instructions || '');
+  const questionMath = parseStandaloneMath(question.question);
+  const readingPassageMath = parseStandaloneMath(section.readingPassage || '');
+  const feedbackMath = parseStandaloneMath(studentAnswer?.feedback || '');
+  const correctAnswerMath = parseStandaloneMath(question.correctAnswer || '');
 
   return (
     <>
@@ -75,9 +103,16 @@ export function ExamQuestionCard({
           {section.title}
         </Text>
         {section.instructions ? (
-          <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
-            {section.instructions}
-          </Text>
+          sectionInstructionsMath ? (
+            <MathRenderer
+              expression={sectionInstructionsMath.expression}
+              displayMode={sectionInstructionsMath.displayMode}
+            />
+          ) : (
+            <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
+              {section.instructions}
+            </Text>
+          )
         ) : null}
       </View>
 
@@ -86,13 +121,17 @@ export function ExamQuestionCard({
         <View style={[styles.readingPassageCard, { backgroundColor: theme.surface }]}>
           <View style={styles.passageLabelRow}>
             <Ionicons name="book-outline" size={14} color={theme.primary} />
-            <Text style={[styles.readingPassageTitle, { color: theme.primary }]}>
-              Passage
-            </Text>
-          </View>
-          <Text style={[styles.readingPassageText, { color: theme.text }]}>
-            {section.readingPassage}
+          <Text style={[styles.readingPassageTitle, { color: theme.primary }]}>
+            Passage
           </Text>
+        </View>
+          {readingPassageMath ? (
+            <MathRenderer expression={readingPassageMath.expression} displayMode={readingPassageMath.displayMode} />
+          ) : (
+            <Text style={[styles.readingPassageText, { color: theme.text }]}>
+              {section.readingPassage}
+            </Text>
+          )}
         </View>
       ) : null}
 
@@ -116,9 +155,13 @@ export function ExamQuestionCard({
           </View>
         </View>
 
-        <Text style={[styles.questionText, { color: theme.text }]}>
-          {question.question}
-        </Text>
+        {questionMath ? (
+          <MathRenderer expression={questionMath.expression} displayMode={questionMath.displayMode} />
+        ) : (
+          <Text style={[styles.questionText, { color: theme.text }]}>
+            {question.question}
+          </Text>
+        )}
 
         {/* Multiple Choice Options */}
         {question.type === 'multiple_choice' && question.options && (
@@ -126,6 +169,7 @@ export function ExamQuestionCard({
             {question.options.map((option, index) => {
               const optionLetter = String.fromCharCode(65 + index);
               const cleanedOption = option.replace(/^\s*[A-D]\s*[\.\)\-:]\s*/i, '').trim();
+              const optionMath = parseStandaloneMath(cleanedOption);
               const isSelected =
                 currentAnswer === option ||
                 currentAnswer === cleanedOption ||
@@ -195,18 +239,40 @@ export function ExamQuestionCard({
                           <Ionicons name="checkmark" size={12} color={theme.primary} />
                         )}
                   </View>
-                  <Text
-                    style={[
-                      styles.optionText,
-                      {
-                        color: isLocked
-                          ? lockedTextColor
-                          : isSelected ? theme.primary : theme.text,
-                      },
-                    ]}
-                  >
-                    {optionLetter}. {cleanedOption}
-                  </Text>
+                  <View style={styles.optionTextWrap}>
+                    <Text
+                      style={[
+                        styles.optionText,
+                        styles.optionTextPrefix,
+                        {
+                          color: isLocked
+                            ? lockedTextColor
+                            : isSelected ? theme.primary : theme.text,
+                        },
+                      ]}
+                    >
+                      {optionLetter}.
+                    </Text>
+                    {optionMath ? (
+                      <MathRenderer
+                        expression={optionMath.expression}
+                        displayMode={false}
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.optionText,
+                          {
+                            color: isLocked
+                              ? lockedTextColor
+                              : isSelected ? theme.primary : theme.text,
+                          },
+                        ]}
+                      >
+                        {cleanedOption}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -442,17 +508,25 @@ export function ExamQuestionCard({
                 </Text>
               )}
             </View>
-            <Text style={[styles.feedbackText, { color: theme.text }]}>
-              {studentAnswer.feedback}
-            </Text>
+            {feedbackMath ? (
+              <MathRenderer expression={feedbackMath.expression} displayMode={feedbackMath.displayMode} />
+            ) : (
+              <Text style={[styles.feedbackText, { color: theme.text }]}>
+                {studentAnswer.feedback}
+              </Text>
+            )}
             {!studentAnswer.isCorrect && question.correctAnswer && (
               <View style={styles.correctAnswerRow}>
                 <Text style={[styles.correctAnswerLabel, { color: '#10b981' }]}>
                   Correct answer:
                 </Text>
-                <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
-                  {question.correctAnswer}
-                </Text>
+                {correctAnswerMath ? (
+                  <MathRenderer expression={correctAnswerMath.expression} displayMode={false} />
+                ) : (
+                  <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
+                    {question.correctAnswer}
+                  </Text>
+                )}
               </View>
             )}
           </View>
@@ -552,8 +626,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optionText: {
-    flex: 1,
     fontSize: 15,
+  },
+  optionTextWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  optionTextPrefix: {
+    minWidth: 18,
   },
   workspaceContainer: {
     marginTop: 8,

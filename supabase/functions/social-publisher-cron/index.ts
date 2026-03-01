@@ -89,7 +89,21 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization') || '';
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    const token = authHeader.replace('Bearer ', '');
+    const isCronJob = token === CRON_SECRET;
+    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+
+    let isValidServiceRoleJwt = false;
+    if (token && !isCronJob && !isServiceRole) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        isValidServiceRoleJwt = payload.role === 'service_role';
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!isCronJob && !isServiceRole && !isValidServiceRoleJwt) {
       return jsonResponse(401, { error: 'unauthorized' });
     }
 
@@ -201,4 +215,3 @@ serve(async (req) => {
     return jsonResponse(500, { error: 'social_publisher_cron_error', message: error instanceof Error ? error.message : String(error) });
   }
 });
-

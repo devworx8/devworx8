@@ -313,6 +313,41 @@ function calculateSectionMarks(questions: any[]): number {
   return questions.reduce((sum, q) => sum + (q.marks || 1), 0);
 }
 
+function normalizeComparableText(value: string): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeMathExpression(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/\$\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\left|\\right/gi, '')
+    .replace(/\\times/gi, '*')
+    .replace(/\\cdot/gi, '*')
+    .replace(/\\div/gi, '/')
+    .replace(/\\pm/gi, '+/-')
+    .replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gi, '($1)/($2)')
+    .replace(/\\sqrt\s*\{([^{}]+)\}/gi, 'sqrt($1)')
+    .replace(/[{}]/g, '')
+    .replace(/\(([\p{L}\p{N}.\-+]+)\)/gu, '$1')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function areMathEquivalent(a: string, b: string): boolean {
+  const normalizedA = normalizeMathExpression(a);
+  const normalizedB = normalizeMathExpression(b);
+  if (!normalizedA || !normalizedB) return false;
+  return normalizedA === normalizedB;
+}
+
 /**
  * Grade student answer against correct answer
  */
@@ -328,15 +363,8 @@ export function gradeAnswer(
     };
   }
 
-  const answer = studentAnswer.trim().toLowerCase();
-
-  const normalize = (value: string) =>
-    value
-      .trim()
-      .toLowerCase()
-      .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, ' ');
+  const answer = studentAnswer.trim();
+  const normalize = (value: string) => normalizeComparableText(value);
 
   // Multiple choice - flexible matching
   if (question.type === 'multiple_choice' && question.correctAnswer) {
@@ -357,6 +385,7 @@ export function gradeAnswer(
 
     const isCorrect =
       answerNormalized === correctNormalized ||
+      areMathEquivalent(answer, correctRaw) ||
       (!!answerLetter && !!correctLetter && answerLetter === correctLetter);
 
     return {
@@ -392,7 +421,7 @@ export function gradeAnswer(
   if ((question.type === 'fill_blank' || question.type === 'fill_in_blank') && question.correctAnswer) {
     const normalizedAnswer = normalize(answer);
     const normalizedCorrect = normalize(question.correctAnswer);
-    const isExact = normalizedAnswer === normalizedCorrect;
+    const isExact = normalizedAnswer === normalizedCorrect || areMathEquivalent(answer, question.correctAnswer);
     const isClose = !isExact
       && normalizedCorrect.length > 3
       && normalizedAnswer.length > 0

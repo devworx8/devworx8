@@ -12,9 +12,23 @@ const CRON_SECRET = Deno.env.get('CRON_SECRET') || 'your-cron-secret'
 
 serve(async (req: Request): Promise<Response> => {
   try {
-    // Verify cron secret
-    const authHeader = req.headers.get('Authorization')
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    // Verify cron auth (CRON_SECRET or service role token)
+    const authHeader = req.headers.get('Authorization') || ''
+    const token = authHeader.replace('Bearer ', '')
+    const isCronJob = token === CRON_SECRET
+    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY
+
+    let isValidServiceRoleJwt = false
+    if (token && !isCronJob && !isServiceRole) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        isValidServiceRoleJwt = payload.role === 'service_role'
+      } catch {
+        // ignore malformed token
+      }
+    }
+
+    if (!isCronJob && !isServiceRole && !isValidServiceRoleJwt) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
     }
 

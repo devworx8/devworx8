@@ -243,7 +243,10 @@ export async function fetchStatsAndCounts(
     collectedTuitionAmount = monthFees
       .filter((f: any) => f.status === 'paid')
       .reduce((sum: number, f: any) => {
-        const paid = Number(f.amount_paid || f.final_amount || f.amount || 0);
+        const paid =
+          f.amount_paid != null
+            ? Number(f.amount_paid)
+            : Number(f.final_amount ?? f.amount ?? 0);
         return sum + (Number.isFinite(paid) ? paid : 0);
       }, 0);
   } catch (tuitionError: any) {

@@ -21,6 +21,14 @@ export interface ServiceHealth {
   metadata: Record<string, unknown>;
 }
 
+export interface MonthlyServiceCost {
+  service_name: string;
+  total_cost_usd: number;
+  total_cost_zar: number;
+  total_usage_units: Record<string, unknown> | null;
+  preschool_count: number;
+}
+
 export function useServiceHealthData() {
   return useQuery({
     queryKey: ["service-health"],
@@ -54,4 +62,24 @@ export function useServiceHealthSummary() {
     data: services,
     summary,
   };
+}
+
+export function useMonthlyServiceCosts(targetDate: Date = new Date()) {
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth() + 1;
+
+  return useQuery({
+    queryKey: ["monthly-service-costs", targetYear, targetMonth],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_monthly_service_costs", {
+        p_year: targetYear,
+        p_month: targetMonth,
+      });
+
+      if (error) throw error;
+      return (data || []) as MonthlyServiceCost[];
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
 }
