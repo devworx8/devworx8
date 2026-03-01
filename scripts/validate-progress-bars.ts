@@ -12,7 +12,7 @@ type Candidate = {
 
 const ROOT = process.cwd();
 const INVENTORY_PATH = path.join(ROOT, 'docs/audits/progress-bars-inventory.md');
-const SCAN_CMD = "rg -n 'width:\\s*`\\$\\{[^`]*%`' app components web/src --glob '!components/wireframes/**'";
+const SCAN_CMD = "rg -n 'width:\\s*`\\$\\{[^`]*%`' app components --glob '!components/wireframes/**'";
 
 function loadInventoryAllowlist(): Set<string> {
   const allowlist = new Set<string>();
