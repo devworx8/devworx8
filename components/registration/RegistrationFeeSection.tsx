@@ -1,15 +1,24 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
-import { assertSupabase } from '@/lib/supabase';
+import { assertSupabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { createRegistrationStyles } from './child-registration.styles';
 import type { PromoApplied, RegistrationFormErrors } from '@/hooks/useChildRegistration';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
+
+function inferImageExtAndMime(uri: string): { ext: 'jpg' | 'png' | 'webp'; mime: string } {
+  const clean = (uri || '').split('?')[0].toLowerCase();
+  if (clean.endsWith('.png')) return { ext: 'png', mime: 'image/png' };
+  if (clean.endsWith('.webp')) return { ext: 'webp', mime: 'image/webp' };
+  return { ext: 'jpg', mime: 'image/jpeg' };
+}
+
 interface RegistrationFeeSectionProps {
   registrationFee: number;
   finalAmount: number;
@@ -79,21 +88,48 @@ export function RegistrationFeeSection({
   const confirmPopUpload = async (uri: string) => {
     setUploadingPop(true);
     try {
-      const fileName = `pop_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const { data, error } = await assertSupabase()
-        .storage
-        .from('pop-uploads')
-        .upload(`registration/${fileName}`, blob, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
-      if (error) throw error;
+      const supabase = assertSupabase();
+      const normalizedUri =
+        uri.startsWith('file://') || uri.startsWith('content://') ? uri : `file://${uri}`;
+      const { ext, mime } = inferImageExtAndMime(uri);
+      const fileName = `pop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const authUserId = sessionData.session?.user?.id;
+      if (!accessToken) {
+        throw new Error('Session expired. Please sign in again and retry.');
+      }
+      if (!authUserId) {
+        throw new Error('Could not determine your account ID for upload.');
+      }
+
+      // Bucket policy requires the first folder segment to equal auth.uid()
+      const storagePath = `${authUserId}/registration/${fileName}`;
+
+      // Mobile-safe direct binary upload (avoids empty multipart body failures on Android)
+      const uploadEndpoint = `${supabaseUrl}/storage/v1/object/proof-of-payments/${storagePath}`;
+      const uploadResponse = await FileSystem.uploadAsync(uploadEndpoint, normalizedUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: supabaseAnonKey,
+          'content-type': mime,
+          'x-upsert': 'false',
+        },
+      });
+      if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
+        const bodyPreview = (uploadResponse.body || '').slice(0, 220);
+        throw new Error(
+          `Failed to upload proof of payment (status ${uploadResponse.status})${bodyPreview ? `: ${bodyPreview}` : ''}.`,
+        );
+      }
+
       const { data: urlData } = assertSupabase()
         .storage
-        .from('pop-uploads')
-        .getPublicUrl(`registration/${fileName}`);
+        .from('proof-of-payments')
+        .getPublicUrl(storagePath);
       setProofOfPaymentUrl(urlData.publicUrl);
       Alert.alert('Success', 'Proof of payment uploaded successfully!');
     } catch (error: any) {
