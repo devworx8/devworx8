@@ -65,5 +65,6 @@ and deemed safe (bounded by data constraints or component logic).
 | `app/screens/parent-document-upload.tsx` | 138 | Upload progress 0-100 |
 | `app/screens/super-admin-analytics.tsx` | 314 | Plan percentage bounded |
 | `app/screens/principal-analytics.tsx` | 212 | Enrollment ratio bounded |
+| `app/screens/principal-analytics.tsx` | 223 | Distribution percentage bounded |
 | `components/finance/FinanceOverviewTab.tsx` | 72 | Uses Math.min(collectionRate, 100) |
 | `components/ai/dash-assistant/DashUsageBanner.tsx` | 99 | Uses Math.min(quotaPercentage, 100) |
