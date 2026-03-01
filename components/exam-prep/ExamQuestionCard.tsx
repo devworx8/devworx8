@@ -5,11 +5,14 @@
  * answer options / text input, and post-submission feedback.
  */
 
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
+import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
+
+type WorkspaceTab = 'answer' | 'work';
 
 interface ExamQuestionCardProps {
   section: ExamSection;
@@ -42,6 +45,11 @@ function questionTypeIcon(type: ExamQuestion['type']): { name: string; label: st
   }
 }
 
+const MATH_HINT = 'Use LaTeX for maths: \\frac{1}{2}  \\sqrt{x}  x^2  \\times  \\div';
+
+const isOpenAnswer = (type: ExamQuestion['type']) =>
+  type === 'short_answer' || type === 'essay' || type === 'fill_blank';
+
 export function ExamQuestionCard({
   section,
   question,
@@ -54,6 +62,10 @@ export function ExamQuestionCard({
   theme,
 }: ExamQuestionCardProps) {
   const typeInfo = questionTypeIcon(question.type);
+  const showWorkspace = isOpenAnswer(question.type);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('answer');
+  const [workText, setWorkText] = useState('');
+  const [showMathPreview, setShowMathPreview] = useState(false);
 
   return (
     <>
@@ -286,29 +298,112 @@ export function ExamQuestionCard({
           </View>
         )}
 
-        {/* Text-based Input */}
-        {(question.type === 'short_answer' ||
-          question.type === 'essay' ||
-          question.type === 'fill_blank') && (
-          <TextInput
-            style={[
-              styles.answerInput,
-              question.type === 'essay' && styles.essayInput,
-              {
-                backgroundColor: isLocked ? theme.background + '80' : theme.background,
-                borderColor: theme.border,
-                color: theme.text,
-              },
-              isLocked && { opacity: 0.7 },
-            ]}
-            value={currentAnswer}
-            onChangeText={onChangeAnswer}
-            placeholder="Type your answer here..."
-            placeholderTextColor={theme.textTertiary}
-            multiline={question.type === 'essay'}
-            numberOfLines={question.type === 'essay' ? 6 : 2}
-            editable={!isLocked}
-          />
+        {/* Tabbed Workspace (Answer + Show Work) */}
+        {showWorkspace && (
+          <View style={styles.workspaceContainer}>
+            {/* Tab Row */}
+            <View style={[styles.tabRow, { borderBottomColor: theme.border }]}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'answer' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+                onPress={() => setActiveTab('answer')}
+              >
+                <Ionicons name="pencil" size={14} color={activeTab === 'answer' ? theme.primary : theme.textSecondary} />
+                <Text style={[styles.tabLabel, { color: activeTab === 'answer' ? theme.primary : theme.textSecondary }]}>
+                  Answer
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'work' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+                onPress={() => setActiveTab('work')}
+              >
+                <Ionicons name="calculator" size={14} color={activeTab === 'work' ? theme.primary : theme.textSecondary} />
+                <Text style={[styles.tabLabel, { color: activeTab === 'work' ? theme.primary : theme.textSecondary }]}>
+                  Show Work
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Answer Tab */}
+            {activeTab === 'answer' && (
+              <TextInput
+                style={[
+                  styles.answerInput,
+                  question.type === 'essay' && styles.essayInput,
+                  {
+                    backgroundColor: isLocked ? theme.background + '80' : theme.background,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                  isLocked && { opacity: 0.7 },
+                ]}
+                value={currentAnswer}
+                onChangeText={onChangeAnswer}
+                placeholder="Type your answer here..."
+                placeholderTextColor={theme.textTertiary}
+                multiline
+                numberOfLines={question.type === 'essay' ? 6 : 3}
+                editable={!isLocked}
+              />
+            )}
+
+            {/* Show Work Tab */}
+            {activeTab === 'work' && (
+              <View style={styles.workTab}>
+                <View style={[styles.workHintRow, { backgroundColor: theme.primary + '18' }]}>
+                  <Ionicons name="information-circle-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.workHint, { color: theme.primary }]}>{MATH_HINT}</Text>
+                </View>
+
+                <TextInput
+                  style={[
+                    styles.workInput,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                    isLocked && { opacity: 0.7 },
+                  ]}
+                  value={workText}
+                  onChangeText={setWorkText}
+                  placeholder="Write your working here… steps, calculations, diagrams described in text or LaTeX"
+                  placeholderTextColor={theme.textTertiary}
+                  multiline
+                  numberOfLines={6}
+                  editable={!isLocked}
+                  textAlignVertical="top"
+                />
+
+                {/* LaTeX Preview toggle */}
+                {workText.trim().length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.previewToggle, { borderColor: theme.border }]}
+                    onPress={() => setShowMathPreview(p => !p)}
+                  >
+                    <Ionicons
+                      name={showMathPreview ? 'eye-off-outline' : 'eye-outline'}
+                      size={16}
+                      color={theme.textSecondary}
+                    />
+                    <Text style={[styles.previewToggleLabel, { color: theme.textSecondary }]}>
+                      {showMathPreview ? 'Hide preview' : 'Preview maths'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {showMathPreview && workText.trim().length > 0 && (
+                  <View style={[styles.mathPreviewCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Text style={[styles.mathPreviewTitle, { color: theme.textSecondary }]}>
+                      Rendered preview
+                    </Text>
+                    <ScrollView>
+                      <MathRenderer expression={workText} displayMode />
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         )}
 
         {/* Feedback after submission */}
@@ -460,16 +555,89 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
   },
+  workspaceContainer: {
+    marginTop: 8,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    marginBottom: 10,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    marginBottom: -1,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   answerInput: {
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
     fontSize: 15,
-    marginTop: 8,
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
   essayInput: {
     minHeight: 120,
     textAlignVertical: 'top',
+  },
+  workTab: {
+    gap: 10,
+  },
+  workHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  workHint: {
+    fontSize: 11,
+    fontFamily: 'monospace' as const,
+    flex: 1,
+    flexWrap: 'wrap' as const,
+  },
+  workInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 140,
+    fontFamily: 'monospace' as const,
+    textAlignVertical: 'top' as const,
+  },
+  previewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start' as const,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  previewToggleLabel: {
+    fontSize: 13,
+  },
+  mathPreviewCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    maxHeight: 200,
+  },
+  mathPreviewTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   feedbackCard: {
     marginTop: 16,

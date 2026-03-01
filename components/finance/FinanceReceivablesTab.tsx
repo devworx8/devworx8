@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -39,10 +39,15 @@ export function FinanceReceivablesTab({
         .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`, { foreignTable: 'students' })
         .eq('billing_month', monthIso)
         .eq('students.is_active', true)
-        .eq('students.status', 'active');
+        .eq('students.status', 'active')
+        .limit(5000);
 
       if (!data) return null;
 
+      // Worst-wins status precedence: unpaid > partial > paid
+      // This prevents a last-write-wins race where a later 'partially_paid'
+      // row overwrites an earlier 'pending' row and shows 'Partial' instead of 'Not Paid'.
+      const STATUS_RANK: Record<string, number> = { paid: 0, partial: 1, unpaid: 2 };
       const byStudent = new Map<string, { name: string; studentId: string; totalDue: number; totalPaid: number; status: 'paid' | 'partial' | 'unpaid' }>();
       for (const fee of data as any[]) {
         const s = fee.students;
@@ -50,8 +55,15 @@ export function FinanceReceivablesTab({
         const existing = byStudent.get(sid) || { name: `${s?.first_name || ''} ${s?.last_name || ''}`.trim(), studentId: sid, totalDue: 0, totalPaid: 0, status: 'paid' as const };
         existing.totalDue += Number(fee.final_amount || fee.amount || 0);
         existing.totalPaid += Number(fee.amount_paid || 0);
-        if (fee.status === 'waived') { /* skip */ }
-        else if (fee.status !== 'paid') existing.status = fee.status === 'partially_paid' ? 'partial' : 'unpaid';
+        if (fee.status !== 'waived') {
+          const newStatus: 'paid' | 'partial' | 'unpaid' =
+            fee.status === 'paid' ? 'paid'
+            : fee.status === 'partially_paid' ? 'partial'
+            : 'unpaid';
+          if ((STATUS_RANK[newStatus] ?? 0) > (STATUS_RANK[existing.status] ?? 0)) {
+            existing.status = newStatus;
+          }
+        }
         byStudent.set(sid, existing);
       }
 
@@ -167,13 +179,26 @@ export function FinanceReceivablesTab({
           const excludedFuture = Number(receivables.summary?.excluded_future_enrollment_students || 0);
           const excludedUnverified = Number(receivables.summary?.excluded_unverified_students || 0);
           const totalExcluded = excludedInactive + excludedFuture + excludedUnverified;
-          if (totalExcluded <= 0) return null;
+          const cap = Number((receivables.summary as any)?.students_display_cap || 60);
+          const totalUnpaid = Number((receivables.summary as any)?.students_total_unpaid || 0);
+          const isCapped = totalUnpaid > cap;
           return (
-            <View style={styles.infoBanner}>
-              <Text style={styles.infoBannerText}>
-                Excluded: {excludedFuture} not started, {excludedUnverified} unverified, {excludedInactive} inactive
-              </Text>
-            </View>
+            <>
+              {isCapped && (
+                <View style={[styles.infoBanner, { borderLeftColor: theme.warning || '#F59E0B', borderLeftWidth: 3 }]}>
+                  <Text style={[styles.infoBannerText, { color: theme.warning || '#F59E0B' }]}>
+                    Showing top {cap} of {totalUnpaid} students with unpaid fees. Use the Finance Report for the full list.
+                  </Text>
+                </View>
+              )}
+              {totalExcluded > 0 && (
+                <View style={styles.infoBanner}>
+                  <Text style={styles.infoBannerText}>
+                    Excluded: {excludedFuture} not started, {excludedUnverified} unverified, {excludedInactive} inactive
+                  </Text>
+                </View>
+              )}
+            </>
           );
         })()
       )}

@@ -207,12 +207,15 @@ export async function fetchStatsAndCounts(
   try {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    // Use the same dual-ID filter as the receivables service so students stored
+    // under preschool_id are not excluded from the income calculation.
     const { data: monthFees } = await supabase
       .from('student_fees')
       .select('final_amount, amount, amount_paid, status')
-      .eq('organization_id', preschoolId)
+      .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`)
       .eq('billing_month', currentMonth)
-      .neq('status', 'waived');
+      .neq('status', 'waived')
+      .limit(2000);
 
     if (monthFees && monthFees.length > 0) {
       expectedTuitionIncome = monthFees.reduce((sum: number, f: any) => {

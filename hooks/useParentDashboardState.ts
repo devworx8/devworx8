@@ -5,6 +5,7 @@
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveChild } from '@/contexts/ActiveChildContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
 import { logger } from '@/lib/logger';
@@ -38,8 +39,13 @@ export function useParentDashboardState(focusSection?: string) {
   const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { tier, ready: subscriptionReady, refresh: refreshSubscription } = useSubscription();
+  const { setActiveChildId: setGlobalActiveChildId } = useActiveChild();
   const [refreshing, setRefreshing] = useState(false);
-  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  const [activeChildId, _setActiveChildId] = useState<string | null>(null);
+  const setActiveChildId = useCallback((id: string | null) => {
+    _setActiveChildId(id);
+    setGlobalActiveChildId(id);
+  }, [setGlobalActiveChildId]);
   const [children, setChildren] = useState<any[]>([]);
   const [collapsedSections, setCollapsedSections] = useState(() => new Set(DEFAULT_COLLAPSED_SECTIONS));
   const [searchQuery, setSearchQuery] = useState('');
