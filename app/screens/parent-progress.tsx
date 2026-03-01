@@ -12,6 +12,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveChild } from '@/contexts/ActiveChildContext';
 import { useParentProgress, useLessonProgress } from '@/hooks/useLessonProgress';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -30,7 +31,10 @@ export default function ParentProgressScreen() {
     : ['#10B981', '#059669'];
 
   const params = useLocalSearchParams<{ childId?: string }>();
-  const initialChildId = Array.isArray(params.childId) ? params.childId[0] : params.childId;
+  const { activeChildId: globalActiveChildId } = useActiveChild();
+  const paramChildId = Array.isArray(params.childId) ? params.childId[0] : params.childId;
+  // Prefer URL param, then global context (AsyncStorage-backed), then null
+  const initialChildId = paramChildId ?? globalActiveChildId ?? null;
   const [selectedChildId, setSelectedChildId] = useState<string | null>(initialChildId || null);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -59,14 +63,20 @@ export default function ParentProgressScreen() {
     });
   }, [refetchChildren, refetchDetails]);
   
+  // Once childrenProgress loads, pick the right child.
+  // Priority: globalActiveChildId (AsyncStorage-backed) > first child.
+  // Also self-corrects if current selection is stale (not in list).
   React.useEffect(() => {
-    if (!selectedChildId && childrenProgress.length > 0) {
-      const matchingChild = initialChildId
-        ? childrenProgress.find(c => c.studentId === initialChildId)
-        : null;
-      setSelectedChildId(matchingChild?.studentId || childrenProgress[0].studentId);
-    }
-  }, [childrenProgress, selectedChildId, initialChildId]);
+    if (childrenProgress.length === 0) return;
+    const currentIsValid = childrenProgress.some(c => c.studentId === selectedChildId);
+    if (currentIsValid) return;
+    // Current selection is missing from the list — pick the best available
+    const preferred = globalActiveChildId
+      ? childrenProgress.find(c => c.studentId === globalActiveChildId)
+      : null;
+    setSelectedChildId(preferred?.studentId ?? childrenProgress[0].studentId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childrenProgress, globalActiveChildId]);
   
   const selectedChild = childrenProgress.find(c => c.studentId === selectedChildId);
   
@@ -95,7 +105,16 @@ export default function ParentProgressScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Learning Progress</Text>
-            <Text style={styles.headerSubtitle}>Track your children's achievements</Text>
+            {selectedChild ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Ionicons name="person-circle-outline" size={13} color="rgba(255,255,255,0.8)" />
+                <Text style={[styles.headerSubtitle, { fontWeight: '600' }]}>
+                  {selectedChild.studentName.split(' ')[0]}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.headerSubtitle}>Track your children's achievements</Text>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -144,13 +163,21 @@ export default function ParentProgressScreen() {
         )}
         
         {/* No Children State */}
-        {childrenProgress.length === 0 && (
+        {childrenProgress.length === 0 && !isLoadingChildren && (
           <View style={styles.emptyContainer}>
             <Ionicons name="school-outline" size={64} color={theme.textSecondary} />
             <Text style={styles.emptyTitle}>No Children Enrolled</Text>
             <Text style={styles.emptyText}>
               Your children's progress will appear here once they are enrolled.
             </Text>
+          </View>
+        )}
+
+        {/* Selecting child (context / AsyncStorage not yet resolved) */}
+        {childrenProgress.length > 0 && !selectedChild && (
+          <View style={[styles.emptyContainer, { paddingVertical: 40 }]}>
+            <EduDashSpinner size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { marginTop: 12 }]}>Loading progress…</Text>
           </View>
         )}
         
@@ -231,7 +258,7 @@ export default function ParentProgressScreen() {
                 </View>
               </View>
 
-              {selectedProgress?.averageStars !== null && (
+              {selectedProgress != null && selectedProgress.averageStars != null && (
                 <View style={styles.starsSummaryRow}>
                   <Ionicons name="star" size={16} color="#F59E0B" />
                   <Text style={styles.starsSummaryText}>

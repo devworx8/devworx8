@@ -59,6 +59,7 @@ import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
+import { ActiveChildProvider } from '../contexts/ActiveChildContext';
 import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
 import { FloatingCallOverlay } from '../components/calls/FloatingCallOverlay';
@@ -273,6 +274,7 @@ export default function RootLayout() {
               <AdsProvider>
                 <UpdatesProvider>
                   <AppPreferencesProvider>
+                    <ActiveChildProvider>
                     <NotificationProvider>
                       <CallProvider>
                         <SpotlightTourBridge>
@@ -296,6 +298,7 @@ export default function RootLayout() {
                         </SpotlightTourBridge>
                       </CallProvider>
                     </NotificationProvider>
+                    </ActiveChildProvider>
                   </AppPreferencesProvider>
                 </UpdatesProvider>
               </AdsProvider>

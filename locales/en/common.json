@@ -1532,7 +1532,10 @@
         "notifications": "Notifications",
         "menu": "Menu",
         "weekly_menu": "Weekly Menu",
-        "documents": "Documents"
+        "documents": "Documents",
+        "timetable": "Timetable",
+        "my_exams": "My Exams & Scores",
+        "groups": "Groups"
       },
       "profile": {
         "menu": "Profile menu",
@@ -1636,9 +1639,16 @@
         "exam_badge": "Exam Builder",
         "exam_title": "Build Full Exam (Printable)",
         "exam_description": "Generate a CAPS-aligned formal test paper for review or print.",
-        "exam_cta": "Generate Formal Test Paper"
+        "exam_cta": "Generate Formal Test Paper",
+        "exam_history_badge": "My Exams",
+        "exam_history_title": "Past Exams & Scores",
+        "exam_history_desc": "Review past practice exams with corrected answers and scores.",
+        "exam_history_cta": "View My Exams"
       }
     },
+    "stationery": "Stationery",
+    "timetable": "Today's Timetable",
+    "timetable_hint": "View class schedule, subjects & teachers",
     "todays_activities": "Today's Activities",
     "uniform_sizes": "Uniform Sizes",
     "upcoming_birthdays": "Upcoming Birthdays 🎂",

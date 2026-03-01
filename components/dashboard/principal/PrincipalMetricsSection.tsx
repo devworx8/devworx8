@@ -163,7 +163,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
       id: 'fees_collected',
       title: t('dashboard.money_collected', { defaultValue: 'Collected' }),
       subtitle: t('dashboard.money_collected_hint', { defaultValue: `${collectionRate}% of expected` }),
-      value: collectedTuition > 0 ? fmtR(collectedTuition) : fmtR(feesCollected),
+      value: collectedTuition > 0 ? fmtR(collectedTuition) : '—',
       icon: 'checkmark-done-circle',
       color: '#10B981',
       valueColor: '#10B981',

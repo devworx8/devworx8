@@ -35,7 +35,11 @@ export async function fetchFeeOverviewData(
       })
     : Promise.resolve({ data: null, error: null } as { data: any; error: any });
 
-  // 1. Fetch students + fees + registrations in parallel
+  // 1. Fetch students + fees + registrations in parallel.
+  //    Hard limits guard against unbounded payloads that can OOM the JS heap.
+  const STUDENT_LIMIT = 1000;
+  const FEES_LIMIT = 5000;
+
   const { data: studentsData, error: studentsError } = await supabase
     .from('students')
     .select(`
@@ -45,7 +49,8 @@ export async function fetchFeeOverviewData(
     `)
     .eq('preschool_id', organizationId)
     .eq('is_active', true)
-    .order('first_name');
+    .order('first_name')
+    .limit(STUDENT_LIMIT);
   if (studentsError) throw studentsError;
 
   const activeStudentsData = (studentsData || []).filter(
@@ -57,6 +62,7 @@ export async function fetchFeeOverviewData(
     ? await supabase.from('student_fees')
         .select('*, fee_structures(name, fee_type, description)')
         .in('student_id', studentIds)
+        .limit(FEES_LIMIT)
     : { data: [] as any[], error: null };
   if (feesError) throw feesError;
 
