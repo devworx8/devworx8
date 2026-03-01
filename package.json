@@ -122,6 +122,7 @@
     "i18n:sweep:report": "node scripts/i18n-sweep.js",
     "build:android:apk": "node scripts/eas-wrapper.mjs build --platform android --profile production-apk --local",
     "build:android:aab": "node scripts/bump-android-version.mjs && node scripts/eas-wrapper.mjs build --platform android --profile production --clear-cache --non-interactive",
+    "build:android:prod:safe": "npm run verify:prod && npm run build:android:aab",
     "build:android:preview": "node scripts/eas-wrapper.mjs build --platform android --profile preview --local",
     "build:dev": "node scripts/eas-wrapper.mjs build --platform android --profile development",
     "build:dev:apk": "node scripts/eas-wrapper.mjs build --platform android --profile development-apk",

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCurrency, pickSectionError } from '@/hooks/useFinanceControlCenter';
+import { clampPercent } from '@/lib/progress/clampPercent';
 import type { FinanceControlCenterBundle } from '@/types/finance';
 
 interface FinanceOverviewTabProps {
@@ -51,6 +52,7 @@ export function FinanceOverviewTab({
   const collectionRate = derivedOverview.due > 0
     ? Math.round((derivedOverview.collected / derivedOverview.due) * 100)
     : 0;
+  const collectionPercent = clampPercent(collectionRate, { source: 'FinanceOverviewTab.collectionRate' });
 
   return (
     <View style={styles.section}>
@@ -98,12 +100,12 @@ export function FinanceOverviewTab({
         <View style={{ height: 10, backgroundColor: theme.border, borderRadius: 6, overflow: 'hidden', marginTop: 2 }}>
           <View
             style={{
-              width: `${Math.min(collectionRate, 100)}%`,
+              width: `${collectionPercent}%`,
               height: '100%',
               backgroundColor:
-                collectionRate >= 80
+                collectionPercent >= 80
                   ? theme.success
-                  : collectionRate >= 50
+                  : collectionPercent >= 50
                     ? theme.warning || '#F59E0B'
                     : theme.error,
               borderRadius: 6,
@@ -111,7 +113,7 @@ export function FinanceOverviewTab({
           />
         </View>
         <Text style={[styles.metricLabel, { marginTop: 8, marginBottom: 0, textAlign: 'right', fontSize: 13 }]}>
-          {collectionRate}% collected
+          {collectionPercent}% collected
         </Text>
       </View>
 
