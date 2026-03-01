@@ -1,5 +1,4 @@
 BEGIN;
-
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'name-practice-snapshots',
@@ -9,12 +8,10 @@ VALUES (
   ARRAY['image/png', 'image/jpeg', 'image/webp']::text[]
 )
 ON CONFLICT (id) DO NOTHING;
-
 DROP POLICY IF EXISTS name_practice_snapshots_select ON storage.objects;
 DROP POLICY IF EXISTS name_practice_snapshots_insert ON storage.objects;
 DROP POLICY IF EXISTS name_practice_snapshots_update ON storage.objects;
 DROP POLICY IF EXISTS name_practice_snapshots_delete ON storage.objects;
-
 CREATE POLICY name_practice_snapshots_select
   ON storage.objects
   FOR SELECT
@@ -40,7 +37,6 @@ CREATE POLICY name_practice_snapshots_select
       )
     )
   );
-
 CREATE POLICY name_practice_snapshots_insert
   ON storage.objects
   FOR INSERT
@@ -66,7 +62,6 @@ CREATE POLICY name_practice_snapshots_insert
       )
     )
   );
-
 CREATE POLICY name_practice_snapshots_update
   ON storage.objects
   FOR UPDATE
@@ -78,7 +73,6 @@ CREATE POLICY name_practice_snapshots_update
   WITH CHECK (
     bucket_id = 'name-practice-snapshots'
   );
-
 CREATE POLICY name_practice_snapshots_delete
   ON storage.objects
   FOR DELETE
@@ -87,5 +81,4 @@ CREATE POLICY name_practice_snapshots_delete
     bucket_id = 'name-practice-snapshots'
     AND owner = auth.uid()
   );
-
 COMMIT;

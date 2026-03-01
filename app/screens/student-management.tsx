@@ -201,7 +201,7 @@ export default function StudentManagementScreen() {
           <View style={styles.ageGroupSectionHeader}>
             <Text style={styles.sectionTitle}>Age Group Distribution</Text>
             <TouchableOpacity
-              onPress={() => router.push('/screens/principal-age-groups')}
+              onPress={() => router.push('/screens/class-teacher-management')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.manageAgeGroupsLink}>Manage</Text>
@@ -233,7 +233,7 @@ export default function StudentManagementScreen() {
           </ScrollView>
           ) : (
             <Text style={styles.ageGroupEmptyHint}>
-              Configure Curious Cubs, Little Explorers, and Panda under Manage.
+              Configure classes or age groups under Manage to see distribution.
             </Text>
           )}
         </View>

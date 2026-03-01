@@ -1,7 +1,6 @@
 -- Expand finance category normalization to include excursions/fundraisers/donations/aftercare activity categories.
 
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.normalize_fee_category_code(p_value text)
 RETURNS text
 LANGUAGE plpgsql
@@ -45,7 +44,6 @@ BEGIN
   RETURN 'other';
 END;
 $$;
-
 -- Drop legacy category checks first so normalization can run safely on historical rows.
 DO $$
 BEGIN
@@ -60,7 +58,6 @@ BEGIN
   END IF;
 END
 $$;
-
 -- Refresh existing category codes with expanded normalization logic.
 UPDATE public.student_fees sf
 SET category_code = public.normalize_fee_category_code(
@@ -75,7 +72,6 @@ SET category_code = public.normalize_fee_category_code(
 )
 FROM public.fee_structures fs
 WHERE sf.fee_structure_id = fs.id;
-
 UPDATE public.payments
 SET category_code = public.normalize_fee_category_code(
   coalesce(
@@ -89,7 +85,6 @@ SET category_code = public.normalize_fee_category_code(
 WHERE category_code IS NULL
    OR trim(category_code) = ''
    OR category_code IN ('ad_hoc', 'meal', 'other', 'activities', 'excursion', 'fundraiser', 'donation_drive', 'books', 'deposit');
-
 UPDATE public.pop_uploads
 SET category_code = public.normalize_fee_category_code(
   coalesce(
@@ -106,7 +101,6 @@ WHERE upload_type = 'proof_of_payment'
     OR trim(category_code) = ''
     OR category_code IN ('ad_hoc', 'meal', 'other')
   );
-
 DO $$
 BEGIN
   IF to_regclass('public.student_fees') IS NOT NULL THEN
@@ -168,5 +162,4 @@ BEGIN
   END IF;
 END
 $$;
-
 COMMIT;

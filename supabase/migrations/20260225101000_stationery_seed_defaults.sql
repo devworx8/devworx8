@@ -1,8 +1,6 @@
 BEGIN;
-
 CREATE UNIQUE INDEX IF NOT EXISTS stationery_list_items_list_item_name_key
   ON public.stationery_list_items(list_id, item_name);
-
 CREATE OR REPLACE FUNCTION public.seed_stationery_defaults_for_school_year(
   p_school_id uuid,
   p_academic_year integer,
@@ -149,7 +147,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.clone_stationery_lists_from_year(
   p_school_id uuid,
   p_from_year integer,
@@ -247,7 +244,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.ensure_stationery_year_templates(
   p_school_id uuid,
   p_academic_year integer DEFAULT public.stationery_current_academic_year(),
@@ -309,7 +305,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Bootstrap current year defaults for existing schools.
 DO $$
 DECLARE
@@ -325,5 +320,4 @@ BEGIN
   END LOOP;
 END
 $$;
-
 COMMIT;

@@ -3,7 +3,10 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { AnalyticsData } from './types';
-import { calculateAgeInfo, findAgeGroup, PRESCHOOL_AGE_GROUP_NAMES } from '@/hooks/student-management/studentHelpers';
+import {
+  calculateAgeInfo,
+  resolveStudentGroupName,
+} from '@/hooks/student-management/studentHelpers';
 
 export async function fetchPrincipalAnalytics(
   schoolId: string,
@@ -41,7 +44,7 @@ export async function fetchPrincipalAnalytics(
   const [studentsRes, attendanceRes, todayAttRes, revenueRes, outstandingRes, staffRes] =
     await Promise.all([
       sb.from('students')
-        .select('id, created_at, status, date_of_birth, is_active')
+        .select('id, created_at, status, date_of_birth, is_active, classes(name)')
         .eq('preschool_id', schoolId)
         .eq('is_active', true),
       sb.from('attendance').select('status, attendance_date').gte('attendance_date', monthStart),
@@ -65,22 +68,41 @@ export async function fetchPrincipalAnalytics(
   const withdrawnStudents = students.filter((s) => s.status === 'withdrawn').length;
   const retentionRate = totalStudents ? (activeStudents / totalStudents) * 100 : 0;
 
-  // Build age group distribution using DOB-based assignment (same logic as student-management)
+  // Build age group distribution using class-first assignment (same logic as student-management)
   const ageGroupCounts: Record<string, number> = {};
   students.forEach((s: any) => {
     const { age_months } = calculateAgeInfo(s.date_of_birth);
-    const group = findAgeGroup(age_months, ageGroupsForCalc as any[]);
-    const ag = group?.name || 'Unassigned';
+    const className = Array.isArray(s.classes)
+      ? String(s.classes[0]?.name || '').trim() || null
+      : String(s.classes?.name || '').trim() || null;
+    const ag = resolveStudentGroupName({
+      className,
+      ageMonths: age_months,
+      ageGroups: ageGroupsForCalc as any[],
+    });
     ageGroupCounts[ag] = (ageGroupCounts[ag] || 0) + 1;
   });
-  // Ensure the canonical preschool groups always appear (even with 0 count)
-  PRESCHOOL_AGE_GROUP_NAMES.forEach((name) => {
-    if (!(name in ageGroupCounts)) ageGroupCounts[name] = 0;
-  });
-  const ageGroupDistribution = Object.entries(ageGroupCounts)
-    .filter(([, count]) => count > 0)
-    .map(([ageGroup, count]) => ({ ageGroup, count }))
-    .sort((a, b) => b.count - a.count);
+
+  const configuredOrder = [...new Set(
+    (ageGroupsForCalc || [])
+      .map((group: any) => String(group?.name || '').trim())
+      .filter(Boolean),
+  )];
+
+  const orderedGroupNames = [
+    ...configuredOrder.filter((name) => ageGroupCounts[name] > 0),
+    ...Object.keys(ageGroupCounts)
+      .filter((name) => name !== 'Unassigned' && !configuredOrder.includes(name))
+      .sort((a, b) => a.localeCompare(b)),
+  ];
+  if (ageGroupCounts.Unassigned > 0) {
+    orderedGroupNames.push('Unassigned');
+  }
+
+  const ageGroupDistribution = orderedGroupNames.map((ageGroup) => ({
+    ageGroup,
+    count: ageGroupCounts[ageGroup],
+  }));
 
   // Attendance
   const attRecords = attendanceRes.data || [];

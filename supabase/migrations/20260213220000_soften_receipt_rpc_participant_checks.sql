@@ -10,7 +10,6 @@
 -- no information is leaked, auth.uid() still governs identity.
 
 BEGIN;
-
 -- 1) mark_message_as_read — return void (no-op) if not participant
 CREATE OR REPLACE FUNCTION public.mark_message_as_read(message_id uuid, reader_id uuid)
 RETURNS void
@@ -53,7 +52,6 @@ BEGIN
   WHERE mp.thread_id = v_thread_id AND mp.user_id = v_caller;
 END;
 $$;
-
 -- 2) mark_thread_messages_as_read — return void (no-op) if not participant
 CREATE OR REPLACE FUNCTION public.mark_thread_messages_as_read(thread_id uuid, reader_id uuid)
 RETURNS void
@@ -93,10 +91,8 @@ BEGIN
     AND mp.user_id = v_caller;
 END;
 $$;
-
 -- 3) mark_messages_delivered — return 0 if not participant
 DROP FUNCTION IF EXISTS public.mark_messages_delivered(uuid, uuid, uuid, uuid);
-
 CREATE OR REPLACE FUNCTION public.mark_messages_delivered(
   p_thread_id uuid DEFAULT NULL,
   p_user_id uuid DEFAULT NULL,
@@ -144,7 +140,5 @@ BEGIN
   RETURN updated_count;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.mark_messages_delivered(uuid, uuid, uuid, uuid) TO authenticated;
-
 COMMIT;

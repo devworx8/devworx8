@@ -5,7 +5,6 @@
 -- Drop the broken policies (already dropped via psql, but documenting for migration history)
 DROP POLICY IF EXISTS "profiles_staff_view_school_parents" ON profiles;
 DROP POLICY IF EXISTS "profiles_parents_view_school_parents" ON profiles;
-
 -- Note: The correct approach for staff viewing parents would be to use a security definer function
 -- or to structure the query differently to avoid self-referencing the profiles table in RLS policies
 

@@ -14,15 +14,11 @@ CREATE TABLE IF NOT EXISTS public.school_event_reminder_logs (
   CONSTRAINT school_event_reminder_logs_unique_threshold
     UNIQUE (event_id, reminder_offset_days, target_role)
 );
-
 CREATE INDEX IF NOT EXISTS idx_school_event_reminder_logs_event
   ON public.school_event_reminder_logs (event_id, reminder_offset_days);
-
 CREATE INDEX IF NOT EXISTS idx_school_event_reminder_logs_school
   ON public.school_event_reminder_logs (preschool_id, sent_at DESC);
-
 ALTER TABLE public.school_event_reminder_logs ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS school_event_reminder_logs_staff_view ON public.school_event_reminder_logs;
 CREATE POLICY school_event_reminder_logs_staff_view
   ON public.school_event_reminder_logs
@@ -36,6 +32,5 @@ CREATE POLICY school_event_reminder_logs_staff_view
         AND COALESCE(p.organization_id, p.preschool_id) = school_event_reminder_logs.preschool_id
     )
   );
-
 GRANT SELECT ON public.school_event_reminder_logs TO authenticated;
 GRANT INSERT ON public.school_event_reminder_logs TO authenticated;

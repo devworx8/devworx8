@@ -1,29 +1,3 @@
-DO $do$
-BEGIN
-  IF to_regclass('public.message_threads') IS NULL THEN
-    RETURN;
-  END IF;
-
-  IF to_regclass('public.message_participants') IS NULL THEN
-    RETURN;
-  END IF;
-
-  IF to_regclass('public.messages') IS NULL THEN
-    RETURN;
-  END IF;
-
-  IF to_regclass('public.classes') IS NULL THEN
-    RETURN;
-  END IF;
-
-  IF to_regclass('public.profiles') IS NULL THEN
-    RETURN;
-  END IF;
-
-  IF to_regclass('public.students') IS NULL THEN
-    RETURN;
-  END IF;
-
 -- =========================================================================
 -- Migration: Add Group Messaging Support
 -- Description: Enhances message_threads table to support group chats,
@@ -48,17 +22,14 @@ ADD COLUMN IF NOT EXISTS group_type TEXT CHECK (group_type IN (
 ADD COLUMN IF NOT EXISTS class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
 ADD COLUMN IF NOT EXISTS allow_replies BOOLEAN DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS created_by_role TEXT;
-
 -- Add role column to message_participants if not exists
 ALTER TABLE message_participants
 ADD COLUMN IF NOT EXISTS can_send_messages BOOLEAN DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
-
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_message_threads_is_group ON message_threads(is_group) WHERE is_group = TRUE;
 CREATE INDEX IF NOT EXISTS idx_message_threads_group_type ON message_threads(group_type) WHERE group_type IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_message_threads_class_id ON message_threads(class_id) WHERE class_id IS NOT NULL;
-
 -- Add comment for documentation
 COMMENT ON COLUMN message_threads.is_group IS 'Whether this thread is a group chat (multiple participants beyond 2)';
 COMMENT ON COLUMN message_threads.group_name IS 'Display name for group chats';
@@ -66,10 +37,8 @@ COMMENT ON COLUMN message_threads.group_type IS 'Type of group: class_group, par
 COMMENT ON COLUMN message_threads.class_id IS 'Reference to class for class_group type threads';
 COMMENT ON COLUMN message_threads.allow_replies IS 'Whether participants can reply (false for announcement-only channels)';
 COMMENT ON COLUMN message_threads.created_by_role IS 'Role of the user who created this thread';
-
 COMMENT ON COLUMN message_participants.can_send_messages IS 'Whether this participant can send messages in the thread';
 COMMENT ON COLUMN message_participants.is_admin IS 'Whether this participant is an admin of the group';
-
 -- =========================================================================
 -- Function to create a class group for all parents and teacher
 -- =========================================================================
@@ -162,7 +131,6 @@ BEGIN
   RETURN v_thread_id;
 END;
 $$;
-
 -- =========================================================================
 -- Function to create a custom parent group
 -- =========================================================================
@@ -231,7 +199,6 @@ BEGIN
   RETURN v_thread_id;
 END;
 $$;
-
 -- =========================================================================
 -- Function to create an announcement channel (one-way broadcast)
 -- =========================================================================
@@ -341,7 +308,6 @@ BEGIN
   RETURN v_thread_id;
 END;
 $$;
-
 -- =========================================================================
 -- Function to add participants to a group
 -- =========================================================================
@@ -388,7 +354,6 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
-
 -- =========================================================================
 -- Function to remove participant from a group
 -- =========================================================================
@@ -420,23 +385,22 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
-
 -- =========================================================================
 -- Create unique constraint for message_participants if not exists
 -- =========================================================================
-IF NOT EXISTS (
-  SELECT 1 FROM pg_constraint 
-  WHERE conname = 'message_participants_thread_user_unique'
-) THEN
-  BEGIN
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'message_participants_thread_user_unique'
+  ) THEN
     ALTER TABLE message_participants
     ADD CONSTRAINT message_participants_thread_user_unique UNIQUE (thread_id, user_id);
-  EXCEPTION
-    WHEN duplicate_object THEN
-      NULL; -- Constraint already exists
-  END;
-END IF;
-
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL; -- Constraint already exists
+END $$;
 -- =========================================================================
 -- Update RLS policies for group messaging
 -- =========================================================================
@@ -453,7 +417,6 @@ CREATE POLICY "Users can view threads they participate in" ON message_threads
     )
     OR created_by = auth.uid()
   );
-
 -- Allow admins to update group thread details
 DROP POLICY IF EXISTS "Group admins can update thread details" ON message_threads;
 CREATE POLICY "Group admins can update thread details" ON message_threads
@@ -467,7 +430,6 @@ CREATE POLICY "Group admins can update thread details" ON message_threads
     )
     OR created_by = auth.uid()
   );
-
 -- Participants can only send messages if allowed
 DROP POLICY IF EXISTS "Participants can send messages if allowed" ON messages;
 CREATE POLICY "Participants can send messages if allowed" ON messages
@@ -490,11 +452,9 @@ CREATE POLICY "Participants can send messages if allowed" ON messages
       )
     )
   );
-
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION create_class_group TO authenticated;
 GRANT EXECUTE ON FUNCTION create_parent_group TO authenticated;
 GRANT EXECUTE ON FUNCTION create_announcement_channel TO authenticated;
 GRANT EXECUTE ON FUNCTION add_group_participants TO authenticated;
 GRANT EXECUTE ON FUNCTION remove_group_participant TO authenticated;
-END $do$;

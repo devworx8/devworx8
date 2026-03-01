@@ -3,7 +3,6 @@
 -- and daily data quality reporting.
 
 BEGIN;
-
 -- 1) Canonical strict-active consistency on students
 -- ------------------------------------------------------------------
 
@@ -15,12 +14,10 @@ SET status = CASE
 END
 WHERE status IS NULL
    OR lower(status) NOT IN ('active', 'inactive', 'pending');
-
 -- Backfill is_active from status (strict rule: only active => true).
 UPDATE public.students
 SET is_active = (lower(status) = 'active')
 WHERE is_active IS DISTINCT FROM (lower(status) = 'active');
-
 CREATE OR REPLACE FUNCTION public.sync_student_active_flags()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -46,14 +43,12 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_sync_student_active_flags ON public.students;
 CREATE TRIGGER trg_sync_student_active_flags
 BEFORE INSERT OR UPDATE OF status, is_active
 ON public.students
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_student_active_flags();
-
 -- 2) Data quality views and daily report table
 -- ------------------------------------------------------------------
 
@@ -78,7 +73,6 @@ WHERE (
 ) OR (
   lower(COALESCE(s.status, '')) <> 'active' AND s.is_active IS DISTINCT FROM false
 );
-
 CREATE OR REPLACE VIEW public.student_duplicate_candidates AS
 WITH normalized AS (
   SELECT
@@ -125,7 +119,6 @@ SELECT
   g.active_flags,
   g.latest_created_at
 FROM grouped g;
-
 CREATE TABLE IF NOT EXISTS public.student_data_quality_daily_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_date DATE NOT NULL,
@@ -137,12 +130,9 @@ CREATE TABLE IF NOT EXISTS public.student_data_quality_daily_reports (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (report_date, preschool_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_student_data_quality_daily_reports_school_date
   ON public.student_data_quality_daily_reports (preschool_id, report_date DESC);
-
 ALTER TABLE public.student_data_quality_daily_reports ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS student_data_quality_daily_reports_select ON public.student_data_quality_daily_reports;
 CREATE POLICY student_data_quality_daily_reports_select
 ON public.student_data_quality_daily_reports
@@ -156,7 +146,6 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = student_data_quality_daily_reports.preschool_id
   )
 );
-
 DROP POLICY IF EXISTS student_data_quality_daily_reports_manage ON public.student_data_quality_daily_reports;
 CREATE POLICY student_data_quality_daily_reports_manage
 ON public.student_data_quality_daily_reports
@@ -179,7 +168,6 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = student_data_quality_daily_reports.preschool_id
   )
 );
-
 CREATE OR REPLACE FUNCTION public.generate_student_data_quality_daily_report(
   p_preschool_id UUID DEFAULT NULL
 )
@@ -279,9 +267,7 @@ BEGIN
   RETURN v_processed;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.generate_student_data_quality_daily_report(UUID) TO authenticated;
-
 -- 3) Attendance lifecycle policy helper
 -- ------------------------------------------------------------------
 
@@ -339,9 +325,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_attendance_lifecycle_policy(UUID) TO authenticated;
-
 -- 4) Inactivity case model
 -- ------------------------------------------------------------------
 
@@ -383,22 +367,17 @@ CREATE TABLE IF NOT EXISTS public.student_inactivity_cases (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_student_inactivity_cases_school_state
   ON public.student_inactivity_cases (preschool_id, case_state, warning_deadline_at);
-
 CREATE INDEX IF NOT EXISTS idx_student_inactivity_cases_student
   ON public.student_inactivity_cases (student_id, created_at DESC);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_student_inactivity_cases_one_open
   ON public.student_inactivity_cases (student_id)
   WHERE case_state = 'at_risk' AND closed_at IS NULL;
-
 DROP TRIGGER IF EXISTS trg_student_inactivity_cases_updated_at ON public.student_inactivity_cases;
 CREATE TRIGGER trg_student_inactivity_cases_updated_at
 BEFORE UPDATE ON public.student_inactivity_cases
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 CREATE TABLE IF NOT EXISTS public.student_inactivity_case_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id UUID NOT NULL REFERENCES public.student_inactivity_cases(id) ON DELETE CASCADE,
@@ -424,16 +403,12 @@ CREATE TABLE IF NOT EXISTS public.student_inactivity_case_events (
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_student_inactivity_case_events_case
   ON public.student_inactivity_case_events (case_id, created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_student_inactivity_case_events_school
   ON public.student_inactivity_case_events (preschool_id, created_at DESC);
-
 ALTER TABLE public.student_inactivity_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_inactivity_case_events ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS student_inactivity_cases_staff_select ON public.student_inactivity_cases;
 CREATE POLICY student_inactivity_cases_staff_select
 ON public.student_inactivity_cases
@@ -447,7 +422,6 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = student_inactivity_cases.preschool_id
   )
 );
-
 DROP POLICY IF EXISTS student_inactivity_cases_parent_select ON public.student_inactivity_cases;
 CREATE POLICY student_inactivity_cases_parent_select
 ON public.student_inactivity_cases
@@ -456,7 +430,6 @@ USING (
   student_id IN (SELECT public.get_my_children_ids())
   AND case_state IN ('at_risk', 'inactive')
 );
-
 DROP POLICY IF EXISTS student_inactivity_cases_manage ON public.student_inactivity_cases;
 CREATE POLICY student_inactivity_cases_manage
 ON public.student_inactivity_cases
@@ -479,7 +452,6 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = student_inactivity_cases.preschool_id
   )
 );
-
 DROP POLICY IF EXISTS student_inactivity_case_events_staff_select ON public.student_inactivity_case_events;
 CREATE POLICY student_inactivity_case_events_staff_select
 ON public.student_inactivity_case_events
@@ -493,7 +465,6 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = student_inactivity_case_events.preschool_id
   )
 );
-
 DROP POLICY IF EXISTS student_inactivity_case_events_parent_select ON public.student_inactivity_case_events;
 CREATE POLICY student_inactivity_case_events_parent_select
 ON public.student_inactivity_case_events
@@ -502,7 +473,6 @@ USING (
   student_id IN (SELECT public.get_my_children_ids())
   AND event_type IN ('warning_sent', 'auto_inactivated', 'case_resolved', 'status_changed')
 );
-
 DROP POLICY IF EXISTS student_inactivity_case_events_manage ON public.student_inactivity_case_events;
 CREATE POLICY student_inactivity_case_events_manage
 ON public.student_inactivity_case_events
@@ -525,7 +495,6 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = student_inactivity_case_events.preschool_id
   )
 );
-
 -- Helper to append immutable events
 CREATE OR REPLACE FUNCTION public.log_student_inactivity_case_event(
   p_case_id UUID,
@@ -570,9 +539,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.log_student_inactivity_case_event(UUID, TEXT, TEXT, UUID, JSONB) TO authenticated;
-
 -- Principal action RPC
 CREATE OR REPLACE FUNCTION public.apply_student_inactivity_action(
   p_case_id UUID,
@@ -731,13 +698,10 @@ BEGIN
   RETURN v_case;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.apply_student_inactivity_action(UUID, TEXT, TEXT, INTEGER) TO authenticated;
-
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.student_inactivity_cases TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.student_inactivity_case_events TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.student_data_quality_daily_reports TO authenticated;
-
 -- 5) Daily schedules: data quality rollup + lifecycle monitor
 -- ------------------------------------------------------------------
 
@@ -748,7 +712,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
-
 -- Schedule SQL-only daily quality report at 04:10 UTC
 DO $$
 BEGIN
@@ -764,7 +727,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'Could not schedule student-data-quality-daily: %', SQLERRM;
 END $$;
-
 -- Schedule edge function call for lifecycle monitor at 04:30 UTC
 DO $$
 DECLARE
@@ -812,5 +774,4 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'Could not schedule student-activity-monitor-daily: %', SQLERRM;
 END $$;
-
 COMMIT;

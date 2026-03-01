@@ -4,7 +4,6 @@
 -- Drop existing problematic policies
 DROP POLICY IF EXISTS "Members can view organization members" ON public.organization_members;
 DROP POLICY IF EXISTS "Admins can manage organization members" ON public.organization_members;
-
 -- Create security definer function to check if user can view organization members
 CREATE OR REPLACE FUNCTION user_can_view_org_members(target_org_id UUID)
 RETURNS BOOLEAN
@@ -23,7 +22,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Create security definer function to check if user can manage organization members
 CREATE OR REPLACE FUNCTION user_can_manage_org_members(target_org_id UUID)
 RETURNS BOOLEAN
@@ -50,22 +48,18 @@ BEGIN
   );
 END;
 $$;
-
 -- Re-create policies using security definer functions
 CREATE POLICY "Members can view organization members"
 ON public.organization_members
 FOR SELECT
 USING (user_can_view_org_members(organization_id));
-
 CREATE POLICY "Admins can manage organization members"
 ON public.organization_members
 FOR ALL
 USING (user_can_manage_org_members(organization_id))
 WITH CHECK (user_can_manage_org_members(organization_id));
-
 -- Add comments
 COMMENT ON FUNCTION user_can_view_org_members IS 
 'Security definer function to check if user can view organization members without infinite recursion';
-
 COMMENT ON FUNCTION user_can_manage_org_members IS 
 'Security definer function to check if user can manage organization members without infinite recursion';

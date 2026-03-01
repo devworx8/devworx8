@@ -8,28 +8,20 @@
 
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'completed';
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS voided_at timestamptz;
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS voided_by uuid;
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS void_reason text;
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS original_amount numeric(12,2);
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS edit_reason text;
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS edited_at timestamptz;
-
 ALTER TABLE public.payroll_payments
   ADD COLUMN IF NOT EXISTS edited_by uuid;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -43,10 +35,8 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE INDEX IF NOT EXISTS idx_payroll_payments_status
   ON public.payroll_payments(status);
-
 -- -----------------------------------------------------------------------------
 -- 2. Create payroll_advances table
 -- -----------------------------------------------------------------------------
@@ -67,15 +57,11 @@ CREATE TABLE IF NOT EXISTS public.payroll_advances (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_payroll_advances_recipient
   ON public.payroll_advances(payroll_recipient_id, created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_payroll_advances_org
   ON public.payroll_advances(organization_id, advance_date DESC);
-
 ALTER TABLE public.payroll_advances ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS payroll_advances_org_access ON public.payroll_advances;
 CREATE POLICY payroll_advances_org_access
 ON public.payroll_advances
@@ -95,7 +81,6 @@ USING (
       )
   )
 );
-
 -- -----------------------------------------------------------------------------
 -- 3. RPC: edit_payroll_payment — update amount with audit trail
 -- -----------------------------------------------------------------------------
@@ -216,9 +201,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.edit_payroll_payment(uuid, numeric, text) TO authenticated;
-
 -- -----------------------------------------------------------------------------
 -- 4. RPC: void_payroll_payment — mark payment as voided
 -- -----------------------------------------------------------------------------
@@ -326,7 +309,5 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.void_payroll_payment(uuid, text) TO authenticated;
-
--- Done
+-- Done;

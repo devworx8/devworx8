@@ -8,7 +8,6 @@
 -- Path convention: proof-of-payments/{user_id}/{child_id}/{filename}
 
 BEGIN;
-
 -- Ensure the bucket exists with correct settings
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -35,7 +34,6 @@ DO UPDATE SET
         'image/webp',
         'application/pdf'
     ]::text[];
-
 -- Drop ALL existing policies for this bucket to eliminate recursion
 DO $$
 DECLARE
@@ -55,7 +53,6 @@ BEGIN
         RAISE NOTICE 'Dropped policy: %', pol.policyname;
     END LOOP;
 END $$;
-
 -- SELECT: Authenticated users can read files in their own folder
 CREATE POLICY pop_select_own ON storage.objects
     FOR SELECT
@@ -64,7 +61,6 @@ CREATE POLICY pop_select_own ON storage.objects
         bucket_id = 'proof-of-payments'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
-
 -- SELECT: Principals/teachers can read any file in their org
 CREATE POLICY pop_select_org ON storage.objects
     FOR SELECT
@@ -78,7 +74,6 @@ CREATE POLICY pop_select_org ON storage.objects
               AND p.role IN ('principal', 'principal_admin', 'teacher', 'super_admin')
         )
     );
-
 -- INSERT: Authenticated users can upload to their own folder
 CREATE POLICY pop_insert_own ON storage.objects
     FOR INSERT
@@ -87,7 +82,6 @@ CREATE POLICY pop_insert_own ON storage.objects
         bucket_id = 'proof-of-payments'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
-
 -- UPDATE: Authenticated users can update their own files
 CREATE POLICY pop_update_own ON storage.objects
     FOR UPDATE
@@ -100,7 +94,6 @@ CREATE POLICY pop_update_own ON storage.objects
         bucket_id = 'proof-of-payments'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
-
 -- DELETE: Authenticated users can delete their own files
 CREATE POLICY pop_delete_own ON storage.objects
     FOR DELETE
@@ -109,5 +102,4 @@ CREATE POLICY pop_delete_own ON storage.objects
         bucket_id = 'proof-of-payments'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
-
 COMMIT;

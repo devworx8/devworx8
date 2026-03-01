@@ -27,7 +27,6 @@ DO $$ BEGIN
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 -- 2. Consent status enum
 DO $$ BEGIN
   CREATE TYPE public.consent_status AS ENUM (
@@ -38,7 +37,6 @@ DO $$ BEGIN
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 -- 3. Data subject request type enum
 DO $$ BEGIN
   CREATE TYPE public.data_subject_request_type AS ENUM (
@@ -51,7 +49,6 @@ DO $$ BEGIN
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 -- 4. Data subject request status enum
 DO $$ BEGIN
   CREATE TYPE public.data_subject_request_status AS ENUM (
@@ -62,7 +59,6 @@ DO $$ BEGIN
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 -- =============================================================================
 -- consent_records — every consent action with full audit trail
 -- =============================================================================
@@ -86,7 +82,6 @@ CREATE TABLE IF NOT EXISTS public.consent_records (
   CONSTRAINT consent_records_user_purpose_unique
     UNIQUE (user_id, purpose, version)
 );
-
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION public.update_consent_records_updated_at()
 RETURNS TRIGGER AS $$
@@ -95,12 +90,10 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS consent_records_updated_at ON public.consent_records;
 CREATE TRIGGER consent_records_updated_at
   BEFORE UPDATE ON public.consent_records
   FOR EACH ROW EXECUTE FUNCTION public.update_consent_records_updated_at();
-
 -- =============================================================================
 -- data_subject_requests — POPIA §23-25 / GDPR Art 15-22
 -- =============================================================================
@@ -119,7 +112,6 @@ CREATE TABLE IF NOT EXISTS public.data_subject_requests (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION public.update_data_subject_requests_updated_at()
 RETURNS TRIGGER AS $$
@@ -128,12 +120,10 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS data_subject_requests_updated_at ON public.data_subject_requests;
 CREATE TRIGGER data_subject_requests_updated_at
   BEFORE UPDATE ON public.data_subject_requests
   FOR EACH ROW EXECUTE FUNCTION public.update_data_subject_requests_updated_at();
-
 -- =============================================================================
 -- data_retention_policies — configurable retention per data category
 -- =============================================================================
@@ -148,7 +138,6 @@ CREATE TABLE IF NOT EXISTS public.data_retention_policies (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- =============================================================================
 -- Add consent fields to profiles table
 -- =============================================================================
@@ -164,7 +153,6 @@ DO $$ BEGIN
   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS coppa_verified BOOLEAN DEFAULT false;
   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS data_processing_consent BOOLEAN DEFAULT false;
 END $$;
-
 -- =============================================================================
 -- Extend audit_event_type enum with consent events
 -- =============================================================================
@@ -179,45 +167,34 @@ DO $$ BEGIN
   ALTER TYPE public.audit_event_type ADD VALUE IF NOT EXISTS 'privacy_settings_updated';
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 -- =============================================================================
 -- Indexes
 -- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_consent_records_user_id
   ON public.consent_records(user_id);
-
 CREATE INDEX IF NOT EXISTS idx_consent_records_user_purpose
   ON public.consent_records(user_id, purpose);
-
 CREATE INDEX IF NOT EXISTS idx_consent_records_status
   ON public.consent_records(status) WHERE status = 'granted';
-
 CREATE INDEX IF NOT EXISTS idx_consent_records_expires
   ON public.consent_records(expires_at) WHERE expires_at IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_data_subject_requests_user_id
   ON public.data_subject_requests(user_id);
-
 CREATE INDEX IF NOT EXISTS idx_data_subject_requests_status
   ON public.data_subject_requests(status) WHERE status IN ('pending', 'processing');
-
 -- =============================================================================
 -- RLS Policies — users can only see/manage their own consent records
 -- =============================================================================
 ALTER TABLE public.consent_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.data_subject_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.data_retention_policies ENABLE ROW LEVEL SECURITY;
-
 -- consent_records: users see their own
 CREATE POLICY consent_records_select_own ON public.consent_records
   FOR SELECT USING (auth.uid() = user_id);
-
 CREATE POLICY consent_records_insert_own ON public.consent_records
   FOR INSERT WITH CHECK (auth.uid() = user_id);
-
 CREATE POLICY consent_records_update_own ON public.consent_records
   FOR UPDATE USING (auth.uid() = user_id);
-
 -- Parents can grant consent for their children (guardian_profile_id link)
 CREATE POLICY consent_records_parent_insert ON public.consent_records
   FOR INSERT WITH CHECK (
@@ -229,18 +206,14 @@ CREATE POLICY consent_records_parent_insert ON public.consent_records
         )
     )
   );
-
 -- data_subject_requests: users see their own
 CREATE POLICY data_subject_requests_select_own ON public.data_subject_requests
   FOR SELECT USING (auth.uid() = user_id);
-
 CREATE POLICY data_subject_requests_insert_own ON public.data_subject_requests
   FOR INSERT WITH CHECK (auth.uid() = user_id);
-
 -- data_retention_policies: read-only for authenticated users
 CREATE POLICY data_retention_policies_select_all ON public.data_retention_policies
   FOR SELECT TO authenticated USING (true);
-
 -- =============================================================================
 -- Seed default retention policies
 -- =============================================================================
@@ -256,7 +229,6 @@ VALUES
   ('media_uploads',         'Photos, videos, audio uploaded by users',          730, 'consent',            false),
   ('session_data',          'Auth session and refresh token data',               30, 'legitimate_interest', true)
 ON CONFLICT (category) DO NOTHING;
-
 -- =============================================================================
 -- Helper function: check if user has active consent for a purpose
 -- =============================================================================
@@ -277,7 +249,6 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- =============================================================================
 -- Helper function: get all active consents for a user
 -- =============================================================================
@@ -302,7 +273,6 @@ BEGIN
   ORDER BY cr.purpose, cr.created_at DESC;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 COMMENT ON TABLE public.consent_records IS 'POPIA/COPPA/GDPR consent records with full audit trail';
 COMMENT ON TABLE public.data_subject_requests IS 'Data subject access/erasure/portability requests per POPIA §23-25, GDPR Art 15-22';
 COMMENT ON TABLE public.data_retention_policies IS 'Configurable data retention periods per category with legal basis';

@@ -3,10 +3,8 @@
 -- repeatedly insert duplicate registration_requests rows.
 
 BEGIN;
-
 ALTER TABLE public.registration_requests
   ADD COLUMN IF NOT EXISTS edusite_sync_key TEXT;
-
 -- Backfill deterministic sync key for already-synced rows.
 UPDATE public.registration_requests rr
 SET edusite_sync_key = concat_ws(
@@ -19,7 +17,6 @@ SET edusite_sync_key = concat_ws(
 )
 WHERE rr.synced_from_edusite IS TRUE
   AND rr.edusite_sync_key IS NULL;
-
 -- Keep latest row per sync key (if duplicates already exist).
 WITH ranked AS (
   SELECT
@@ -36,17 +33,13 @@ DELETE FROM public.registration_requests rr
 USING ranked r
 WHERE rr.id = r.id
   AND r.rn > 1;
-
 -- Canonical external-id uniqueness guard.
 CREATE UNIQUE INDEX IF NOT EXISTS registration_requests_edusite_id_uidx
   ON public.registration_requests(edusite_id)
   WHERE edusite_id IS NOT NULL;
-
 -- Fallback uniqueness guard when source IDs are missing/unstable.
 CREATE UNIQUE INDEX IF NOT EXISTS registration_requests_edusite_sync_key_uidx
   ON public.registration_requests(edusite_sync_key)
   WHERE synced_from_edusite IS TRUE
     AND edusite_sync_key IS NOT NULL;
-
 COMMIT;
-

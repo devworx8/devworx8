@@ -64,5 +64,4 @@ begin
   return v_result;
 end;
 $$;
-
 grant execute on function public.validate_invitation_code(text, text) to anon, authenticated;

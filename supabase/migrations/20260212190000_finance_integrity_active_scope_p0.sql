@@ -380,9 +380,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_finance_month_snapshot(uuid, date) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.approve_pop_payment(
   p_upload_id uuid,
   p_billing_month date,
@@ -914,5 +912,4 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.approve_pop_payment(uuid, date, text, jsonb, text) TO authenticated;

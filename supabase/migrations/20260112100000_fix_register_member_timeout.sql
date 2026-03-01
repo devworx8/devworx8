@@ -286,7 +286,6 @@ EXCEPTION
     );
 END;
 $function$;
-
 COMMENT ON FUNCTION public.register_organization_member(uuid,uuid,uuid,text,text,text,text,text,text,text,text,text,date,text,text,text,text) IS 
 'Registers a new organization member. No retry loop - client handles retries.
 Added p_date_of_birth and p_physical_address parameters for Youth Wing registration.

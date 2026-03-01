@@ -1,10 +1,8 @@
 -- Allow receipt as a valid pdf_documents document_type
 
 BEGIN;
-
 ALTER TABLE public.pdf_documents
   DROP CONSTRAINT IF EXISTS pdf_documents_document_type_check;
-
 ALTER TABLE public.pdf_documents
   ADD CONSTRAINT pdf_documents_document_type_check
   CHECK (document_type IN (
@@ -21,5 +19,4 @@ ALTER TABLE public.pdf_documents
     'general',
     'receipt'
   ));
-
 COMMIT;

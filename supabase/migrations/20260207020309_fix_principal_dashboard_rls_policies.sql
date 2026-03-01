@@ -12,7 +12,6 @@
 --    all receipts/invoices/PDFs for their school
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "pdf_documents_tenant_select" ON public.pdf_documents;
-
 CREATE POLICY "pdf_documents_tenant_select"
 ON public.pdf_documents
 FOR SELECT
@@ -36,13 +35,10 @@ USING (
         )
     )
 );
-
-
 -- ---------------------------------------------------------------------------
 -- 2. Update school_branding WITH CHECK to include principal_admin
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "school_branding_tenant_modify" ON public.school_branding;
-
 CREATE POLICY "school_branding_tenant_modify"
 ON public.school_branding
 AS PERMISSIVE

@@ -21,7 +21,6 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', pol.policyname);
   END LOOP;
 END $$;
-
 -- Create simplified policies that work with our path structure
 -- Path format: documents/{preschool_id}/{user_id}/{doctype}_{timestamp}.{ext}
 
@@ -34,7 +33,6 @@ WITH CHECK (
   -- Allow upload to any path in registration-documents bucket for authenticated users
   -- The user_id is embedded in the path for organization purposes
 );
-
 -- Policy: Authenticated users can view documents in registration-documents bucket
 -- Parents need to view their own, principals need to view all
 CREATE POLICY "regdocs_view_authenticated" ON storage.objects
@@ -42,7 +40,6 @@ FOR SELECT TO authenticated
 USING (
   bucket_id = 'registration-documents'
 );
-
 -- Policy: Authenticated users can update documents they uploaded
 CREATE POLICY "regdocs_update_authenticated" ON storage.objects
 FOR UPDATE TO authenticated
@@ -52,14 +49,12 @@ USING (
 WITH CHECK (
   bucket_id = 'registration-documents'
 );
-
 -- Policy: Allow delete for cleanup (by the user who uploaded or principals)
 CREATE POLICY "regdocs_delete_authenticated" ON storage.objects
 FOR DELETE TO authenticated
 USING (
   bucket_id = 'registration-documents'
 );
-
 -- Verify policies
 DO $$
 DECLARE

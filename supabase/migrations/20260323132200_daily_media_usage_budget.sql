@@ -11,12 +11,9 @@ create table if not exists public.daily_media_usage (
   updated_at timestamptz not null default timezone('utc', now()),
   primary key (user_id, usage_date, feature)
 );
-
 create index if not exists daily_media_usage_feature_date_idx
   on public.daily_media_usage (feature, usage_date);
-
 alter table public.daily_media_usage enable row level security;
-
 do $$
 begin
   if not exists (
@@ -34,7 +31,6 @@ begin
   end if;
 end
 $$;
-
 do $$
 begin
   if not exists (
@@ -52,7 +48,6 @@ begin
   end if;
 end
 $$;
-
 do $$
 begin
   if not exists (
@@ -71,7 +66,6 @@ begin
   end if;
 end
 $$;
-
 create or replace function public.resolve_daily_media_limit(
   p_feature text,
   p_tier text default 'free'
@@ -102,7 +96,6 @@ begin
   raise exception 'Unsupported media feature: %', p_feature;
 end;
 $$;
-
 create or replace function public.get_daily_media_budget(
   p_feature text,
   p_tier text default 'free'
@@ -140,19 +133,19 @@ begin
   v_limit := public.resolve_daily_media_limit(v_feature, p_tier);
 
   if v_feature = 'auto_scan' then
-    select u.used_count::bigint
+    select used_count::bigint
       into v_used
-      from public.daily_media_usage u
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature;
+      from public.daily_media_usage
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature;
   else
-    select u.used_ms
+    select used_ms
       into v_used
-      from public.daily_media_usage u
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature;
+      from public.daily_media_usage
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature;
   end if;
 
   v_used := coalesce(v_used, 0);
@@ -169,7 +162,6 @@ begin
       end;
 end;
 $$;
-
 create or replace function public.consume_daily_media_budget(
   p_feature text,
   p_amount bigint default 1,
@@ -210,20 +202,20 @@ begin
   v_limit := public.resolve_daily_media_limit(v_feature, p_tier);
 
   if v_feature = 'auto_scan' then
-    select u.used_count::bigint
+    select used_count::bigint
       into v_used
-      from public.daily_media_usage u
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature
+      from public.daily_media_usage
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature
       for update;
   else
-    select u.used_ms
+    select used_ms
       into v_used
-      from public.daily_media_usage u
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature
+      from public.daily_media_usage
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature
       for update;
   end if;
 
@@ -242,21 +234,21 @@ begin
   end if;
 
   if v_feature = 'auto_scan' then
-    update public.daily_media_usage u
-      set used_count = least(2147483647, u.used_count + v_amount::integer),
+    update public.daily_media_usage
+      set used_count = least(2147483647, used_count + v_amount::integer),
           updated_at = timezone('utc', now())
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature
-      returning u.used_count::bigint into v_used;
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature
+      returning used_count::bigint into v_used;
   else
-    update public.daily_media_usage u
-      set used_ms = greatest(0, u.used_ms + v_amount),
+    update public.daily_media_usage
+      set used_ms = greatest(0, used_ms + v_amount),
           updated_at = timezone('utc', now())
-      where u.user_id = v_user_id
-        and u.usage_date = v_date
-        and u.feature = v_feature
-      returning u.used_ms into v_used;
+      where user_id = v_user_id
+        and usage_date = v_date
+        and feature = v_feature
+      returning used_ms into v_used;
   end if;
 
   return query
@@ -272,10 +264,7 @@ begin
       end;
 end;
 $$;
-
 revoke all on function public.get_daily_media_budget(text, text) from public;
 grant execute on function public.get_daily_media_budget(text, text) to authenticated, service_role;
-
 revoke all on function public.consume_daily_media_budget(text, bigint, text) from public;
 grant execute on function public.consume_daily_media_budget(text, bigint, text) to authenticated, service_role;
-

@@ -100,18 +100,13 @@ BEGIN
     RETURN v_result;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.validate_invitation_code(text, text)
     TO anon, authenticated;
-
-
 -- ---------------------------------------------------------------------------
 -- 2. Ensure job_postings has public anon SELECT for active postings
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.job_postings ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "public_view_active_job_postings" ON public.job_postings;
-
 CREATE POLICY "public_view_active_job_postings"
 ON public.job_postings
 FOR SELECT
@@ -120,79 +115,59 @@ USING (
     status = 'active'
     AND (expires_at IS NULL OR expires_at > now())
 );
-
-
 -- ---------------------------------------------------------------------------
 -- 3. Allow anon to read limited preschool info (for apply/sign-up pages)
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "anon_view_active_preschools" ON public.preschools;
-
 CREATE POLICY "anon_view_active_preschools"
 ON public.preschools
 FOR SELECT
 TO anon
 USING (is_active = true);
-
-
 -- ---------------------------------------------------------------------------
 -- 4. Allow anon to read limited org info (for apply/sign-up pages)
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "anon_view_organizations" ON public.organizations;
-
 CREATE POLICY "anon_view_organizations"
 ON public.organizations
 FOR SELECT
 TO anon
 USING (true);
-
-
 -- ---------------------------------------------------------------------------
 -- 5. Allow anon to insert candidate_profiles (web apply form)
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "anon_create_candidate_profile" ON public.candidate_profiles;
-
 CREATE POLICY "anon_create_candidate_profile"
 ON public.candidate_profiles
 FOR INSERT
 TO anon
 WITH CHECK (true);
-
 -- Allow anon to read own candidate profile by email (for upsert logic)
 DROP POLICY IF EXISTS "anon_read_candidate_profiles" ON public.candidate_profiles;
-
 CREATE POLICY "anon_read_candidate_profiles"
 ON public.candidate_profiles
 FOR SELECT
 TO anon
 USING (true);
-
-
 -- ---------------------------------------------------------------------------
 -- 6. Allow anon to insert job_applications (web apply form)
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "anon_create_job_application" ON public.job_applications;
-
 CREATE POLICY "anon_create_job_application"
 ON public.job_applications
 FOR INSERT
 TO anon
 WITH CHECK (true);
-
-
 -- ---------------------------------------------------------------------------
 -- 7. Ensure logo_url column exists on job_postings
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.job_postings
     ADD COLUMN IF NOT EXISTS logo_url text;
-
-
 -- ---------------------------------------------------------------------------
 -- 8. Ensure school_invitation_codes is readable by anon for validation
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.school_invitation_codes ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "anon_read_active_invites" ON public.school_invitation_codes;
-
 -- Note: The validate_invitation_code function is SECURITY DEFINER so it
 -- bypasses RLS. But if any direct query is attempted, allow read of active codes.
 CREATE POLICY "anon_read_active_invites"

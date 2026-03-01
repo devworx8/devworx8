@@ -2,7 +2,6 @@
 
 ALTER TABLE public.ai_usage_tiers
   ADD COLUMN IF NOT EXISTS chat_messages_per_month integer;
-
 UPDATE public.ai_usage_tiers
 SET chat_messages_per_month = CASE
     WHEN chat_messages_per_month IS NOT NULL THEN chat_messages_per_month
@@ -10,19 +9,14 @@ SET chat_messages_per_month = CASE
     ELSE chat_messages_per_day * 30
   END
 WHERE chat_messages_per_month IS NULL;
-
 ALTER TABLE public.ai_usage_tiers
   ALTER COLUMN chat_messages_per_month SET NOT NULL;
-
 ALTER TABLE public.user_ai_usage
   ADD COLUMN IF NOT EXISTS chat_messages_this_month integer DEFAULT 0;
-
 UPDATE public.user_ai_usage
 SET chat_messages_this_month = COALESCE(chat_messages_this_month, 0);
-
 ALTER TABLE public.user_ai_usage
   ALTER COLUMN chat_messages_this_month SET NOT NULL;
-
 CREATE OR REPLACE FUNCTION public.check_ai_usage_limit(p_user_id uuid, p_request_type character varying)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -121,7 +115,6 @@ BEGIN
   );
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(
   p_user_id uuid,
   p_request_type character varying,

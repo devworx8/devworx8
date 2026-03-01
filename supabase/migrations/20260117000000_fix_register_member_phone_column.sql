@@ -3,7 +3,6 @@
 
 -- Drop existing function overloads to ensure clean replacement
 DROP FUNCTION IF EXISTS public.register_organization_member(uuid, uuid, uuid, text, text, text, text, text, text, text, text, text, date, text, text, text, text);
-
 -- Create the helper function first (if not exists)
 CREATE OR REPLACE FUNCTION get_profile_role_from_member_type(p_member_type TEXT)
 RETURNS TEXT AS $$
@@ -31,7 +30,6 @@ BEGIN
     END CASE;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
 -- Create the definitive register_organization_member function
 -- Fixed: Use 'phone' column instead of 'phone_number' in profiles table update
 CREATE OR REPLACE FUNCTION public.register_organization_member(
@@ -256,66 +254,10 @@ BEGIN
   );
 END;
 $$;
-
--- Grant execute permissions (use full signatures to avoid overload ambiguity)
-GRANT EXECUTE ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text,
-  text,
-  text,
-  text
-) TO anon;
-GRANT EXECUTE ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text,
-  text,
-  text,
-  text
-) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO anon;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO authenticated;
-
-COMMENT ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text,
-  text,
-  text,
-  text
-) IS 
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION public.register_organization_member TO anon;
+GRANT EXECUTE ON FUNCTION public.register_organization_member TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO anon;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO authenticated;
+COMMENT ON FUNCTION public.register_organization_member IS 
 'Creates an organization member record and updates the user profile role. Returns JSON with success status, action taken, and member details. Fixed: Uses phone column instead of phone_number.';

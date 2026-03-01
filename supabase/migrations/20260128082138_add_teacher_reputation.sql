@@ -1,13 +1,8 @@
 -- Teacher reputation + market profile support
 
 -- Candidate profiles: public market info + location
-create table if not exists public.candidate_profiles (
-  id uuid primary key default gen_random_uuid()
-);
-
 alter table if exists public.candidate_profiles
   add column if not exists user_id uuid;
-
 alter table if exists public.candidate_profiles
   add column if not exists is_public boolean not null default false,
   add column if not exists location_city text,
@@ -17,13 +12,10 @@ alter table if exists public.candidate_profiles
   add column if not exists location_source text,
   add column if not exists preferred_radius_km integer,
   add column if not exists location_updated_at timestamptz;
-
 create unique index if not exists candidate_profiles_user_id_key
   on public.candidate_profiles (user_id);
-
 create index if not exists idx_candidate_profiles_public_location
   on public.candidate_profiles (is_public, location_city, location_province);
-
 -- Employment history for verification
 create table if not exists public.teacher_employment_history (
   id uuid primary key default gen_random_uuid(),
@@ -37,10 +29,8 @@ create table if not exists public.teacher_employment_history (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists idx_teacher_employment_history_teacher
   on public.teacher_employment_history (teacher_user_id, organization_id);
-
 -- References & ratings
 create table if not exists public.teacher_references (
   id uuid primary key default gen_random_uuid(),
@@ -61,16 +51,12 @@ create table if not exists public.teacher_references (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create unique index if not exists teacher_references_unique_per_principal
   on public.teacher_references (candidate_profile_id, organization_id, principal_id);
-
 create index if not exists idx_teacher_references_candidate
   on public.teacher_references (candidate_profile_id);
-
 create index if not exists idx_teacher_references_teacher_user
   on public.teacher_references (teacher_user_id);
-
 create table if not exists public.teacher_reference_requests (
   id uuid primary key default gen_random_uuid(),
   candidate_profile_id uuid not null references public.candidate_profiles(id) on delete cascade,
@@ -80,10 +66,8 @@ create table if not exists public.teacher_reference_requests (
   status text not null default 'pending',
   created_at timestamptz not null default now()
 );
-
 create index if not exists idx_teacher_reference_requests_candidate
   on public.teacher_reference_requests (candidate_profile_id);
-
 -- Rating summary view
 create or replace view public.teacher_rating_summary as
 select
@@ -100,13 +84,11 @@ select
   max(tr.created_at) as last_rating_at
 from public.teacher_references tr
 group by tr.candidate_profile_id, tr.teacher_user_id;
-
 -- RLS
 alter table if exists public.candidate_profiles enable row level security;
 alter table if exists public.teacher_employment_history enable row level security;
 alter table if exists public.teacher_references enable row level security;
 alter table if exists public.teacher_reference_requests enable row level security;
-
 -- Candidate profiles: teacher can manage their own; principals can view public
 drop policy if exists "Teachers manage their public profile" on public.candidate_profiles;
 create policy "Teachers manage their public profile"
@@ -114,7 +96,6 @@ create policy "Teachers manage their public profile"
   for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
-
 drop policy if exists "Principals can view public teacher profiles" on public.candidate_profiles;
 create policy "Principals can view public teacher profiles"
   on public.candidate_profiles
@@ -128,7 +109,6 @@ create policy "Principals can view public teacher profiles"
         and p.role in ('principal', 'principal_admin', 'super_admin', 'superadmin')
     )
   );
-
 -- Employment history: principals within org can manage
 drop policy if exists "Principals manage employment history" on public.teacher_employment_history;
 create policy "Principals manage employment history"
@@ -152,7 +132,6 @@ create policy "Principals manage employment history"
         and (p.organization_id = organization_id or p.preschool_id = organization_id)
     )
   );
-
 -- References: principals can view; teachers can view their own
 drop policy if exists "Principals can view teacher references" on public.teacher_references;
 create policy "Principals can view teacher references"
@@ -172,7 +151,6 @@ create policy "Principals can view teacher references"
       where cp.user_id = auth.uid()
     )
   );
-
 drop policy if exists "Principals can create references for former teachers" on public.teacher_references;
 create policy "Principals can create references for former teachers"
   on public.teacher_references
@@ -193,20 +171,17 @@ create policy "Principals can create references for former teachers"
         and h.organization_id = organization_id
     )
   );
-
 drop policy if exists "Principals can update their references" on public.teacher_references;
 create policy "Principals can update their references"
   on public.teacher_references
   for update
   using (principal_id = auth.uid())
   with check (principal_id = auth.uid());
-
 drop policy if exists "Principals can delete their references" on public.teacher_references;
 create policy "Principals can delete their references"
   on public.teacher_references
   for delete
   using (principal_id = auth.uid());
-
 -- Reference requests: principals manage their org requests
 drop policy if exists "Principals manage reference requests" on public.teacher_reference_requests;
 create policy "Principals manage reference requests"

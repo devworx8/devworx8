@@ -5,7 +5,6 @@
 
 -- Drop the policy first, then recreate the function, then recreate the policy
 DROP POLICY IF EXISTS "members_view_documents" ON public.organization_documents;
-
 -- Update the user_can_view_org_document function to properly handle access levels
 -- and allow national executives to view documents from sub-structures (youth, women, veterans)
 CREATE OR REPLACE FUNCTION public.user_can_view_org_document(doc_id UUID, doc_access_level TEXT)
@@ -119,12 +118,10 @@ BEGIN
   END CASE;
 END;
 $$;
-
 -- Recreate the policy using the updated function
 CREATE POLICY "members_view_documents"
 ON public.organization_documents
 FOR SELECT
 USING (public.user_can_view_org_document(id, access_level));
-
-COMMENT ON FUNCTION public.user_can_view_org_document(UUID, TEXT) IS 
+COMMENT ON FUNCTION public.user_can_view_org_document IS 
 'Checks if a user can view a document based on access level. National executives can see ALL admin_only documents including those from youth, women, and veterans wings.';

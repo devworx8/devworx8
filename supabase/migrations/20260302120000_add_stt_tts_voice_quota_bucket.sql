@@ -3,7 +3,6 @@
 
 ALTER TABLE public.ai_usage_tiers
   ADD COLUMN IF NOT EXISTS transcriptions_per_month integer;
-
 UPDATE public.ai_usage_tiers
 SET transcriptions_per_month = CASE
     WHEN transcriptions_per_month IS NOT NULL THEN transcriptions_per_month
@@ -14,19 +13,14 @@ SET transcriptions_per_month = CASE
     ELSE 20
   END
 WHERE transcriptions_per_month IS NULL;
-
 ALTER TABLE public.ai_usage_tiers
   ALTER COLUMN transcriptions_per_month SET NOT NULL;
-
 ALTER TABLE public.user_ai_usage
   ADD COLUMN IF NOT EXISTS transcriptions_this_month integer DEFAULT 0;
-
 UPDATE public.user_ai_usage
 SET transcriptions_this_month = COALESCE(transcriptions_this_month, 0);
-
 ALTER TABLE public.user_ai_usage
   ALTER COLUMN transcriptions_this_month SET NOT NULL;
-
 -- Update check_ai_usage_limit to map stt/tts to transcription bucket and add monthly reset
 CREATE OR REPLACE FUNCTION public.check_ai_usage_limit(
   p_user_id uuid,
@@ -218,7 +212,6 @@ BEGIN
   );
 END;
 $function$;
-
 -- Update increment_ai_usage to handle stt/tts/transcription
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(
   p_user_id uuid,

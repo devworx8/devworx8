@@ -30,7 +30,6 @@ CREATE POLICY parents_view_published_weekly_programs
       )
     )
   );
-
 -- Allow students to view published routines for their own school
 DROP POLICY IF EXISTS students_view_published_weekly_programs ON weekly_programs;
 CREATE POLICY students_view_published_weekly_programs
@@ -46,7 +45,6 @@ CREATE POLICY students_view_published_weekly_programs
         AND COALESCE(p.organization_id, p.preschool_id) = weekly_programs.preschool_id
     )
   );
-
 -- ── daily_program_blocks ─────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS parents_view_published_daily_program_blocks ON daily_program_blocks;
@@ -79,7 +77,6 @@ CREATE POLICY parents_view_published_daily_program_blocks
         )
     )
   );
-
 DROP POLICY IF EXISTS students_view_published_daily_program_blocks ON daily_program_blocks;
 CREATE POLICY students_view_published_daily_program_blocks
   ON daily_program_blocks

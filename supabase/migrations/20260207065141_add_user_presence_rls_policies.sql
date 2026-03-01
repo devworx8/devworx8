@@ -8,7 +8,6 @@ DROP POLICY IF EXISTS "Authenticated users can read all presence" ON public.user
 DROP POLICY IF EXISTS "Users can insert own presence" ON public.user_presence;
 DROP POLICY IF EXISTS "Users can update own presence" ON public.user_presence;
 DROP POLICY IF EXISTS "Users can delete own presence" ON public.user_presence;
-
 -- 1. Allow all authenticated users to SELECT presence data
 -- Presence is non-sensitive metadata (user_id, status, last_seen_at)
 -- and must be readable by all app users for chat online indicators
@@ -17,14 +16,12 @@ CREATE POLICY "Authenticated users can read all presence"
     FOR SELECT
     TO authenticated
     USING (true);
-
 -- 2. Allow users to INSERT their own presence row
 CREATE POLICY "Users can insert own presence"
     ON public.user_presence
     FOR INSERT
     TO authenticated
     WITH CHECK (auth.uid() = user_id);
-
 -- 3. Allow users to UPDATE their own presence row
 CREATE POLICY "Users can update own presence"
     ON public.user_presence
@@ -32,14 +29,12 @@ CREATE POLICY "Users can update own presence"
     TO authenticated
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
-
 -- 4. Allow users to DELETE their own presence row
 CREATE POLICY "Users can delete own presence"
     ON public.user_presence
     FOR DELETE
     TO authenticated
     USING (auth.uid() = user_id);
-
 -- 5. Enable Realtime for user_presence so postgres_changes subscriptions work
 DO $$
 BEGIN

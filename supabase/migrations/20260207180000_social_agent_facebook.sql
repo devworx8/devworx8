@@ -40,7 +40,6 @@ BEGIN
     );
   END IF;
 END $$;
-
 -- ----------------------------------------------------------------------------
 -- 2) Tables
 -- ----------------------------------------------------------------------------
@@ -63,15 +62,12 @@ CREATE TABLE IF NOT EXISTS public.social_connections (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, platform, page_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_social_connections_org ON public.social_connections(organization_id);
 CREATE INDEX IF NOT EXISTS idx_social_connections_platform ON public.social_connections(platform);
-
 DROP TRIGGER IF EXISTS social_connections_updated_at ON public.social_connections;
 CREATE TRIGGER social_connections_updated_at
 BEFORE UPDATE ON public.social_connections
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 -- Per-organization agent settings.
 CREATE TABLE IF NOT EXISTS public.social_agent_settings (
   organization_id uuid PRIMARY KEY,
@@ -90,12 +86,10 @@ CREATE TABLE IF NOT EXISTS public.social_agent_settings (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 DROP TRIGGER IF EXISTS social_agent_settings_updated_at ON public.social_agent_settings;
 CREATE TRIGGER social_agent_settings_updated_at
 BEFORE UPDATE ON public.social_agent_settings
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 -- Post drafts and publish state.
 CREATE TABLE IF NOT EXISTS public.social_posts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -118,19 +112,15 @@ CREATE TABLE IF NOT EXISTS public.social_posts (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_social_posts_org_status_created
 ON public.social_posts(organization_id, status, created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_social_posts_scheduled_due
 ON public.social_posts(scheduled_at)
 WHERE status = 'scheduled';
-
 DROP TRIGGER IF EXISTS social_posts_updated_at ON public.social_posts;
 CREATE TRIGGER social_posts_updated_at
 BEFORE UPDATE ON public.social_posts
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 -- ----------------------------------------------------------------------------
 -- 3) Row Level Security
 -- ----------------------------------------------------------------------------
@@ -138,7 +128,6 @@ FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 ALTER TABLE public.social_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.social_agent_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.social_posts ENABLE ROW LEVEL SECURITY;
-
 -- Helper: admin-level roles scoped to an organization
 -- (profiles.id may be auth.uid() OR profiles.auth_user_id may be auth.uid()).
 
@@ -157,7 +146,6 @@ USING (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_connections_admin_insert ON public.social_connections;
 CREATE POLICY social_connections_admin_insert
 ON public.social_connections
@@ -173,7 +161,6 @@ WITH CHECK (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_connections_admin_update ON public.social_connections;
 CREATE POLICY social_connections_admin_update
 ON public.social_connections
@@ -199,7 +186,6 @@ WITH CHECK (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_connections_admin_delete ON public.social_connections;
 CREATE POLICY social_connections_admin_delete
 ON public.social_connections
@@ -215,7 +201,6 @@ USING (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 -- Settings policies
 DROP POLICY IF EXISTS social_agent_settings_admin_select ON public.social_agent_settings;
 CREATE POLICY social_agent_settings_admin_select
@@ -232,7 +217,6 @@ USING (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_agent_settings_admin_upsert ON public.social_agent_settings;
 CREATE POLICY social_agent_settings_admin_upsert
 ON public.social_agent_settings
@@ -258,7 +242,6 @@ WITH CHECK (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 -- Posts policies
 DROP POLICY IF EXISTS social_posts_admin_select ON public.social_posts;
 CREATE POLICY social_posts_admin_select
@@ -275,7 +258,6 @@ USING (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_posts_admin_modify ON public.social_posts;
 DROP POLICY IF EXISTS social_posts_admin_insert ON public.social_posts;
 CREATE POLICY social_posts_admin_insert
@@ -292,7 +274,6 @@ WITH CHECK (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_posts_admin_update ON public.social_posts;
 CREATE POLICY social_posts_admin_update
 ON public.social_posts
@@ -318,7 +299,6 @@ WITH CHECK (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 DROP POLICY IF EXISTS social_posts_admin_delete ON public.social_posts;
 CREATE POLICY social_posts_admin_delete
 ON public.social_posts
@@ -334,7 +314,6 @@ USING (
       AND p.role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   )
 );
-
 -- ----------------------------------------------------------------------------
 -- 4) Scheduling Helper (claim due posts)
 -- ----------------------------------------------------------------------------
@@ -385,12 +364,10 @@ BEGIN
   FROM updated u;
 END;
 $$;
-
 -- ----------------------------------------------------------------------------
 -- 5) Grants
 -- ----------------------------------------------------------------------------
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.social_connections TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.social_agent_settings TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.social_posts TO authenticated;
-
 GRANT EXECUTE ON FUNCTION public.claim_due_social_posts(integer) TO service_role;

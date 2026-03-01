@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.name_practice_progress (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id uuid NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -14,21 +13,16 @@ CREATE TABLE IF NOT EXISTS public.name_practice_progress (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT name_practice_progress_student_unique UNIQUE(student_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_name_practice_progress_preschool
   ON public.name_practice_progress(preschool_id);
-
 CREATE INDEX IF NOT EXISTS idx_name_practice_progress_last_attempt
   ON public.name_practice_progress(last_attempt_at DESC);
-
 ALTER TABLE public.name_practice_progress ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS name_practice_parent_select ON public.name_practice_progress;
 DROP POLICY IF EXISTS name_practice_parent_insert ON public.name_practice_progress;
 DROP POLICY IF EXISTS name_practice_parent_update ON public.name_practice_progress;
 DROP POLICY IF EXISTS name_practice_staff_select ON public.name_practice_progress;
 DROP POLICY IF EXISTS name_practice_staff_update ON public.name_practice_progress;
-
 CREATE POLICY name_practice_parent_select
   ON public.name_practice_progress
   FOR SELECT
@@ -41,7 +35,6 @@ CREATE POLICY name_practice_parent_select
         AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
     )
   );
-
 CREATE POLICY name_practice_parent_insert
   ON public.name_practice_progress
   FOR INSERT
@@ -54,7 +47,6 @@ CREATE POLICY name_practice_parent_insert
         AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
     )
   );
-
 CREATE POLICY name_practice_parent_update
   ON public.name_practice_progress
   FOR UPDATE
@@ -75,7 +67,6 @@ CREATE POLICY name_practice_parent_update
         AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
     )
   );
-
 CREATE POLICY name_practice_staff_select
   ON public.name_practice_progress
   FOR SELECT
@@ -89,7 +80,6 @@ CREATE POLICY name_practice_staff_select
         AND p.preschool_id = name_practice_progress.preschool_id
     )
   );
-
 CREATE POLICY name_practice_staff_update
   ON public.name_practice_progress
   FOR UPDATE
@@ -112,13 +102,11 @@ CREATE POLICY name_practice_staff_update
         AND p.preschool_id = name_practice_progress.preschool_id
     )
   );
-
 DROP TRIGGER IF EXISTS trg_name_practice_progress_updated_at ON public.name_practice_progress;
 CREATE TRIGGER trg_name_practice_progress_updated_at
   BEFORE UPDATE ON public.name_practice_progress
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
-
 CREATE OR REPLACE FUNCTION public.record_name_practice_attempt(
   p_student_id uuid,
   p_preschool_id uuid,
@@ -199,7 +187,5 @@ BEGIN
   RETURN v_row;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.record_name_practice_attempt(uuid, uuid, numeric, text, uuid) TO authenticated;
-
 COMMIT;

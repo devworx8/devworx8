@@ -15,14 +15,11 @@ CREATE TABLE IF NOT EXISTS public.superadmin_ai_control (
   CONSTRAINT superadmin_ai_control_singleton CHECK (id = 1),
   CONSTRAINT superadmin_ai_control_mode_check CHECK (autonomy_mode IN ('assistant', 'copilot', 'full'))
 );
-
 ALTER TABLE public.superadmin_ai_control ENABLE ROW LEVEL SECURITY;
-
 -- Seed a default singleton row if none exists
 INSERT INTO public.superadmin_ai_control (id)
 SELECT 1
 WHERE NOT EXISTS (SELECT 1 FROM public.superadmin_ai_control WHERE id = 1);
-
 -- Only super admins can read the control state
 DROP POLICY IF EXISTS superadmin_ai_control_select ON public.superadmin_ai_control;
 CREATE POLICY superadmin_ai_control_select
@@ -30,7 +27,6 @@ CREATE POLICY superadmin_ai_control_select
   FOR SELECT
   TO authenticated
   USING (public.is_super_admin());
-
 -- Only the platform owner can update; first super admin to claim must set owner_user_id to self
 DROP POLICY IF EXISTS superadmin_ai_control_update ON public.superadmin_ai_control;
 CREATE POLICY superadmin_ai_control_update

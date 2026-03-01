@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.set_uniform_request_fields()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -51,7 +50,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP POLICY IF EXISTS uniform_requests_staff_update ON public.uniform_requests;
 CREATE POLICY uniform_requests_staff_update
 ON public.uniform_requests
@@ -87,5 +85,4 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = uniform_requests.preschool_id
   )
 );
-
 COMMIT;

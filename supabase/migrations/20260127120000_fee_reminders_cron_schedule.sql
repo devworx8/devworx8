@@ -4,7 +4,6 @@
 
 -- Enable pg_cron extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 -- Schedule fee reminders to run daily at 5:00 AM UTC (7:00 AM SAST)
 SELECT cron.schedule(
   'fee-reminders-daily',

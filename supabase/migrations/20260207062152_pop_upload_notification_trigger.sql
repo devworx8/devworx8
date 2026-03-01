@@ -8,7 +8,6 @@
 
 -- Enable pg_net extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
 -- Create the trigger function
 CREATE OR REPLACE FUNCTION notify_pop_uploaded()
 RETURNS trigger
@@ -62,10 +61,8 @@ EXCEPTION WHEN OTHERS THEN
     RETURN NEW;
 END;
 $$;
-
 -- Create the trigger on the pop_uploads table
 DROP TRIGGER IF EXISTS trg_pop_upload_notify ON pop_uploads;
-
 CREATE TRIGGER trg_pop_upload_notify
     AFTER INSERT ON pop_uploads
     FOR EACH ROW

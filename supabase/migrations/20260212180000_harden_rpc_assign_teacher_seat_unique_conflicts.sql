@@ -422,5 +422,4 @@ BEGIN
   RETURN jsonb_build_object('status', 'assigned');
 END;
 $function$;
-
 GRANT EXECUTE ON FUNCTION public.rpc_assign_teacher_seat(uuid) TO authenticated;

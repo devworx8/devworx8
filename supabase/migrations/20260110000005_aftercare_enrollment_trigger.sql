@@ -29,7 +29,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Create trigger
 DROP TRIGGER IF EXISTS aftercare_enrollment_trigger ON aftercare_registrations;
 CREATE TRIGGER aftercare_enrollment_trigger
@@ -37,7 +36,6 @@ CREATE TRIGGER aftercare_enrollment_trigger
   FOR EACH ROW
   WHEN (NEW.status IN ('enrolled', 'paid'))
   EXECUTE FUNCTION trigger_aftercare_enrollment();
-
 -- Add enrolled_at column if it doesn't exist
 DO $$ 
 BEGIN
@@ -49,6 +47,5 @@ BEGIN
     ALTER TABLE aftercare_registrations ADD COLUMN enrolled_at TIMESTAMPTZ;
   END IF;
 END $$;
-
 COMMENT ON FUNCTION trigger_aftercare_enrollment() IS 
 'Trigger function that logs when aftercare registration status changes to enrolled or paid. Client should call Edge Function to process enrollment.';

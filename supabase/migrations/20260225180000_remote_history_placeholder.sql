@@ -1,2 +1,0 @@
--- Placeholder migration to align local history with remote.
--- Original migration 20260225180000 exists remotely.

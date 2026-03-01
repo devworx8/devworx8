@@ -14,6 +14,4 @@ AS $$
      OR p.id = auth.uid()
   LIMIT 1;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_current_user_preschool_id() TO authenticated;
-

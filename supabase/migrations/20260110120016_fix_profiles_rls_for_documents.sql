@@ -3,7 +3,6 @@
 
 -- Drop existing policy if it exists
 DROP POLICY IF EXISTS "profiles_read_for_documents" ON public.profiles;
-
 -- Create policy to allow reading profiles when joining with organization_documents
 -- Users can read profiles of users in their organization
 CREATE POLICY "profiles_read_for_documents"
@@ -24,7 +23,6 @@ USING (
       )
   )
 );
-
 -- Add comment
 COMMENT ON POLICY "profiles_read_for_documents" ON public.profiles IS
 'Allows users to read profiles of other users in their organization for document metadata';

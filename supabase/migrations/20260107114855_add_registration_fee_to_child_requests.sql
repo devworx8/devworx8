@@ -1,65 +1,6 @@
 -- Migration: Add registration fee support to child_registration_requests
 -- This aligns in-app registration with the website registration flow
 
--- Shadow DB safety: ensure base tables exist
-CREATE TABLE IF NOT EXISTS preschools (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  settings JSONB
-);
-
-ALTER TABLE preschools
-  ADD COLUMN IF NOT EXISTS settings JSONB;
-
-CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  role TEXT,
-  preschool_id UUID
-);
-
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS role TEXT,
-  ADD COLUMN IF NOT EXISTS preschool_id UUID;
-
-CREATE TABLE IF NOT EXISTS fee_structures (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID,
-  name TEXT,
-  description TEXT,
-  amount DECIMAL(10,2),
-  fee_type TEXT,
-  frequency TEXT,
-  mandatory BOOLEAN,
-  is_active BOOLEAN,
-  effective_from DATE,
-  created_by UUID,
-  due_day INTEGER
-);
-
-ALTER TABLE fee_structures
-  ADD COLUMN IF NOT EXISTS due_day INTEGER,
-  ADD COLUMN IF NOT EXISTS mandatory BOOLEAN,
-  ADD COLUMN IF NOT EXISTS is_active BOOLEAN,
-  ADD COLUMN IF NOT EXISTS fee_type TEXT,
-  ADD COLUMN IF NOT EXISTS frequency TEXT;
-
-CREATE TABLE IF NOT EXISTS student_fees (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID,
-  fee_structure_id UUID,
-  amount DECIMAL(10,2),
-  final_amount DECIMAL(10,2),
-  due_date DATE,
-  status TEXT,
-  amount_outstanding DECIMAL(10,2)
-);
-
-CREATE TABLE IF NOT EXISTS child_registration_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  parent_id UUID,
-  preschool_id UUID,
-  status TEXT DEFAULT 'pending'
-);
-
 -- =============================================================================
 -- 1. Add registration fee columns to child_registration_requests
 -- =============================================================================
@@ -73,7 +14,6 @@ ADD COLUMN IF NOT EXISTS payment_verified BOOLEAN DEFAULT false,
 ADD COLUMN IF NOT EXISTS payment_verified_by UUID REFERENCES profiles(id),
 ADD COLUMN IF NOT EXISTS payment_verified_at TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS payment_reference TEXT;
-
 -- Add comment for documentation
 COMMENT ON COLUMN child_registration_requests.registration_fee_amount IS 'Registration fee amount (from school settings or fee_structures)';
 COMMENT ON COLUMN child_registration_requests.registration_fee_paid IS 'Whether parent claims to have paid';
@@ -83,7 +23,6 @@ COMMENT ON COLUMN child_registration_requests.payment_verified IS 'Whether princ
 COMMENT ON COLUMN child_registration_requests.payment_verified_by IS 'Principal who verified the payment';
 COMMENT ON COLUMN child_registration_requests.payment_verified_at IS 'When payment was verified';
 COMMENT ON COLUMN child_registration_requests.payment_reference IS 'Payment reference number';
-
 -- =============================================================================
 -- 2. Create registration fee structure for schools that don't have one
 -- =============================================================================
@@ -117,7 +56,6 @@ WHERE NOT EXISTS (
   WHERE preschool_id = 'ba79097c-1b93-4b48-bcbe-df73878ab4d1' 
   AND fee_type = 'registration'
 );
-
 -- =============================================================================
 -- 3. Function to get school's registration fee amount
 -- =============================================================================
@@ -151,7 +89,6 @@ BEGIN
   RETURN COALESCE(v_fee, 0);
 END;
 $$;
-
 -- =============================================================================
 -- 4. Function to auto-assign fees when student is approved
 -- =============================================================================
@@ -229,7 +166,6 @@ BEGIN
   END LOOP;
 END;
 $$;
-
 -- =============================================================================
 -- 5. Update RLS policies for the new columns
 -- =============================================================================
@@ -239,13 +175,11 @@ DROP POLICY IF EXISTS "Parents can view own child registration requests" ON chil
 CREATE POLICY "Parents can view own child registration requests"
 ON child_registration_requests FOR SELECT
 USING (parent_id = auth.uid());
-
 -- Parents can insert registration requests with payment info
 DROP POLICY IF EXISTS "Parents can insert child registration requests" ON child_registration_requests;
 CREATE POLICY "Parents can insert child registration requests"
 ON child_registration_requests FOR INSERT
 WITH CHECK (parent_id = auth.uid());
-
 -- Parents can update their own pending requests (e.g., upload POP)
 DROP POLICY IF EXISTS "Parents can update own pending requests" ON child_registration_requests;
 CREATE POLICY "Parents can update own pending requests"
@@ -258,7 +192,6 @@ WITH CHECK (
   parent_id = auth.uid()
   AND status = 'pending'
 );
-
 -- Principals can view all requests for their school
 DROP POLICY IF EXISTS "Principals can view school registration requests" ON child_registration_requests;
 CREATE POLICY "Principals can view school registration requests"
@@ -268,7 +201,6 @@ USING (
     SELECT preschool_id FROM profiles WHERE id = auth.uid() AND role IN ('principal', 'principal_admin', 'super_admin')
   )
 );
-
 -- Principals can update requests (approve/reject/verify payment)
 DROP POLICY IF EXISTS "Principals can update school registration requests" ON child_registration_requests;
 CREATE POLICY "Principals can update school registration requests"
@@ -278,7 +210,6 @@ USING (
     SELECT preschool_id FROM profiles WHERE id = auth.uid() AND role IN ('principal', 'principal_admin', 'super_admin')
   )
 );
-
 -- Grant execute on new functions
 GRANT EXECUTE ON FUNCTION get_registration_fee(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION assign_initial_student_fees(UUID, UUID) TO authenticated;

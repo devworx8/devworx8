@@ -1,11 +1,8 @@
 BEGIN;
-
 ALTER TABLE public.birthday_donation_days
   DROP CONSTRAINT IF EXISTS birthday_donation_days_birthday_count_check;
-
 ALTER TABLE public.birthday_donation_days
   ADD CONSTRAINT birthday_donation_days_birthday_count_check CHECK (birthday_count >= 0);
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -160,5 +157,4 @@ BEGIN
   RETURN day_row;
 END;
 $$;
-
 COMMIT;

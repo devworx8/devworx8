@@ -220,7 +220,6 @@ BEGIN
   );
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(
   p_user_id uuid,
   p_request_type character varying,

@@ -2,7 +2,6 @@
 -- Principal-first billing month ledger + explicit allocations + unified payroll abstractions.
 
 BEGIN;
-
 -- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
@@ -38,7 +37,6 @@ BEGIN
   RETURN 'ad_hoc';
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.normalize_finance_payment_method(p_value text)
 RETURNS text
 LANGUAGE plpgsql
@@ -68,7 +66,6 @@ BEGIN
   RETURN 'other';
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- Ledger fields on existing tables
 -- -----------------------------------------------------------------------------
@@ -76,15 +73,12 @@ $$;
 ALTER TABLE public.student_fees
   ADD COLUMN IF NOT EXISTS billing_month date,
   ADD COLUMN IF NOT EXISTS category_code text;
-
 ALTER TABLE public.payments
   ADD COLUMN IF NOT EXISTS billing_month date,
   ADD COLUMN IF NOT EXISTS category_code text,
   ADD COLUMN IF NOT EXISTS transaction_date date;
-
 ALTER TABLE public.pop_uploads
   ADD COLUMN IF NOT EXISTS category_code text;
-
 UPDATE public.student_fees sf
 SET
   billing_month = date_trunc('month', coalesce(sf.due_date::timestamp, sf.created_at, now()))::date,
@@ -98,7 +92,6 @@ WHERE sf.fee_structure_id = fs.id
     OR sf.category_code IS NULL
     OR btrim(coalesce(sf.category_code, '')) = ''
   );
-
 UPDATE public.student_fees
 SET
   billing_month = coalesce(billing_month, date_trunc('month', coalesce(due_date::timestamp, created_at, now()))::date),
@@ -106,7 +99,6 @@ SET
 WHERE billing_month IS NULL
    OR category_code IS NULL
    OR btrim(coalesce(category_code, '')) = '';
-
 UPDATE public.payments
 SET
   transaction_date = coalesce(
@@ -131,45 +123,36 @@ SET
     description,
     'tuition'
   ));
-
 UPDATE public.pop_uploads
 SET category_code = public.normalize_fee_category_code(coalesce(description, title, 'tuition'))
 WHERE upload_type = 'proof_of_payment'
   AND (category_code IS NULL OR btrim(coalesce(category_code, '')) = '');
-
 ALTER TABLE public.student_fees
   ALTER COLUMN billing_month SET DEFAULT date_trunc('month', now())::date,
   ALTER COLUMN category_code SET DEFAULT 'tuition';
-
 ALTER TABLE public.payments
   ALTER COLUMN billing_month SET DEFAULT date_trunc('month', now())::date,
   ALTER COLUMN category_code SET DEFAULT 'tuition',
   ALTER COLUMN transaction_date SET DEFAULT current_date;
-
 ALTER TABLE public.pop_uploads
   ALTER COLUMN category_code SET DEFAULT 'ad_hoc';
-
 UPDATE public.student_fees
 SET billing_month = coalesce(billing_month, date_trunc('month', now())::date),
     category_code = coalesce(nullif(btrim(category_code), ''), 'tuition')
 WHERE billing_month IS NULL OR category_code IS NULL OR btrim(coalesce(category_code, '')) = '';
-
 UPDATE public.payments
 SET billing_month = coalesce(billing_month, date_trunc('month', now())::date),
     category_code = coalesce(nullif(btrim(category_code), ''), 'tuition'),
     transaction_date = coalesce(transaction_date, current_date)
 WHERE billing_month IS NULL OR category_code IS NULL OR transaction_date IS NULL
    OR btrim(coalesce(category_code, '')) = '';
-
 ALTER TABLE public.student_fees
   ALTER COLUMN billing_month SET NOT NULL,
   ALTER COLUMN category_code SET NOT NULL;
-
 ALTER TABLE public.payments
   ALTER COLUMN billing_month SET NOT NULL,
   ALTER COLUMN category_code SET NOT NULL,
   ALTER COLUMN transaction_date SET NOT NULL;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -206,7 +189,6 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE OR REPLACE FUNCTION public.sync_student_fee_ledger_fields()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -237,13 +219,11 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_sync_student_fee_ledger_fields ON public.student_fees;
 CREATE TRIGGER trg_sync_student_fee_ledger_fields
 BEFORE INSERT OR UPDATE ON public.student_fees
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_student_fee_ledger_fields();
-
 CREATE OR REPLACE FUNCTION public.sync_payment_ledger_fields()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -297,13 +277,11 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_sync_payment_ledger_fields ON public.payments;
 CREATE TRIGGER trg_sync_payment_ledger_fields
 BEFORE INSERT OR UPDATE ON public.payments
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_payment_ledger_fields();
-
 CREATE OR REPLACE FUNCTION public.sync_pop_upload_finance_fields()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -326,23 +304,18 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_sync_pop_upload_finance_fields ON public.pop_uploads;
 CREATE TRIGGER trg_sync_pop_upload_finance_fields
 BEFORE INSERT OR UPDATE ON public.pop_uploads
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_pop_upload_finance_fields();
-
 CREATE INDEX IF NOT EXISTS idx_student_fees_billing_month_category
   ON public.student_fees (billing_month, category_code);
-
 CREATE INDEX IF NOT EXISTS idx_payments_billing_month_category
   ON public.payments (billing_month, category_code);
-
 CREATE INDEX IF NOT EXISTS idx_pop_uploads_category_code
   ON public.pop_uploads (category_code)
   WHERE upload_type = 'proof_of_payment';
-
 -- -----------------------------------------------------------------------------
 -- New ledger + payroll tables
 -- -----------------------------------------------------------------------------
@@ -360,7 +333,6 @@ CREATE TABLE IF NOT EXISTS public.payment_allocations (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (payment_id, student_fee_id)
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -374,11 +346,9 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE INDEX IF NOT EXISTS idx_payment_allocations_payment ON public.payment_allocations(payment_id);
 CREATE INDEX IF NOT EXISTS idx_payment_allocations_fee ON public.payment_allocations(student_fee_id);
 CREATE INDEX IF NOT EXISTS idx_payment_allocations_billing_month ON public.payment_allocations(billing_month, category_code);
-
 CREATE TABLE IF NOT EXISTS public.family_credits (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   parent_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -393,7 +363,6 @@ CREATE TABLE IF NOT EXISTS public.family_credits (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -417,10 +386,8 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE INDEX IF NOT EXISTS idx_family_credits_org_status ON public.family_credits(preschool_id, status);
 CREATE INDEX IF NOT EXISTS idx_family_credits_parent ON public.family_credits(parent_id);
-
 CREATE TABLE IF NOT EXISTS public.payroll_recipients (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.preschools(id) ON DELETE CASCADE,
@@ -433,7 +400,6 @@ CREATE TABLE IF NOT EXISTS public.payroll_recipients (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -447,15 +413,12 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payroll_recipients_teacher
   ON public.payroll_recipients(organization_id, teacher_id)
   WHERE teacher_id IS NOT NULL;
-
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payroll_recipients_principal_profile
   ON public.payroll_recipients(organization_id, role_type, profile_id)
   WHERE role_type = 'principal' AND profile_id IS NOT NULL;
-
 CREATE TABLE IF NOT EXISTS public.payroll_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   payroll_recipient_id uuid NOT NULL REFERENCES public.payroll_recipients(id) ON DELETE CASCADE,
@@ -469,10 +432,8 @@ CREATE TABLE IF NOT EXISTS public.payroll_profiles (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_payroll_profiles_recipient_effective
   ON public.payroll_profiles(payroll_recipient_id, effective_from DESC);
-
 CREATE TABLE IF NOT EXISTS public.payroll_payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   payroll_recipient_id uuid NOT NULL REFERENCES public.payroll_recipients(id) ON DELETE CASCADE,
@@ -487,7 +448,6 @@ CREATE TABLE IF NOT EXISTS public.payroll_payments (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -501,12 +461,10 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE INDEX IF NOT EXISTS idx_payroll_payments_org_month
   ON public.payroll_payments(organization_id, payment_month DESC);
 CREATE INDEX IF NOT EXISTS idx_payroll_payments_recipient
   ON public.payroll_payments(payroll_recipient_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS public.finance_month_closures (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.preschools(id) ON DELETE CASCADE,
@@ -521,7 +479,6 @@ CREATE TABLE IF NOT EXISTS public.finance_month_closures (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, month)
 );
-
 -- -----------------------------------------------------------------------------
 -- RLS for new tables
 -- -----------------------------------------------------------------------------
@@ -532,7 +489,6 @@ ALTER TABLE public.payroll_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payroll_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payroll_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.finance_month_closures ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS payment_allocations_org_select ON public.payment_allocations;
 CREATE POLICY payment_allocations_org_select
 ON public.payment_allocations
@@ -549,7 +505,6 @@ USING (
       AND lower(actor.role) IN ('admin','principal','principal_admin','super_admin','superadmin','teacher')
   )
 );
-
 DROP POLICY IF EXISTS payment_allocations_org_insert ON public.payment_allocations;
 CREATE POLICY payment_allocations_org_insert
 ON public.payment_allocations
@@ -566,7 +521,6 @@ WITH CHECK (
       AND lower(actor.role) IN ('admin','principal','principal_admin','super_admin','superadmin')
   )
 );
-
 DROP POLICY IF EXISTS family_credits_org_select ON public.family_credits;
 CREATE POLICY family_credits_org_select
 ON public.family_credits
@@ -579,7 +533,6 @@ USING (
     WHERE p.id = auth.uid() OR p.auth_user_id = auth.uid()
   )
 );
-
 DROP POLICY IF EXISTS family_credits_org_modify ON public.family_credits;
 CREATE POLICY family_credits_org_modify
 ON public.family_credits
@@ -601,7 +554,6 @@ WITH CHECK (
       AND lower(p.role) IN ('admin','principal','principal_admin','super_admin','superadmin')
   )
 );
-
 DROP POLICY IF EXISTS payroll_recipients_org_access ON public.payroll_recipients;
 CREATE POLICY payroll_recipients_org_access
 ON public.payroll_recipients
@@ -622,7 +574,6 @@ WITH CHECK (
       AND lower(p.role) IN ('admin','principal','principal_admin','super_admin','superadmin')
   )
 );
-
 DROP POLICY IF EXISTS payroll_profiles_org_access ON public.payroll_profiles;
 CREATE POLICY payroll_profiles_org_access
 ON public.payroll_profiles
@@ -649,7 +600,6 @@ WITH CHECK (
       AND lower(actor.role) IN ('admin','principal','principal_admin','super_admin','superadmin')
   )
 );
-
 DROP POLICY IF EXISTS payroll_payments_org_access ON public.payroll_payments;
 CREATE POLICY payroll_payments_org_access
 ON public.payroll_payments
@@ -670,7 +620,6 @@ WITH CHECK (
       AND lower(p.role) IN ('admin','principal','principal_admin','super_admin','superadmin')
   )
 );
-
 DROP POLICY IF EXISTS finance_month_closures_org_access ON public.finance_month_closures;
 CREATE POLICY finance_month_closures_org_access
 ON public.finance_month_closures
@@ -691,7 +640,6 @@ WITH CHECK (
       AND lower(p.role) IN ('principal','principal_admin','super_admin','superadmin')
   )
 );
-
 -- -----------------------------------------------------------------------------
 -- RPC: approve_pop_payment
 -- -----------------------------------------------------------------------------
@@ -1207,7 +1155,6 @@ BEGIN
   );
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- RPC: get_finance_month_snapshot
 -- -----------------------------------------------------------------------------
@@ -1370,7 +1317,6 @@ BEGIN
   );
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- RPC: get_payroll_roster
 -- -----------------------------------------------------------------------------
@@ -1511,7 +1457,6 @@ BEGIN
   );
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- RPC: record_payroll_payment
 -- -----------------------------------------------------------------------------
@@ -1694,7 +1639,6 @@ BEGIN
   );
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- RPC: close_finance_month
 -- -----------------------------------------------------------------------------
@@ -1775,7 +1719,6 @@ BEGIN
   );
 END;
 $$;
-
 -- -----------------------------------------------------------------------------
 -- Grants
 -- -----------------------------------------------------------------------------
@@ -1785,5 +1728,4 @@ GRANT EXECUTE ON FUNCTION public.get_finance_month_snapshot(uuid, date) TO authe
 GRANT EXECUTE ON FUNCTION public.get_payroll_roster(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.record_payroll_payment(uuid, numeric, date, text, text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.close_finance_month(uuid, date) TO authenticated;
-
 COMMIT;

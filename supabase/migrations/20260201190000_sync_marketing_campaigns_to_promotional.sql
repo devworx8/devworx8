@@ -110,7 +110,6 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists trg_sync_marketing_campaign_to_promotional on public.marketing_campaigns;
 create trigger trg_sync_marketing_campaign_to_promotional
 after insert or update or delete on public.marketing_campaigns

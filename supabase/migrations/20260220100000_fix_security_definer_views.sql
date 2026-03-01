@@ -11,7 +11,6 @@
 
 -- 1) student_status_consistency_report
 DROP VIEW IF EXISTS public.student_status_consistency_report;
-
 CREATE VIEW public.student_status_consistency_report
   WITH (security_invoker = true)
 AS
@@ -37,10 +36,8 @@ WHERE (
 ) OR (
   lower(COALESCE(s.status, '')) <> 'active' AND s.is_active IS DISTINCT FROM false
 );
-
 -- 2) student_duplicate_candidates
 DROP VIEW IF EXISTS public.student_duplicate_candidates;
-
 CREATE VIEW public.student_duplicate_candidates
   WITH (security_invoker = true)
 AS

@@ -8,7 +8,6 @@
 
 -- Ensure pg_net extension is available
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Trigger function: fires on INSERT into job_applications
 -- Sends async HTTP POST to notifications-dispatcher/trigger Edge Function
@@ -55,17 +54,14 @@ EXCEPTION WHEN OTHERS THEN
     RETURN NEW;
 END;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Create trigger on job_applications table
 -- ─────────────────────────────────────────────────────────────────────────────
 DROP TRIGGER IF EXISTS trg_job_application_notify ON job_applications;
-
 CREATE TRIGGER trg_job_application_notify
     AFTER INSERT ON job_applications
     FOR EACH ROW
     EXECUTE FUNCTION notify_new_job_application();
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Grant: Ensure anon can call generate_resume_filename (belt-and-suspenders)
 -- ─────────────────────────────────────────────────────────────────────────────

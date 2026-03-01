@@ -3,7 +3,6 @@
 -- Resolves Postgres 42702: column reference "usage_date" is ambiguous.
 
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.get_daily_media_budget(
   p_feature text,
   p_tier text DEFAULT 'free'
@@ -65,7 +64,6 @@ BEGIN
     CASE WHEN v_limit < 0 THEN -1 ELSE greatest(0, v_limit - v_used) END;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.consume_daily_media_budget(
   p_feature text,
   p_amount bigint DEFAULT 1,
@@ -163,5 +161,4 @@ BEGIN
     CASE WHEN v_limit < 0 THEN -1 ELSE greatest(0, v_limit - coalesce(v_used, 0)) END;
 END;
 $$;
-
 COMMIT;

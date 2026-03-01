@@ -13,16 +13,12 @@
 
 ALTER TABLE public.ai_usage_logs
   ADD COLUMN IF NOT EXISTS provider text;
-
 ALTER TABLE public.ai_usage_logs
   ADD COLUMN IF NOT EXISTS model text;
-
 COMMENT ON COLUMN public.ai_usage_logs.provider IS
   'Denormalized provider (from ai_services.provider) for backwards-compatible selects.';
-
 COMMENT ON COLUMN public.ai_usage_logs.model IS
   'Backwards-compatible alias for ai_model_used.';
-
 -- ---------------------------------------------------------------------------
 -- Backfill existing rows
 -- ---------------------------------------------------------------------------
@@ -30,14 +26,12 @@ UPDATE public.ai_usage_logs
 SET model = ai_model_used
 WHERE ai_model_used IS NOT NULL
   AND model IS DISTINCT FROM ai_model_used;
-
 UPDATE public.ai_usage_logs l
 SET provider = s.provider
 FROM public.ai_services s
 WHERE l.ai_service_id = s.id
   AND s.provider IS NOT NULL
   AND l.provider IS DISTINCT FROM s.provider;
-
 -- ---------------------------------------------------------------------------
 -- Keep future rows in sync
 -- ---------------------------------------------------------------------------
@@ -61,12 +55,9 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
-
 DROP TRIGGER IF EXISTS trg_ai_usage_logs_set_provider_model ON public.ai_usage_logs;
-
 CREATE TRIGGER trg_ai_usage_logs_set_provider_model
 BEFORE INSERT OR UPDATE OF ai_model_used, ai_service_id
 ON public.ai_usage_logs
 FOR EACH ROW
 EXECUTE FUNCTION public.ai_usage_logs_set_provider_model();
-

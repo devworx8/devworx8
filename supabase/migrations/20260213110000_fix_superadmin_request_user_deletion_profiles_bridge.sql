@@ -162,4 +162,3 @@ EXCEPTION
     );
 END;
 $function$;
-
