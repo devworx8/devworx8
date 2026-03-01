@@ -23,6 +23,8 @@ import type {
   ExamTeacherAlignmentSummary,
 } from '@/components/exam-prep/types';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { QuotaRingWithStatus } from '@/components/ui/CircularQuotaRing';
+import { useAIUserLimits } from '@/hooks/useAI';
 
 type GenerationState = 'loading' | 'error' | 'ready';
 
@@ -65,6 +67,7 @@ export default function ExamGenerationScreen() {
   const savedExamId = toSafeParam(params.examId);
   const loadSaved = toBool(toSafeParam(params.loadSaved), false);
 
+  const { data: aiLimits } = useAIUserLimits();
   const [state, setState] = useState<GenerationState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [exam, setExam] = useState<ParsedExam | null>(null);
@@ -370,6 +373,17 @@ export default function ExamGenerationScreen() {
             <Text style={[styles.loadingTitle, { color: theme.text }]}>Please wait...</Text>
             <Text style={[styles.loadingText, { color: theme.muted }]}>{generationLabel}</Text>
             <Text style={[styles.loadingSubtext, { color: theme.muted }]}>Using {useTeacherContext ? 'teacher artifacts + CAPS' : 'CAPS baseline'} to build this paper.</Text>
+            {aiLimits && (
+              <View style={{ marginTop: 24 }}>
+                <QuotaRingWithStatus
+                  featureName="Exam Generations"
+                  used={aiLimits.used?.lesson_generation ?? 0}
+                  limit={aiLimits.quotas?.lesson_generation ?? 0}
+                  isGenerating
+                  size={70}
+                />
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.centerBlock}>
