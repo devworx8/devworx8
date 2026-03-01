@@ -311,6 +311,24 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
 
         <K12ParentQuickActions onActionPress={handleQuickAction} theme={theme} quickWinsEnabled={quickWinsEnabled} />
 
+        {/* Timetable Card */}
+        <TouchableOpacity
+          style={[styles.section, { marginHorizontal: 16 }]}
+          activeOpacity={0.85}
+          onPress={() => { track('k12.parent.timetable_tap', { user_id: user?.id }); pushAction('timetable'); }}
+        >
+          <View style={{ backgroundColor: theme.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: theme.primary + '20', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="calendar" size={22} color={theme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>{t('dashboard.parent.timetable', { defaultValue: "Today's Timetable" })}</Text>
+              <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>{t('dashboard.parent.timetable_hint', { defaultValue: 'View class schedule, subjects & teachers' })}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </View>
+        </TouchableOpacity>
+
         <K12ParentLearningHub
           leadChildName={dashboardSummary.activeChildName}
           onOpenTutor={openTutorSession}
