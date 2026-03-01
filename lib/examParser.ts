@@ -399,13 +399,19 @@ export function gradeAnswer(
     };
   }
 
-  // True/false - exact match
+  // True/false - flexible matching (t/f, true/false, yes/no, correct/incorrect)
   if (question.type === 'true_false' && question.correctAnswer) {
     const normalizedAnswer = normalize(answer);
     const normalizedCorrect = normalize(question.correctAnswer);
-    const normalizedStudent = normalizedAnswer === 't' ? 'true' : normalizedAnswer === 'f' ? 'false' : normalizedAnswer;
-    const normalizedTarget = normalizedCorrect === 't' ? 'true' : normalizedCorrect === 'f' ? 'false' : normalizedCorrect;
-    const isCorrect = normalizedStudent === normalizedTarget;
+    const mapToBool = (s: string): 'true' | 'false' | null => {
+      if (['t', 'true', 'yes', 'y', 'correct', 'right', '1'].includes(s)) return 'true';
+      if (['f', 'false', 'no', 'n', 'incorrect', 'wrong', '0'].includes(s)) return 'false';
+      return null;
+    };
+    const studentBool = mapToBool(normalizedAnswer);
+    const targetBool = mapToBool(normalizedCorrect);
+    const isCorrect =
+      studentBool !== null && targetBool !== null && studentBool === targetBool;
 
     return {
       isCorrect,
@@ -422,23 +428,34 @@ export function gradeAnswer(
     const normalizedAnswer = normalize(answer);
     const normalizedCorrect = normalize(question.correctAnswer);
     const isExact = normalizedAnswer === normalizedCorrect || areMathEquivalent(answer, question.correctAnswer);
-    const isClose = !isExact
-      && normalizedCorrect.length > 3
+    // Accommodate spelling: Levenshtein-like tolerance (1-2 char diff for short words, more for longer)
+    const maxEditDistance = Math.max(1, Math.floor(normalizedCorrect.length / 4));
+    const editDistance = (a: string, b: string): number => {
+      const m = a.length;
+      const n = b.length;
+      const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+        }
+      }
+      return dp[m][n];
+    };
+    const isSpellingClose = !isExact
+      && normalizedCorrect.length >= 2
       && normalizedAnswer.length > 0
-      && (normalizedAnswer.startsWith(normalizedCorrect) || normalizedCorrect.startsWith(normalizedAnswer)
-        || (Math.abs(normalizedAnswer.length - normalizedCorrect.length) <= 2
-          && [...normalizedCorrect].filter((c, i) => normalizedAnswer[i] !== c).length <= 1));
+      && editDistance(normalizedAnswer, normalizedCorrect) <= maxEditDistance;
+    const isPrefixMatch = !isExact
+      && normalizedCorrect.length > 3
+      && (normalizedAnswer.startsWith(normalizedCorrect) || normalizedCorrect.startsWith(normalizedAnswer));
 
-    if (isExact) {
+    if (isExact || isSpellingClose || isPrefixMatch) {
       return {
         isCorrect: true,
-        feedback: question.explanation || 'Correct!',
-        marks: question.marks,
-      };
-    } else if (isClose) {
-      return {
-        isCorrect: true,
-        feedback: `Correct (minor spelling variation accepted). The expected answer is ${question.correctAnswer}.`,
+        feedback: question.explanation || (isSpellingClose ? `Correct (spelling variation accepted). Expected: ${question.correctAnswer}` : 'Correct!'),
         marks: question.marks,
       };
     }
@@ -454,20 +471,21 @@ export function gradeAnswer(
   if ((question.type === 'short_answer' || question.type === 'essay') && question.correctAnswer) {
     const normalizedExpected = normalize(question.correctAnswer);
     const normalizedStudent = normalize(answer);
-    const expectedTokens = normalizedExpected.split(' ').filter((token) => token.length >= 3);
+    const expectedTokens = normalizedExpected.split(' ').filter((token) => token.length >= 2);
     const studentTokens = normalizedStudent.split(' ');
 
     const fuzzyMatch = (expected: string, student: string): boolean => {
       if (expected === student) return true;
-      if (expected.length <= 3) return false;
+      if (expected.length <= 2 && student.length <= 2) return expected === student;
       if (student.startsWith(expected) || expected.startsWith(student)) return true;
+      const maxDist = Math.max(1, Math.floor(expected.length / 4));
       let dist = 0;
       const longer = expected.length >= student.length ? expected : student;
       const shorter = expected.length < student.length ? expected : student;
-      if (Math.abs(longer.length - shorter.length) > 2) return false;
+      if (Math.abs(longer.length - shorter.length) > maxDist) return false;
       for (let i = 0; i < longer.length; i++) {
-        if (shorter[i] !== longer[i]) dist++;
-        if (dist > 1) return false;
+        if ((shorter[i] ?? '') !== longer[i]) dist++;
+        if (dist > maxDist) return false;
       }
       return true;
     };
@@ -479,12 +497,13 @@ export function gradeAnswer(
 
     const isEssay = question.type === 'essay';
     const wordCount = studentTokens.length;
-    const lengthBonus = isEssay && wordCount >= 15 ? 0.1 : isEssay && wordCount >= 8 ? 0.05 : 0;
+    const lengthBonus = isEssay && wordCount >= 15 ? 0.12 : isEssay && wordCount >= 8 ? 0.08 : 0;
     const adjustedCoverage = Math.min(1, coverage + lengthBonus);
     const awarded = Math.min(question.marks, Math.max(0, Math.round(question.marks * adjustedCoverage)));
 
-    const correctThreshold = isEssay ? 0.55 : 0.6;
-    const partialThreshold = 0.3;
+    const correctThreshold = isEssay ? 0.5 : 0.55;
+    const partialThreshold = 0.25;
+    const minimumAward = partialThreshold > 0 ? Math.floor(question.marks * partialThreshold) : 0;
 
     if (adjustedCoverage >= correctThreshold) {
       return {
@@ -498,7 +517,7 @@ export function gradeAnswer(
         feedback: question.explanation
           ? `Partially correct (${Math.round(adjustedCoverage * 100)}% coverage). ${question.explanation}`
           : `Partially correct (${Math.round(adjustedCoverage * 100)}% coverage). Include more key terms and elaborate on your reasoning.`,
-        marks: awarded,
+        marks: Math.max(awarded, minimumAward),
       };
     } else {
       return {

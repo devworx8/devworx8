@@ -392,6 +392,26 @@ export const examPrepWizardStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  generateButtonBlock: {
+    marginTop: 20,
+    marginBottom: 20,
+    gap: 10,
+  },
+  generateButtonDisabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  generateButtonDisabledText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  generateButtonInactive: {},
   usageCard: {
     borderWidth: 1,
     borderRadius: 14,
@@ -448,9 +468,50 @@ export const examPrepWizardStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  uploadedMaterialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  uploadedMaterialBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
   materialSubtitle: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  materialSplitCard: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+  },
+  materialSplitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  materialSplitTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  materialSplitMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  materialSplitTrack: {
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  materialSplitFill: {
+    height: '100%',
+    borderRadius: 999,
   },
   materialActions: {
     flexDirection: 'row',
@@ -492,6 +553,19 @@ export const examPrepWizardStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  materialRetryBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  materialRetryText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   customPromptInput: {
     borderWidth: 1,

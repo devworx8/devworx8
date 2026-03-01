@@ -16,15 +16,16 @@ interface ReviewStepProps {
   selectedExamTypeLabel: string;
   selectedExamType: string;
   selectedLanguage: keyof typeof LANGUAGE_OPTIONS;
-  generateButtonLabel: string;
+  generateButtonLabel?: string;
   useTeacherContext: boolean;
   contextPreview: ExamContextSummary | null;
   contextLoading: boolean;
   contextError: string | null;
   onBack: () => void;
   onSetUseTeacherContext: (enabled: boolean) => void;
-  onGenerateWithCurrentContext: () => void;
-  onGenerateCapsOnly: () => void;
+  onGenerateWithCurrentContext?: () => void;
+  onGenerateCapsOnly?: () => void;
+  hideGenerateButtons?: boolean;
 }
 
 function ContextPreviewCard({
@@ -112,7 +113,7 @@ export function ExamPrepReviewStep({
   selectedExamTypeLabel,
   selectedExamType,
   selectedLanguage,
-  generateButtonLabel,
+  generateButtonLabel = 'Generate',
   useTeacherContext,
   contextPreview,
   contextLoading,
@@ -121,6 +122,7 @@ export function ExamPrepReviewStep({
   onSetUseTeacherContext,
   onGenerateWithCurrentContext,
   onGenerateCapsOnly,
+  hideGenerateButtons = false,
 }: ReviewStepProps): React.ReactElement {
   return (
     <View style={styles.stepContainer}>
@@ -199,22 +201,26 @@ export function ExamPrepReviewStep({
         contextError={contextError}
       />
 
-      <TouchableOpacity
-        style={[styles.generateButton, { backgroundColor: '#22c55e' }]}
-        onPress={onGenerateWithCurrentContext}
-      >
-        <Ionicons name="sparkles" size={22} color="#ffffff" />
-        <Text style={styles.generateButtonText}>{generateButtonLabel}</Text>
-      </TouchableOpacity>
+      {!hideGenerateButtons && onGenerateWithCurrentContext && onGenerateCapsOnly ? (
+        <>
+          <TouchableOpacity
+            style={[styles.generateButton, { backgroundColor: '#22c55e' }]}
+            onPress={onGenerateWithCurrentContext}
+          >
+            <Ionicons name="sparkles" size={22} color="#ffffff" />
+            <Text style={styles.generateButtonText}>{generateButtonLabel}</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.secondaryGenerateButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
-        onPress={onGenerateCapsOnly}
-      >
-        <Text style={[styles.secondaryGenerateText, { color: theme.text }]}>
-          Generate without teacher context
-        </Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryGenerateButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            onPress={onGenerateCapsOnly}
+          >
+            <Text style={[styles.secondaryGenerateText, { color: theme.text }]}>
+              Generate without teacher context
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
     </View>
   );
 }

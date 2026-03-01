@@ -424,6 +424,20 @@ export default function K12StudentDashboardScreen() {
               cta={t('dashboard.student.learning_hub.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
               onPress={openExamBuilder}
             />
+            <GradientActionCard
+              tone="blue"
+              icon="reader-outline"
+              badgeLabel={t('dashboard.student.learning_hub.my_exams_badge', { defaultValue: 'My Exams' })}
+              title={t('dashboard.student.learning_hub.my_exams_title', { defaultValue: 'My Practice Exams' })}
+              description={t('dashboard.student.learning_hub.my_exams_description', {
+                defaultValue: 'View your exam history, scores, and retake exams.',
+              })}
+              cta={t('dashboard.student.learning_hub.my_exams_cta', { defaultValue: 'View My Exams' })}
+              onPress={() => {
+                track('k12.student.my_exams_open', { user_id: user?.id });
+                router.push('/screens/parent-my-exams' as any);
+              }}
+            />
             <View style={styles.learningHubHintRow}>
               <Pill
                 label={t('dashboard.student.learning_hub.tutor_active', { defaultValue: 'Tutor Session Active' })}
@@ -591,6 +605,12 @@ export default function K12StudentDashboardScreen() {
             label: t('dashboard.student.nav.library', { defaultValue: 'Library' }),
             icon: 'library',
             route: '/(k12)/library',
+          },
+          {
+            id: 'my_exams',
+            label: t('dashboard.student.nav.my_exams', { defaultValue: 'My Exams' }),
+            icon: 'reader-outline',
+            route: '/screens/parent-my-exams',
           },
           {
             id: 'ai',

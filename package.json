@@ -216,6 +216,7 @@
     "mermaid": "^10.4.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.46.0",
     "next": "^16.0.1",
+    "pdf-lib": "^1.17.1",
     "posthog-react-native": "^4.3.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",

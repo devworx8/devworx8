@@ -12,6 +12,7 @@ import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
 import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
 import { containsMathDelimiters, parseMathSegments } from '@/components/exam-prep/mathSegments';
+import { MathCalculator } from '@/components/exam-prep/MathCalculator';
 import { assertSupabase } from '@/lib/supabase';
 
 type WorkspaceTab = 'answer' | 'work';
@@ -99,6 +100,7 @@ export function ExamQuestionCard({
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('answer');
   const [workText, setWorkText] = useState('');
   const [showMathPreview, setShowMathPreview] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
   const [translatedContentByQuestion, setTranslatedContentByQuestion] = useState<Record<string, TranslatedQuestionContent>>({});
   const [translatedVisibleByQuestion, setTranslatedVisibleByQuestion] = useState<Record<string, boolean>>({});
   const [translatingQuestionId, setTranslatingQuestionId] = useState<string | null>(null);
@@ -665,6 +667,25 @@ export function ExamQuestionCard({
                   <Text style={[styles.workHint, { color: theme.primary }]}>{MATH_HINT}</Text>
                 </View>
 
+                <TouchableOpacity
+                  style={[styles.calculatorToggle, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                  onPress={() => setShowCalculator((p) => !p)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="calculator-outline" size={16} color={theme.primary} />
+                  <Text style={[styles.calculatorToggleLabel, { color: theme.text }]}>
+                    {showCalculator ? 'Hide calculator' : 'Show calculator'}
+                  </Text>
+                  <Ionicons name={showCalculator ? 'chevron-up' : 'chevron-down'} size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+
+                {showCalculator && (
+                  <MathCalculator
+                    theme={theme as Record<string, string>}
+                    onInsertResult={(value) => setWorkText((prev) => (prev ? `${prev} ${value}` : value))}
+                  />
+                )}
+
                 <TextInput
                   style={[
                     styles.workInput,
@@ -956,6 +977,20 @@ const styles = StyleSheet.create({
   },
   workTab: {
     gap: 10,
+  },
+  calculatorToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  calculatorToggleLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   workHintRow: {
     flexDirection: 'row',

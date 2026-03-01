@@ -84,6 +84,7 @@ export default function ExamGenerationScreen() {
     draftId?: string;
     examId?: string;
     loadSaved?: string;
+    retake?: string;
   }>();
 
   const grade = toSafeParam(params.grade);
@@ -98,8 +99,20 @@ export default function ExamGenerationScreen() {
   const draftId = toSafeParam(params.draftId);
   const savedExamId = toSafeParam(params.examId);
   const loadSaved = toBool(toSafeParam(params.loadSaved), false);
+  const retakeMode = toBool(toSafeParam(params.retake), false);
   const [generationDraft] = useState(() => consumeExamGenerationDraft(draftId));
   const customPrompt = generationDraft?.customPrompt?.trim() || '';
+  const usesUploadedMaterial = useMemo(
+    () =>
+      Boolean(
+        customPrompt &&
+          (customPrompt.includes('Study material extracted') ||
+            customPrompt.includes('uploaded images') ||
+            customPrompt.includes('uploaded material') ||
+            customPrompt.includes('Study Notes')),
+      ),
+    [customPrompt],
+  );
 
   const { data: aiLimits } = useAIUserLimits();
   const quotaMap = useMemo(() => toNumberMap((aiLimits as any)?.quotas), [aiLimits]);
@@ -367,6 +380,14 @@ export default function ExamGenerationScreen() {
               <Text style={[styles.warningText, { color: theme.warning }]}>{persistenceWarning}</Text>
             </View>
           ) : null}
+          {usesUploadedMaterial ? (
+            <View style={[styles.warningBanner, { borderColor: `${theme.primary}55`, backgroundColor: `${theme.primary}18` }]}>
+              <Ionicons name="document-attach-outline" size={16} color={theme.primary} />
+              <Text style={[styles.warningText, { color: theme.primary }]}>
+                Using uploaded material / Images / PDFs / Study Notes
+              </Text>
+            </View>
+          ) : null}
           {isPracticeArtifact && completionSummary ? (
             <View style={[styles.completionBanner, { borderColor: `${theme.success}55`, backgroundColor: `${theme.success}18` }]}>
               <View style={styles.completionBannerLeft}>
@@ -463,6 +484,7 @@ export default function ExamGenerationScreen() {
                 studentId={studentId}
                 classId={classId}
                 schoolId={schoolId}
+                retakeMode={retakeMode}
                 onComplete={handleComplete}
                 onExit={handleBack}
               />
