@@ -110,7 +110,6 @@ export function K12ParentLearningHub({
           description={t('dashboard.parent.k12.exam_description', { defaultValue: 'Generate a CAPS-aligned formal test paper for review or print.' })}
           cta={t('dashboard.parent.k12.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
           onPress={onExamBuilder}
-          disabled={!canShowExamPrep}
         />
         {onExamHistory && (
           <GradientActionCard

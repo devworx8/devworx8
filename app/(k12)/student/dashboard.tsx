@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Dimensions, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Dimensions, Platform, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,9 +118,20 @@ export default function K12StudentDashboardScreen() {
     t('dashboard.student.your_school', { defaultValue: 'Your School' });
   const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.student', { defaultValue: 'Student' });
   const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
-  const grade = t('dashboard.student.default_grade', { defaultValue: 'Grade 10' }); // TODO: Get from profile/student record
-  const gradeMatch = grade.match(/\d+/);
-  const gradeNumber = gradeMatch ? Number(gradeMatch[0]) : 0;
+  const inferredGradeRaw =
+    String(
+      (profile as any)?.student_grade ||
+      (profile as any)?.grade ||
+      (profile as any)?.organization_membership?.grade ||
+      '',
+    ).trim();
+  const fallbackGradeLabel = t('dashboard.student.default_grade', { defaultValue: 'Grade 10' });
+  const grade = inferredGradeRaw || fallbackGradeLabel;
+  const parseGradeNumber = (value: string): number => {
+    const match = value.match(/\d{1,2}/);
+    return match ? Number(match[0]) : 0;
+  };
+  const gradeNumber = parseGradeNumber(inferredGradeRaw) || parseGradeNumber(fallbackGradeLabel) || 10;
   const canBuildFormalExam = gradeNumber >= 4;
   const normalizedTier = normalizeTierName(
     String(tier || (profile as any)?.subscription_tier || 'free')
@@ -150,6 +161,13 @@ export default function K12StudentDashboardScreen() {
 
   const openExamBuilder = useCallback(() => {
     track('k12.student.exam_builder_open', { user_id: user?.id, grade });
+    if (!canBuildFormalExam) {
+      Alert.alert(
+        t('dashboard.student.exam_prep.not_ready_title', { defaultValue: 'Exam Builder Not Available Yet' }),
+        t('dashboard.student.exam_prep.not_ready_message', { defaultValue: 'Exam Builder is available from Grade 4 and up.' }),
+      );
+      return;
+    }
     const inferredStudentId =
       (profile as any)?.student_id ||
       (profile as any)?.linked_student_id ||
@@ -177,7 +195,7 @@ export default function K12StudentDashboardScreen() {
         childName: userName,
       },
     } as any);
-  }, [grade, gradeNumber, user?.id, profile, userName]);
+  }, [grade, gradeNumber, user?.id, profile, userName, canBuildFormalExam, t]);
 
   // Track dashboard view
   useEffect(() => {
@@ -405,7 +423,6 @@ export default function K12StudentDashboardScreen() {
               })}
               cta={t('dashboard.student.learning_hub.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
               onPress={openExamBuilder}
-              disabled={!canBuildFormalExam}
             />
             <View style={styles.learningHubHintRow}>
               <Pill

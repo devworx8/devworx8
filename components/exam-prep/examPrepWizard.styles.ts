@@ -392,6 +392,46 @@ export const examPrepWizardStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  usageCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  usageCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  usageCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  usageRingWrap: {
+    marginVertical: 4,
+  },
+  usageCardHint: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  usageWarning: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  usageWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
   materialCard: {
     borderWidth: 1,
     borderRadius: 14,

@@ -11,6 +11,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface CircularQuotaRingProps {
   used: number;
@@ -37,6 +38,7 @@ export function CircularQuotaRing({
   colorWarning = '#F59E0B',
   colorCritical = '#EF4444',
 }: CircularQuotaRingProps) {
+  const { theme } = useTheme();
   const remaining = Math.max(0, limit - used);
   const percentUsed = limit > 0 ? Math.min(1, used / limit) : 0;
   const percentRemaining = 1 - percentUsed;
@@ -110,12 +112,12 @@ export function CircularQuotaRing({
           {displayValue}
         </Text>
         {label && (
-          <Text style={[styles.labelText, { fontSize: size * 0.12 }]} numberOfLines={1}>
+          <Text style={[styles.labelText, { fontSize: size * 0.12, color: theme.textSecondary }]} numberOfLines={1}>
             {label}
           </Text>
         )}
         {!showPercentage && limit > 0 && (
-          <Text style={[styles.ofText, { fontSize: size * 0.1 }]}>
+          <Text style={[styles.ofText, { fontSize: size * 0.1, color: theme.textSecondary }]}>
             of {limit}
           </Text>
         )}
@@ -134,6 +136,7 @@ export function QuotaRingWithStatus({
   isGenerating = false,
   ...ringProps
 }: QuotaRingWithStatusProps) {
+  const { theme } = useTheme();
   const remaining = Math.max(0, ringProps.limit - ringProps.used);
   const isExhausted = ringProps.limit > 0 && remaining <= 0;
 
@@ -141,13 +144,13 @@ export function QuotaRingWithStatus({
     <View style={styles.statusContainer}>
       <CircularQuotaRing {...ringProps} />
       <View style={styles.statusInfo}>
-        <Text style={styles.featureName}>{featureName}</Text>
-        <Text style={[styles.statusText, isExhausted && styles.exhaustedText]}>
+        <Text style={[styles.featureName, { color: theme.text }]}>{featureName}</Text>
+        <Text style={[styles.statusText, { color: theme.textSecondary }, isExhausted && { color: theme.error }]}>
           {isGenerating
             ? 'Generating...'
             : isExhausted
-              ? 'Daily limit reached'
-              : `${remaining} remaining today`}
+              ? 'Monthly limit reached'
+              : `${remaining} remaining this month`}
         </Text>
       </View>
     </View>
@@ -193,14 +196,9 @@ const styles = StyleSheet.create({
   featureName: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
   },
   statusText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
     marginTop: 2,
-  },
-  exhaustedText: {
-    color: '#EF4444',
   },
 });

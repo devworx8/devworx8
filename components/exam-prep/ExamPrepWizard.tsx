@@ -43,8 +43,129 @@ import {
   type WizardStep,
 } from '@/components/exam-prep/examPrepWizard.helpers';
 import { examPrepWizardStyles as styles } from '@/components/exam-prep/examPrepWizard.styles';
+import { QuotaRingWithStatus } from '@/components/ui/CircularQuotaRing';
+import { useAIUserLimits } from '@/hooks/useAI';
 
 const MAX_MATERIAL_SIZE_BYTES = 8 * 1024 * 1024;
+const MAX_MATERIAL_SIZE_MB = Math.round(MAX_MATERIAL_SIZE_BYTES / (1024 * 1024));
+const MATERIAL_OCR_RETRIES = 2;
+const MATERIAL_OCR_RETRY_BASE_MS = 1200;
+
+function formatSizeMB(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0';
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type FunctionInvokeErrorInfo = {
+  status?: number;
+  code?: string;
+  message: string;
+  rateLimited: boolean;
+  quotaExceeded: boolean;
+  retryAfterSeconds?: number;
+};
+
+async function parseFunctionInvokeError(error: unknown, fallbackMessage: string): Promise<FunctionInvokeErrorInfo> {
+  const err = (error || {}) as Record<string, unknown>;
+  const context = (err.context || null) as
+    | {
+        status?: number;
+        headers?: { get?: (name: string) => string | null };
+        text?: () => Promise<string>;
+      }
+    | null;
+
+  const rawStatus = err.status || context?.status;
+  const status = Number.isFinite(Number(rawStatus)) ? Number(rawStatus) : undefined;
+
+  let payloadCode: string | undefined;
+  let payloadMessage: string | undefined;
+
+  if (context && typeof context.text === 'function') {
+    try {
+      const rawText = await context.text();
+      if (rawText) {
+        const parsed = JSON.parse(rawText) as Record<string, unknown>;
+        if (typeof parsed.error === 'string') payloadCode = parsed.error;
+        if (typeof parsed.message === 'string') payloadMessage = parsed.message;
+      }
+    } catch {
+      // Ignore JSON parse/body read failures and fall back to generic error text.
+    }
+  }
+
+  const errorMessage =
+    payloadMessage ||
+    (typeof err.message === 'string' ? err.message : '') ||
+    fallbackMessage;
+  const errorCode =
+    payloadCode ||
+    (typeof err.code === 'string' ? err.code : undefined);
+
+  const retryAfterHeader = context?.headers?.get?.('retry-after') || context?.headers?.get?.('Retry-After');
+  const retryAfterSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined;
+  const normalized = `${errorCode || ''} ${errorMessage}`.toLowerCase();
+  const quotaExceeded =
+    errorCode === 'quota_exceeded' ||
+    normalized.includes('quota exceeded') ||
+    normalized.includes('billing period');
+  const rateLimited =
+    status === 429 ||
+    errorCode === 'rate_limited' ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests');
+
+  return {
+    status,
+    code: errorCode,
+    message: errorMessage,
+    rateLimited,
+    quotaExceeded,
+    retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+  };
+}
+
+function getMaterialAIErrorMessage(info: FunctionInvokeErrorInfo): string {
+  if (info.quotaExceeded) {
+    return 'AI usage quota reached for this billing period. Please upgrade or wait for quota reset before analyzing more study material.';
+  }
+  if (info.rateLimited) {
+    if (info.retryAfterSeconds && info.retryAfterSeconds > 0) {
+      return `AI service is busy right now. Please retry in about ${info.retryAfterSeconds} seconds.`;
+    }
+    return 'AI service is busy right now. Please retry in about a minute.';
+  }
+  if (info.message.includes('Edge Function returned a non-2xx')) {
+    return 'Study material analysis failed. Please retry in a moment.';
+  }
+  return info.message || 'Could not analyze study material.';
+}
+
+function toQuotaMap(input: unknown): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const map: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    map[key] = Math.max(0, numeric);
+  }
+  return map;
+}
+
+function getFirstQuotaValue(
+  map: Record<string, number>,
+  keys: string[],
+): number {
+  for (const key of keys) {
+    const value = map[key];
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
 
 type StudyMaterial = {
   id: string;
@@ -97,6 +218,31 @@ export function ExamPrepWizard(): React.ReactElement {
   const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
   const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice');
   const requiredExamTier = getRequiredTier('exam.practice');
+  const { data: aiLimits } = useAIUserLimits();
+  const quotaMap = useMemo(() => toQuotaMap((aiLimits as any)?.quotas), [aiLimits]);
+  const usedMap = useMemo(
+    () => toQuotaMap((aiLimits as any)?.used ?? (aiLimits as any)?.current_usage),
+    [aiLimits],
+  );
+  const examQuotaKeys = useMemo(
+    () => ['exam_generation', 'grading_assistance', 'lesson_generation'],
+    [],
+  );
+  const examQuotaLimit = useMemo(
+    () => getFirstQuotaValue(quotaMap, examQuotaKeys),
+    [quotaMap, examQuotaKeys],
+  );
+  const examQuotaUsed = useMemo(
+    () => getFirstQuotaValue(usedMap, examQuotaKeys),
+    [usedMap, examQuotaKeys],
+  );
+  const examQuotaRemaining = Math.max(0, examQuotaLimit - examQuotaUsed);
+  const examQuotaPercent = examQuotaLimit > 0 ? (examQuotaUsed / examQuotaLimit) * 100 : 0;
+  const examQuotaWarning = examQuotaLimit > 0 && examQuotaRemaining <= 0
+    ? 'Monthly exam quota appears exhausted. Generation may fail until reset or upgrade.'
+    : examQuotaLimit > 0 && examQuotaPercent >= 85
+      ? `Exam quota is low: ${examQuotaRemaining} left this month.`
+      : null;
 
   const selectedExamTypeLabel = useMemo(() => {
     const examType = selectedExamType === 'practice_test'
@@ -165,42 +311,61 @@ export function ExamPrepWizard(): React.ReactElement {
   const summarizeStudyMaterial = useCallback(
     async (payload: { base64: string; mimeType: string; fileName: string }): Promise<string> => {
       const supabase = assertSupabase();
-      const { data, error } = await supabase.functions.invoke('ai-proxy', {
-        body: {
-          scope: 'student',
-          service_type: 'image_analysis',
-          payload: {
-            prompt: `Extract exam-prep context from ${payload.fileName}. Provide concise bullet points under: (1) Topics to revise, (2) Key facts/formulas, (3) Common mistakes, (4) Suggested question angles. If the source language is not English, include short English translations for critical terms.`,
-            context:
-              'You process learner study material for CAPS exam prep. Return plain text bullet points only. Keep it concise and practical.',
-            images: [{ data: payload.base64, media_type: payload.mimeType }],
-            ocr_mode: true,
-            ocr_task: 'document',
-            ocr_response_format: 'text',
+      for (let attempt = 0; attempt <= MATERIAL_OCR_RETRIES; attempt += 1) {
+        const { data, error } = await supabase.functions.invoke('ai-proxy', {
+          body: {
+            scope: 'student',
+            // Keep OCR stable on projects where older quota mapping does not recognize image_analysis.
+            service_type: 'chat_message',
+            payload: {
+              prompt: `Extract exam-prep context from ${payload.fileName}. Provide concise bullet points under: (1) Topics to revise, (2) Key facts/formulas, (3) Common mistakes, (4) Suggested question angles. If the source language is not English, include short English translations for critical terms.`,
+              context:
+                'You process learner study material for CAPS exam prep. Return plain text bullet points only. Keep it concise and practical.',
+              images: [{ data: payload.base64, media_type: payload.mimeType }],
+              ocr_mode: true,
+              ocr_task: 'document',
+              ocr_response_format: 'text',
+            },
+            stream: false,
+            enable_tools: false,
+            metadata: {
+              source: 'exam_prep.wizard.material_ocr',
+              file_name: payload.fileName,
+            },
           },
-          stream: false,
-          enable_tools: false,
-          metadata: {
-            source: 'exam_prep.wizard.material_ocr',
-            file_name: payload.fileName,
-          },
-        },
-      });
+        });
 
-      if (error) {
-        throw new Error(error.message || 'Failed to analyze study material.');
+        if (error) {
+          const parsedError = await parseFunctionInvokeError(
+            error,
+            'Failed to analyze study material.',
+          );
+          const canRetry =
+            parsedError.rateLimited &&
+            !parsedError.quotaExceeded &&
+            attempt < MATERIAL_OCR_RETRIES;
+          if (canRetry) {
+            const retryDelayMs = parsedError.retryAfterSeconds
+              ? parsedError.retryAfterSeconds * 1000
+              : MATERIAL_OCR_RETRY_BASE_MS * (attempt + 1);
+            await sleep(retryDelayMs);
+            continue;
+          }
+          throw new Error(getMaterialAIErrorMessage(parsedError));
+        }
+
+        const summary =
+          typeof data === 'string'
+            ? data.trim()
+            : String(data?.content || data?.ocr?.analysis || '').trim();
+
+        if (!summary) {
+          throw new Error('No readable content detected in the selected file.');
+        }
+
+        return summary;
       }
-
-      const summary =
-        typeof data === 'string'
-          ? data.trim()
-          : String(data?.content || data?.ocr?.analysis || '').trim();
-
-      if (!summary) {
-        throw new Error('No readable content detected in the selected file.');
-      }
-
-      return summary;
+      throw new Error('Could not analyze study material.');
     },
     [],
   );
@@ -219,10 +384,28 @@ export function ExamPrepWizard(): React.ReactElement {
           : 0;
 
       if (sizeBytes > MAX_MATERIAL_SIZE_BYTES) {
-        Alert.alert(
-          'File too large',
-          'Please use files up to 8MB for exam material analysis.',
-        );
+        if (file.mimeType === 'application/pdf') {
+          Alert.alert(
+            'PDF too large',
+            `This PDF is ${formatSizeMB(sizeBytes)}MB. Exam material PDFs must be ${MAX_MATERIAL_SIZE_MB}MB or smaller.`,
+            [
+              {
+                text: 'Compression steps',
+                onPress: () =>
+                  Alert.alert(
+                    'Compress PDF in terminal',
+                    'Install Ghostscript: sudo apt install -y ghostscript\n\nCompress command:\ngs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -dNOPAUSE -dQUIET -dBATCH -sOutputFile=compressed.pdf input.pdf'
+                  ),
+              },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'File too large',
+            `This file is ${formatSizeMB(sizeBytes)}MB. Please use files up to ${MAX_MATERIAL_SIZE_MB}MB for exam material analysis.`,
+          );
+        }
         return;
       }
 
@@ -256,6 +439,13 @@ export function ExamPrepWizard(): React.ReactElement {
           status: 'error',
           error: message,
         });
+        if (
+          message.toLowerCase().includes('quota') ||
+          message.toLowerCase().includes('busy right now') ||
+          message.toLowerCase().includes('rate')
+        ) {
+          Alert.alert('Study material analysis unavailable', message);
+        }
       }
     },
     [summarizeStudyMaterial, updateStudyMaterial],
@@ -422,6 +612,12 @@ export function ExamPrepWizard(): React.ReactElement {
         );
         return;
       }
+      if (examQuotaLimit > 0 && examQuotaRemaining <= 0) {
+        Alert.alert(
+          'AI quota warning',
+          'Your monthly exam quota appears exhausted. Generation may fail until usage is reset or your plan is upgraded.',
+        );
+      }
 
       const customPrompt = buildCustomPrompt();
       const draftId = customPrompt
@@ -453,6 +649,8 @@ export function ExamPrepWizard(): React.ReactElement {
       selectedExamType,
       selectedLanguage,
       hasMaterialProcessing,
+      examQuotaLimit,
+      examQuotaRemaining,
       buildCustomPrompt,
       childName,
       studentId,
@@ -590,6 +788,35 @@ export function ExamPrepWizard(): React.ReactElement {
 
         {step === 'review' ? (
           <>
+            {examQuotaLimit > 0 ? (
+              <View style={[styles.usageCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.usageCardHeader}>
+                  <Ionicons name="sparkles-outline" size={16} color={theme.primary} />
+                  <Text style={[styles.usageCardTitle, { color: theme.text }]}>AI Usage This Month</Text>
+                </View>
+                <View style={styles.usageRingWrap}>
+                  <QuotaRingWithStatus
+                    featureName="Exam prep"
+                    used={examQuotaUsed}
+                    limit={examQuotaLimit}
+                    size={66}
+                  />
+                </View>
+                <Text style={[styles.usageCardHint, { color: theme.muted }]}>
+                  {examQuotaUsed}/{examQuotaLimit} exam-related AI actions used this month.
+                </Text>
+              </View>
+            ) : null}
+
+            {examQuotaWarning ? (
+              <View style={[styles.usageWarning, { borderColor: `${theme.warning}55`, backgroundColor: `${theme.warning}12` }]}>
+                <Ionicons name="warning-outline" size={15} color={theme.warning} />
+                <Text style={[styles.usageWarningText, { color: theme.warning }]}>
+                  {examQuotaWarning}
+                </Text>
+              </View>
+            ) : null}
+
             <ExamPrepReviewStep
               theme={theme}
               childName={childName}

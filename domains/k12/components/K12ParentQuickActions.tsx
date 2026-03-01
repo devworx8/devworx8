@@ -8,7 +8,7 @@
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '@/contexts/ThemeContext';
@@ -35,11 +35,9 @@ interface QuickAction {
 function AttentionCard({
   children,
   color,
-  theme,
 }: {
   children: React.ReactNode;
   color: string;
-  theme: ThemeColors;
 }) {
   const glowAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
@@ -72,6 +70,7 @@ function AttentionCard({
   return (
     <Animated.View
       style={{
+        width: '100%',
         shadowColor: color,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: glowOpacity,
@@ -92,6 +91,8 @@ export function K12ParentQuickActions({
   paymentsNeedAttention = false,
 }: K12ParentQuickActionsProps) {
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const compactLayout = width < 360;
 
   const quickActions: QuickAction[] = useMemo(() => [
     { id: 'homework', actionId: 'homework', icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), color: '#06B6D4' },
@@ -111,7 +112,7 @@ export function K12ParentQuickActions({
           </Text>
         </View>
         <Text style={[styles.sectionHeaderHint, { color: theme.textSecondary }]}>
-          {t('dashboard.quick_actions_hint', { defaultValue: 'Shortcuts to messages, attendance, payments, and announcements.' })}
+          {t('dashboard.quick_actions_hint', { defaultValue: 'Quick access to homework, messages, payments, attendance, and progress.' })}
         </Text>
       </GlassCard>
       <View style={styles.quickActionsGrid}>
@@ -120,9 +121,9 @@ export function K12ParentQuickActions({
           const cardColor = action.color;
           const cardContent = (
             <TouchableOpacity
-              key={action.id}
               style={[
                 styles.quickActionCard,
+                compactLayout ? styles.quickActionCardCompact : styles.quickActionCardRegular,
                 {
                   backgroundColor: quickWinsEnabled ? 'rgba(255,255,255,0.06)' : theme.surfaceVariant,
                   borderColor: needsAttention ? cardColor + '80' : (quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border),
@@ -131,6 +132,8 @@ export function K12ParentQuickActions({
               ]}
               onPress={() => onActionPress(action.actionId)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: cardColor + '20' }]}>
                 <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={24} color={cardColor} />
@@ -140,15 +143,25 @@ export function K12ParentQuickActions({
                   </View>
                 )}
               </View>
-              <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
+              <Text style={[styles.quickActionLabel, { color: theme.text }]} numberOfLines={2}>
+                {action.label}
+              </Text>
             </TouchableOpacity>
           );
-          return needsAttention ? (
-            <AttentionCard key={action.id} color={cardColor} theme={theme}>
-              {cardContent}
-            </AttentionCard>
-          ) : (
-            <View key={action.id}>{cardContent}</View>
+          return (
+            <View
+              key={action.id}
+              style={[
+                styles.quickActionItem,
+                compactLayout ? styles.quickActionItemCompact : styles.quickActionItemRegular,
+              ]}
+            >
+              {needsAttention ? (
+                <AttentionCard color={cardColor}>{cardContent}</AttentionCard>
+              ) : (
+                cardContent
+              )}
+            </View>
           );
         })}
       </View>
