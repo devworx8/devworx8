@@ -151,8 +151,8 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
   const financialMetrics = [
     {
       id: 'expected_income',
-      title: t('dashboard.expected_income', { defaultValue: 'Expected Income' }),
-      subtitle: t('dashboard.expected_income_hint', { defaultValue: `${totalStudents} children × tuition this month` }),
+      title: t('dashboard.expected_income', { defaultValue: 'Expected This Month' }),
+      subtitle: t('dashboard.expected_income_hint', { defaultValue: `All ${totalStudents} children's fees combined` }),
       value: expectedTuition > 0 ? fmtR(expectedTuition) : '—',
       icon: 'calculator',
       color: '#6366F1',
