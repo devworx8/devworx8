@@ -44,6 +44,28 @@ Typecheck (`npm run typecheck`) requires 8 GB heap via `NODE_OPTIONS=--max-old-s
 
 These are gitignored. The Supabase anon key and URL are committed in `eas.json` as they are public (anon role only).
 
+### Creating Environment Files
+
+Env files are gitignored and must be created on first setup. Supabase credentials come from `eas.json`:
+
+```bash
+node -e "
+const eas = require('./eas.json');
+const url = eas.build.development.env.EXPO_PUBLIC_SUPABASE_URL;
+const key = eas.build.development.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const fs = require('fs');
+let env = fs.readFileSync('.env.example', 'utf8');
+env = env.replace('EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co', 'EXPO_PUBLIC_SUPABASE_URL=' + url);
+env = env.replace('EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here', 'EXPO_PUBLIC_SUPABASE_ANON_KEY=' + key);
+env = env.replace('EXPO_PUBLIC_API_BASE=https://your-project.supabase.co/functions/v1', 'EXPO_PUBLIC_API_BASE=' + url + '/functions/v1');
+fs.writeFileSync('.env', env);
+fs.writeFileSync('web/.env.local', 'NEXT_PUBLIC_SUPABASE_URL=' + url + '\nNEXT_PUBLIC_SUPABASE_ANON_KEY=' + key + '\n');
+let soaEnv = fs.readFileSync('soa-web/.env.example', 'utf8');
+soaEnv = soaEnv.replace('NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here', 'NEXT_PUBLIC_SUPABASE_ANON_KEY=' + key);
+fs.writeFileSync('soa-web/.env.local', soaEnv);
+"
+```
+
 ### Gotchas
 
 - The web dev server (`next dev --webpack`) can take 10-15 seconds for first page compilation. `curl` may time out on the first request; wait for "Ready" in the dev server logs before testing.
