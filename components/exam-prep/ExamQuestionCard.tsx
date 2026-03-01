@@ -5,19 +5,27 @@
  * answer options / text input, and post-submission feedback.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
 import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
 import { containsMathDelimiters, parseMathSegments } from '@/components/exam-prep/mathSegments';
+import { assertSupabase } from '@/lib/supabase';
 
 type WorkspaceTab = 'answer' | 'work';
+type TranslatedQuestionContent = {
+  sectionInstructions?: string;
+  readingPassage?: string;
+  question: string;
+  options?: string[];
+};
 
 interface ExamQuestionCardProps {
   section: ExamSection;
   question: ExamQuestion;
+  examLanguage?: string;
   currentIndex: number;
   currentAnswer: string;
   studentAnswer?: StudentAnswer;
@@ -77,6 +85,7 @@ function parseStandaloneMath(value: string): { expression: string; displayMode: 
 export function ExamQuestionCard({
   section,
   question,
+  examLanguage,
   currentIndex,
   currentAnswer,
   studentAnswer,
@@ -90,11 +99,135 @@ export function ExamQuestionCard({
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('answer');
   const [workText, setWorkText] = useState('');
   const [showMathPreview, setShowMathPreview] = useState(false);
-  const sectionInstructionsMath = parseStandaloneMath(section.instructions || '');
-  const questionMath = parseStandaloneMath(question.question);
-  const readingPassageMath = parseStandaloneMath(section.readingPassage || '');
+  const [translatedContentByQuestion, setTranslatedContentByQuestion] = useState<Record<string, TranslatedQuestionContent>>({});
+  const [translatedVisibleByQuestion, setTranslatedVisibleByQuestion] = useState<Record<string, boolean>>({});
+  const [translatingQuestionId, setTranslatingQuestionId] = useState<string | null>(null);
+  const [translationErrorByQuestion, setTranslationErrorByQuestion] = useState<Record<string, string>>({});
+
+  const canTranslateToEnglish = useMemo(() => {
+    const normalized = String(examLanguage || '').trim().toLowerCase();
+    if (!normalized) return false;
+    return !normalized.startsWith('en');
+  }, [examLanguage]);
+
+  const translatedContent = translatedContentByQuestion[question.id];
+  const showTranslated = translatedVisibleByQuestion[question.id] === true;
+
+  const displaySectionInstructions = showTranslated
+    ? translatedContent?.sectionInstructions || section.instructions || ''
+    : section.instructions || '';
+  const displayReadingPassage = showTranslated
+    ? translatedContent?.readingPassage || section.readingPassage || ''
+    : section.readingPassage || '';
+  const displayQuestionText = showTranslated
+    ? translatedContent?.question || question.question
+    : question.question;
+  const displayOptions = showTranslated && translatedContent?.options?.length
+    ? translatedContent.options
+    : question.options;
+
+  const sectionInstructionsMath = parseStandaloneMath(displaySectionInstructions || '');
+  const questionMath = parseStandaloneMath(displayQuestionText);
+  const readingPassageMath = parseStandaloneMath(displayReadingPassage || '');
   const feedbackMath = parseStandaloneMath(studentAnswer?.feedback || '');
   const correctAnswerMath = parseStandaloneMath(question.correctAnswer || '');
+
+  const translateTextToEnglish = useCallback(async (rawValue?: string): Promise<string> => {
+    const value = String(rawValue || '').trim();
+    if (!value) return '';
+
+    const supabase = assertSupabase();
+    const { data, error } = await supabase.functions.invoke('ai-proxy', {
+      body: {
+        scope: 'student',
+        service_type: 'lesson_generation',
+        payload: {
+          prompt: [
+            'Translate this educational text into plain South African English.',
+            'Preserve math notation, numbering, and mark references.',
+            'Return only the translated text with no extra commentary.',
+            '',
+            value,
+          ].join('\n'),
+          context:
+            'You are a precise translation assistant for a K-12 exam platform. Keep educational intent unchanged.',
+        },
+        stream: false,
+        enable_tools: false,
+        metadata: {
+          source: 'exam_question.translate_to_english',
+          target_language: 'en',
+        },
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Translation failed');
+    }
+
+    const translated =
+      typeof data === 'string'
+        ? data.trim()
+        : String(data?.content || data?.choices?.[0]?.message?.content || '').trim();
+
+    if (!translated) {
+      throw new Error('Empty translation response');
+    }
+
+    return translated;
+  }, []);
+
+  const handleTranslateQuestion = useCallback(async () => {
+    if (showTranslated) {
+      setTranslatedVisibleByQuestion((prev) => ({ ...prev, [question.id]: false }));
+      return;
+    }
+
+    if (translatedContentByQuestion[question.id]) {
+      setTranslatedVisibleByQuestion((prev) => ({ ...prev, [question.id]: true }));
+      return;
+    }
+
+    try {
+      setTranslatingQuestionId(question.id);
+      const [translatedInstructions, translatedPassage, translatedQuestion, translatedOptions] = await Promise.all([
+        translateTextToEnglish(section.instructions),
+        translateTextToEnglish(section.readingPassage),
+        translateTextToEnglish(question.question),
+        question.options?.length
+          ? Promise.all(question.options.map((option) => translateTextToEnglish(option)))
+          : Promise.resolve(undefined),
+      ]);
+
+      const translatedPayload: TranslatedQuestionContent = {
+        sectionInstructions: translatedInstructions || undefined,
+        readingPassage: translatedPassage || undefined,
+        question: translatedQuestion || question.question,
+        options: translatedOptions?.length ? translatedOptions : undefined,
+      };
+
+      setTranslatedContentByQuestion((prev) => ({ ...prev, [question.id]: translatedPayload }));
+      setTranslatedVisibleByQuestion((prev) => ({ ...prev, [question.id]: true }));
+      setTranslationErrorByQuestion((prev) => ({ ...prev, [question.id]: '' }));
+    } catch {
+      setTranslatedVisibleByQuestion((prev) => ({ ...prev, [question.id]: false }));
+      setTranslationErrorByQuestion((prev) => ({
+        ...prev,
+        [question.id]: 'Translation failed. Please retry.',
+      }));
+    } finally {
+      setTranslatingQuestionId((prev) => (prev === question.id ? null : prev));
+    }
+  }, [
+    showTranslated,
+    translatedContentByQuestion,
+    question.id,
+    question.question,
+    question.options,
+    section.instructions,
+    section.readingPassage,
+    translateTextToEnglish,
+  ]);
 
   const renderRichMathText = (
     value: string,
@@ -163,24 +296,24 @@ export function ExamQuestionCard({
         <Text style={[styles.sectionTitle, { color: theme.primary }]}>
           {section.title}
         </Text>
-        {section.instructions ? (
+        {displaySectionInstructions ? (
           sectionInstructionsMath ? (
             <MathRenderer
               expression={sectionInstructionsMath.expression}
               displayMode={sectionInstructionsMath.displayMode}
             />
-          ) : containsMathDelimiters(section.instructions || '') ? (
-            renderRichMathText(section.instructions || '', styles.sectionInstructions, theme.textSecondary)
+          ) : containsMathDelimiters(displaySectionInstructions || '') ? (
+            renderRichMathText(displaySectionInstructions || '', styles.sectionInstructions, theme.textSecondary)
           ) : (
             <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
-              {section.instructions}
+              {displaySectionInstructions}
             </Text>
           )
         ) : null}
       </View>
 
       {/* Reading Passage */}
-      {section.readingPassage ? (
+      {displayReadingPassage ? (
         <View style={[styles.readingPassageCard, { backgroundColor: theme.surface }]}>
           <View style={styles.passageLabelRow}>
             <Ionicons name="book-outline" size={14} color={theme.primary} />
@@ -190,11 +323,11 @@ export function ExamQuestionCard({
         </View>
           {readingPassageMath ? (
             <MathRenderer expression={readingPassageMath.expression} displayMode={readingPassageMath.displayMode} />
-          ) : containsMathDelimiters(section.readingPassage || '') ? (
-            renderRichMathText(section.readingPassage || '', styles.readingPassageText, theme.text)
+          ) : containsMathDelimiters(displayReadingPassage || '') ? (
+            renderRichMathText(displayReadingPassage || '', styles.readingPassageText, theme.text)
           ) : (
             <Text style={[styles.readingPassageText, { color: theme.text }]}>
-              {section.readingPassage}
+              {displayReadingPassage}
             </Text>
           )}
         </View>
@@ -220,13 +353,48 @@ export function ExamQuestionCard({
           </View>
         </View>
 
+        {canTranslateToEnglish ? (
+          <View style={styles.translateRow}>
+            <TouchableOpacity
+              style={[
+                styles.translateButton,
+                {
+                  borderColor: showTranslated ? theme.primary : theme.border,
+                  backgroundColor: showTranslated ? `${theme.primary}20` : theme.background,
+                },
+              ]}
+              onPress={handleTranslateQuestion}
+              disabled={translatingQuestionId === question.id}
+            >
+              {translatingQuestionId === question.id ? (
+                <View style={styles.translateBusy}>
+                  <Ionicons name="sync-outline" size={12} color={theme.primary} />
+                  <Text style={[styles.translateLabel, { color: theme.primary }]}>Translating...</Text>
+                </View>
+              ) : (
+                <View style={styles.translateBusy}>
+                  <Ionicons name="language-outline" size={12} color={theme.primary} />
+                  <Text style={[styles.translateLabel, { color: theme.primary }]}>
+                    {showTranslated ? 'Show original' : 'Translate to English'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            {translationErrorByQuestion[question.id] ? (
+              <Text style={[styles.translateError, { color: theme.error || '#ef4444' }]}>
+                {translationErrorByQuestion[question.id]}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {questionMath ? (
           <MathRenderer expression={questionMath.expression} displayMode={questionMath.displayMode} />
-        ) : containsMathDelimiters(question.question || '') ? (
-          renderRichMathText(question.question || '', styles.questionText, theme.text)
+        ) : containsMathDelimiters(displayQuestionText || '') ? (
+          renderRichMathText(displayQuestionText || '', styles.questionText, theme.text)
         ) : (
           <Text style={[styles.questionText, { color: theme.text }]}>
-            {question.question}
+            {displayQuestionText}
           </Text>
         )}
 
@@ -236,7 +404,9 @@ export function ExamQuestionCard({
             {question.options.map((option, index) => {
               const optionLetter = String.fromCharCode(65 + index);
               const cleanedOption = option.replace(/^\s*[A-D]\s*[\.\)\-:]\s*/i, '').trim();
-              const optionMath = parseStandaloneMath(cleanedOption);
+              const translatedOption = displayOptions?.[index];
+              const displayOption = String(translatedOption || cleanedOption).trim();
+              const optionMath = parseStandaloneMath(displayOption);
               const isSelected =
                 currentAnswer === option ||
                 currentAnswer === cleanedOption ||
@@ -325,9 +495,9 @@ export function ExamQuestionCard({
                         expression={optionMath.expression}
                         displayMode={false}
                       />
-                    ) : containsMathDelimiters(cleanedOption) ? (
+                    ) : containsMathDelimiters(displayOption) ? (
                       renderRichMathText(
-                        cleanedOption,
+                        displayOption,
                         styles.optionText,
                         isLocked
                           ? lockedTextColor
@@ -344,7 +514,7 @@ export function ExamQuestionCard({
                           },
                         ]}
                       >
-                        {cleanedOption}
+                        {displayOption}
                       </Text>
                     )}
                   </View>
@@ -696,6 +866,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 16,
+  },
+  translateRow: {
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  translateButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  translateBusy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  translateLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  translateError: {
+    fontSize: 11,
+    marginTop: 6,
   },
   optionsContainer: {
     marginTop: 8,

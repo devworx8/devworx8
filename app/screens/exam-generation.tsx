@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { consumeExamGenerationDraft } from '@/lib/exam-prep/generationDraftStore';
 import { parseExamMarkdown, type ParsedExam } from '@/lib/examParser';
 import { ExamInteractiveView, type ExamResults } from '@/components/exam-prep/ExamInteractiveView';
 import { ExamFlashcardsView } from '@/components/exam-prep/ExamFlashcardsView';
@@ -61,6 +62,7 @@ export default function ExamGenerationScreen() {
     schoolId?: string;
     childName?: string;
     useTeacherContext?: string;
+    draftId?: string;
     examId?: string;
     loadSaved?: string;
   }>();
@@ -74,8 +76,11 @@ export default function ExamGenerationScreen() {
   const schoolId = toSafeParam(params.schoolId);
   const childName = toSafeParam(params.childName);
   const useTeacherContext = toBool(toSafeParam(params.useTeacherContext), true);
+  const draftId = toSafeParam(params.draftId);
   const savedExamId = toSafeParam(params.examId);
   const loadSaved = toBool(toSafeParam(params.loadSaved), false);
+  const [generationDraft] = useState(() => consumeExamGenerationDraft(draftId));
+  const customPrompt = generationDraft?.customPrompt?.trim() || '';
 
   const { data: aiLimits } = useAIUserLimits();
   const [state, setState] = useState<GenerationState>('loading');
@@ -141,6 +146,7 @@ export default function ExamGenerationScreen() {
           subject,
           examType,
           language,
+          customPrompt: customPrompt || undefined,
           studentId,
           classId,
           schoolId,
@@ -217,7 +223,18 @@ export default function ExamGenerationScreen() {
       setError(message);
       setState('error');
     }
-  }, [grade, subject, examType, language, studentId, classId, schoolId, useTeacherContext, parseExamPayload]);
+  }, [
+    grade,
+    subject,
+    examType,
+    language,
+    customPrompt,
+    studentId,
+    classId,
+    schoolId,
+    useTeacherContext,
+    parseExamPayload,
+  ]);
 
   const loadSavedExam = useCallback(async () => {
     if (!savedExamId) return;
@@ -400,6 +417,7 @@ export default function ExamGenerationScreen() {
               <ExamInteractiveView
                 exam={exam}
                 examId={examId}
+                examLanguage={language}
                 studentId={studentId}
                 classId={classId}
                 schoolId={schoolId}

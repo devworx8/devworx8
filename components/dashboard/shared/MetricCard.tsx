@@ -31,6 +31,8 @@ export interface MetricCardProps {
   glow?: boolean;
   /** Optional badge count (shown on icon) */
   badge?: number;
+  /** Show attention badge icon (!) when card needs attention (e.g. due soon) */
+  attentionBadge?: boolean;
   /** Priority level for visual indicator - 🔴 urgent, 🟡 important, 🟢 informational */
   priority?: 'urgent' | 'important' | 'informational';
 }
@@ -48,18 +50,20 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   cardWidth: customCardWidth,
   glow = false,
   badge,
+  attentionBadge = false,
   priority,
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme, customCardWidth);
-  
-  // Animated value for glow effect
+
+  // Glow: shadow/opacity (useNativeDriver: false)
   const glowAnim = useRef(new Animated.Value(0)).current;
-  
-  // Start glow animation when glow prop is true
+  // Pulse: scale (useNativeDriver: true)
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (glow) {
-      const animation = Animated.loop(
+      const glowLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, {
             toValue: 1,
@@ -73,22 +77,43 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           }),
         ])
       );
-      animation.start();
-      return () => animation.stop();
+      glowLoop.start();
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+      pulseLoop.start();
+      return () => {
+        glowLoop.stop();
+        pulseLoop.stop();
+      };
     } else {
       glowAnim.setValue(0);
+      pulseAnim.setValue(0);
     }
-  }, [glow, glowAnim]);
-  
-  // Interpolate glow values
+  }, [glow, glowAnim, pulseAnim]);
+
   const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.15, 0.4],
+    outputRange: [0.2, 0.5],
   });
-  
   const shadowRadius = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [8, 20],
+    outputRange: [10, 24],
+  });
+  const pulseScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.03],
   });
 
   const getTrendColor = (trendType: string) => {
@@ -145,6 +170,8 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 
   const priorityInfo = getPriorityInfo(priority);
 
+  const showBadge = (badge !== undefined && badge > 0) || attentionBadge;
+
   return (
     <Animated.View
       style={[
@@ -156,8 +183,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           shadowOffset: { width: 0, height: 0 },
           shadowOpacity: glowOpacity,
           shadowRadius: shadowRadius,
-          elevation: 8,
+          elevation: 10,
         },
+        glow && { transform: [{ scale: pulseScale }] },
       ]}
     >
       <TouchableOpacity
@@ -165,7 +193,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           styles.metricCard,
           size === 'large' && styles.metricCardLarge,
           size === 'small' && styles.metricCardSmall,
-          glow && { borderWidth: 1, borderColor: color + '40' },
+          glow && { borderWidth: 1.5, borderColor: color + '60' },
           priorityInfo && { borderLeftWidth: 3, borderLeftColor: priorityInfo.color },
         ]}
         onPress={onPress}
@@ -188,12 +216,16 @@ export const MetricCard: React.FC<MetricCardProps> = ({
                 size={isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)} 
                 color={color} 
               />
-              {/* Badge counter */}
-              {badge !== undefined && badge > 0 && (
-                <View style={[styles.badge, { backgroundColor: color }]}>
-                  <Text style={styles.badgeText}>
-                    {badge > 99 ? '99+' : badge}
-                  </Text>
+              {/* Badge: count or attention icon */}
+              {showBadge && (
+                <View style={[styles.badge, { backgroundColor: attentionBadge ? theme.warning : color }]}>
+                  {attentionBadge ? (
+                    <Ionicons name="alert-circle" size={isSmallScreen ? 10 : 12} color="#fff" />
+                  ) : (
+                    <Text style={styles.badgeText}>
+                      {(badge ?? 0) > 99 ? '99+' : (badge ?? 0)}
+                    </Text>
+                  )}
                 </View>
               )}
             </View>

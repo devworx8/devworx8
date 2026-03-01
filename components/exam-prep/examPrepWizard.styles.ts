@@ -392,4 +392,74 @@ export const examPrepWizardStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  materialCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+    gap: 10,
+  },
+  materialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  materialTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  materialSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  materialActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  materialActionBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  materialActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  materialItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  materialMeta: {
+    flex: 1,
+    marginRight: 8,
+  },
+  materialName: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  materialStatus: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+  materialRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  customPromptInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 86,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+    lineHeight: 18,
+  },
 });

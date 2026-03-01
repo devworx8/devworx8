@@ -105,6 +105,7 @@ export const MissionControlSection: React.FC<MissionControlSectionProps> = ({
                     size="small"
                     cardWidth={cardWidth}
                     glow={Boolean(action.glow)}
+                    attentionBadge={Boolean(action.glow)}
                     onPress={() => {
                       if (action.disabled) {
                         onUpgrade();

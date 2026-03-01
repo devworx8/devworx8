@@ -34,6 +34,7 @@ import { ExamFooter } from './ExamFooter';
 interface ExamInteractiveViewProps {
   exam: ParsedExam;
   examId: string;
+  examLanguage?: string;
   studentId?: string;
   classId?: string;
   schoolId?: string;
@@ -57,6 +58,7 @@ const AUTO_SUBMIT_TYPES: ExamQuestion['type'][] = ['multiple_choice', 'true_fals
 export function ExamInteractiveView({
   exam,
   examId,
+  examLanguage,
   studentId,
   classId,
   schoolId,
@@ -308,6 +310,7 @@ export function ExamInteractiveView({
         <ExamQuestionCard
           section={currentSection}
           question={currentQuestion}
+          examLanguage={examLanguage}
           currentIndex={currentIndex}
           currentAnswer={currentAnswer}
           studentAnswer={currentStudentAnswer}

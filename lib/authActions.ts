@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { signOut } from '@/lib/sessionManager';
 import { Platform, BackHandler } from 'react-native';
 import { deactivateCurrentUserTokens } from './pushTokenUtils';
+import { assertSupabase } from '@/lib/supabase';
 
 let AsyncStorage: any = null;
 try {
@@ -148,6 +149,16 @@ function forceNavigate(targetRoute: string): void {
   }
 }
 
+async function hasActiveSupabaseSession(): Promise<boolean> {
+  try {
+    const { data: { session } } = await assertSupabase().auth.getSession();
+    return !!session?.user?.id;
+  } catch {
+    // If we cannot confirm session state, keep existing behavior paths.
+    return false;
+  }
+}
+
 /**
  * Complete sign-out: clears session, storage, and navigates to sign-in
  * This ensures all auth state is properly cleaned up
@@ -193,14 +204,26 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
   const preserveOtherSessions =
     options?.preserveOtherSessions !== false; // default: true (local sign-out preserves biometric sessions)
   
-  // Overall timeout to prevent infinite hang - force navigation after 15 seconds
+  // Overall timeout to prevent infinite hang; only force sign-in navigation if session is already cleared.
   const overallTimeoutId = setTimeout(() => {
     if (activeSignOutId !== opId) {
       return;
     }
-    console.error('[authActions] Sign-out overall timeout reached, forcing navigation');
-    forceNavigate(targetRouteWithFresh);
-    isSigningOut = false;
+    void (async () => {
+      const sessionStillActive = await hasActiveSupabaseSession();
+      if (sessionStillActive) {
+        console.warn('[authActions] Sign-out timeout reached but session is still active; skipping forced sign-in navigation');
+        isSigningOut = false;
+        signOutStartTime = 0;
+        activeSignOutId = 0;
+        return;
+      }
+      console.error('[authActions] Sign-out overall timeout reached, forcing navigation');
+      forceNavigate(targetRouteWithFresh);
+      isSigningOut = false;
+      signOutStartTime = 0;
+      activeSignOutId = 0;
+    })();
   }, OVERALL_SIGNOUT_TIMEOUT);
   
   try {
@@ -266,6 +289,12 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     // Give the Supabase auth state change event time to propagate
     // This ensures AuthContext receives the SIGNED_OUT event
     await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Guard against timeout race: do not route to sign-in while session is still active.
+    if (await hasActiveSupabaseSession()) {
+      console.warn('[authActions] Sign-out attempt finished but session is still active; aborting sign-in navigation');
+      return;
+    }
     
     // Optionally exit app after sign-out (Android only)
     if (shouldExitApp) {
