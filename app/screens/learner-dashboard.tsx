@@ -33,7 +33,7 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 
 // Soil of Africa logo
-const SOA_LOGO = require('@/assets/branding/soa-logo.png');
+const SOA_LOGO = require('@/assets/branding/png/icon-512.png');
 
 export default function LearnerDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();

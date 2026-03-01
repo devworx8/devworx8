@@ -37,6 +37,7 @@ export interface UserProfile {
     | 'superadmin';
   organization_id?: string;
   organization_name?: string;
+  school_type?: string | null;
   preschool_id?: string;
   preschool_name?: string;
   first_name?: string;

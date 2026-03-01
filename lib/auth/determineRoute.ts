@@ -220,6 +220,18 @@ export function determineUserRoute(
   }));
 
   const resolvedDashboardSchoolType = resolveSchoolTypeFromProfile(profile);
+  debugLog('[ROUTE DEBUG] School type context:', {
+    resolvedDashboardSchoolType,
+    organizationId: profile.organization_id || (profile as any)?.preschool_id || null,
+    organizationName:
+      (profile as any)?.organization_name ||
+      (profile as any)?.organization_membership?.organization_name ||
+      null,
+    schoolType:
+      (profile as any)?.school_type ||
+      (profile as any)?.organization_membership?.school_type ||
+      null,
+  });
   const resolveDashboardPathForRole = (roleValue: string): string | null =>
     getDashboardRouteForRole({
       role: roleValue,

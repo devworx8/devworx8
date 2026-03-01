@@ -38,6 +38,7 @@ export function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
     avatar_url: p.avatar_url,
     organization_id: p.organization_id,
     organization_name: p.organization_name,
+    school_type: p.school_type || p.organization_membership?.school_type,
     seat_status: p.seat_status || 'active',
     capabilities: p.capabilities || [],
     created_at: p.created_at,
@@ -52,6 +53,7 @@ export function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
     invited_by: p.invited_by || p.organization_membership?.invited_by,
     created_at: p.created_at,
     member_type: p.organization_membership?.member_type,
+    school_type: p.school_type || p.organization_membership?.school_type,
   });
 }
 
@@ -95,6 +97,10 @@ export async function persistProfileSnapshot(
       role: enhancedProfile.role as any,
       organization_id: enhancedProfile.organization_id || undefined,
       organization_name: organizationName,
+      school_type:
+        (enhancedProfile as any)?.school_type ||
+        enhancedProfile.organization_membership?.school_type ||
+        undefined,
       preschool_id: (enhancedProfile as any)?.preschool_id || undefined,
       preschool_name: organizationName,
       first_name: enhancedProfile.first_name || undefined,
@@ -188,6 +194,10 @@ export async function buildFallbackProfileFromSession(
   let organizationName =
     dbProfile?.organization_name || userMeta.organization_name || appMeta.organization_name ||
     safeProfile?.organization_name || safeProfile?.organization_membership?.organization_name;
+  let organizationSchoolType =
+    (safeProfile as any)?.school_type ||
+    safeProfile?.organization_membership?.school_type ||
+    null;
 
   const firstName = dbProfile?.first_name || userMeta.first_name || userMeta.given_name || safeProfile?.first_name || '';
   const lastName = dbProfile?.last_name || userMeta.last_name || userMeta.family_name || safeProfile?.last_name || '';
@@ -224,23 +234,33 @@ export async function buildFallbackProfileFromSession(
     } catch { /* non-fatal */ }
   }
 
-  // Best-effort: resolve organization name from DB
-  if (organizationId && !organizationName) {
+  // Best-effort: resolve organization name / school type from DB
+  if (organizationId && (!organizationName || !organizationSchoolType)) {
     try {
       const preschoolResult: any = await Promise.race([
-        assertSupabase().from('preschools').select('name').eq('id', organizationId).maybeSingle(),
+        assertSupabase().from('preschools').select('name, school_type').eq('id', organizationId).maybeSingle(),
         new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
       ]);
       const preschool = preschoolResult?.data ?? preschoolResult;
       if (preschool?.name) {
-        organizationName = preschool.name;
-      } else {
+        if (!organizationName) organizationName = preschool.name;
+        if (!organizationSchoolType && preschool?.school_type) {
+          organizationSchoolType = preschool.school_type;
+        }
+      }
+
+      if (!organizationName || !organizationSchoolType) {
         const orgResult: any = await Promise.race([
-          assertSupabase().from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+          assertSupabase().from('organizations').select('name, type').eq('id', organizationId).maybeSingle(),
           new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
         ]);
         const org = orgResult?.data ?? orgResult;
-        if (org?.name) organizationName = org.name;
+        if (org?.name) {
+          if (!organizationName) organizationName = org.name;
+          if (!organizationSchoolType && org?.type) {
+            organizationSchoolType = org.type;
+          }
+        }
       }
     } catch { /* non-fatal */ }
   }
@@ -257,6 +277,7 @@ export async function buildFallbackProfileFromSession(
     avatar_url: userMeta.avatar_url || userMeta.picture || safeProfile?.avatar_url,
     organization_id: organizationId,
     organization_name: organizationName,
+    school_type: organizationSchoolType,
     preschool_id:
       dbProfile?.preschool_id || userMeta.preschool_id || appMeta.preschool_id ||
       (safeProfile as any)?.preschool_id || organizationId,
@@ -277,7 +298,7 @@ export async function buildFallbackProfileFromSession(
           invited_by: safeProfile?.organization_membership?.invited_by,
           joined_at: safeProfile?.organization_membership?.joined_at || baseProfile.created_at,
           member_type: safeProfile?.organization_membership?.member_type,
-          school_type: safeProfile?.organization_membership?.school_type,
+          school_type: organizationSchoolType || safeProfile?.organization_membership?.school_type,
         }
       : undefined);
 

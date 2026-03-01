@@ -100,6 +100,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     const resolvedPreschoolId = profile.preschool_id || profile.organization_id;
     let organizationName: string | undefined;
     let preschoolName: string | undefined;
+    let schoolType: string | null = null;
 
     if (resolvedOrgId || resolvedPreschoolId) {
       const candidateIds = Array.from(new Set([resolvedOrgId, resolvedPreschoolId].filter(Boolean))) as string[];
@@ -107,12 +108,13 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
         try {
           const { data: pres } = await assertSupabase()
             .from('preschools')
-            .select('name')
+            .select('name, school_type')
             .eq('id', candidateId)
             .maybeSingle();
           if (pres?.name) {
             preschoolName = pres.name;
             organizationName = pres.name;
+            schoolType = pres.school_type || null;
             break;
           }
         } catch {
@@ -121,11 +123,12 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
         try {
           const { data: org } = await assertSupabase()
             .from('organizations')
-            .select('name')
+            .select('name, type')
             .eq('id', candidateId)
             .maybeSingle();
           if (org?.name) {
             organizationName = org.name;
+            schoolType = org.type || null;
             break;
           }
         } catch {
@@ -143,6 +146,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       avatar_url: profile.avatar_url,
       organization_id: resolvedOrgId,
       organization_name: organizationName,
+      school_type: schoolType,
       preschool_id: resolvedPreschoolId,
       preschool_name: preschoolName,
       seat_status: profile.is_active !== false ? 'active' : 'inactive',
@@ -282,6 +286,11 @@ export async function buildMinimalProfileFromUser(user: User, overrides?: Partia
     avatar_url: mergedOverrides?.avatar_url || userMeta.avatar_url || userMeta.picture,
     organization_id: organizationId,
     organization_name: mergedOverrides?.organization_name || userMeta.organization_name || appMeta.organization_name,
+    school_type:
+      (mergedOverrides as any)?.school_type ||
+      userMeta.school_type ||
+      appMeta.school_type ||
+      null,
     preschool_id: preschoolId,
     seat_status: mergedOverrides?.seat_status || 'active',
     capabilities,

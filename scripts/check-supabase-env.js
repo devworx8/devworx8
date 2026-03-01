@@ -1,7 +1,19 @@
 #!/usr/bin/env node
 // Env presence check for Supabase (no secrets printed)
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL || ''
-const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''
+require('dotenv').config({ path: '.env' });
+require('dotenv').config({ path: '.env.local', override: true });
+require('dotenv').config({ path: '.env.eas', override: true });
+
+const url =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  '';
+const anon =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  '';
 const summary = {
   hasUrl: !!url,
   hasAnon: !!anon,
