@@ -33,40 +33,89 @@ export function FinanceReceivablesTab({
     queryFn: async () => {
       if (!organizationId) return null;
       const supabase = assertSupabase();
-      const { data } = await supabase
+
+      const { data: students } = await supabase
+        .from('students')
+        .select('id, first_name, last_name, class_id')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .eq('is_active', true)
+        .eq('status', 'active')
+        .order('first_name', { ascending: true });
+
+      if (!students || students.length === 0) return null;
+
+      const studentIds = students.map((s: any) => s.id);
+      const { data: fees } = await supabase
         .from('student_fees')
-        .select('student_id, status, final_amount, amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status)')
-        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`, { foreignTable: 'students' })
+        .select('student_id, status, final_amount, amount, amount_paid, amount_outstanding')
         .eq('billing_month', monthIso)
-        .eq('students.is_active', true)
-        .eq('students.status', 'active');
+        .in('student_id', studentIds);
 
-      if (!data) return null;
-
-      const byStudent = new Map<string, { name: string; studentId: string; totalDue: number; totalPaid: number; status: 'paid' | 'partial' | 'unpaid' }>();
-      for (const fee of data as any[]) {
-        const s = fee.students;
-        const sid = fee.student_id;
-        const existing = byStudent.get(sid) || { name: `${s?.first_name || ''} ${s?.last_name || ''}`.trim(), studentId: sid, totalDue: 0, totalPaid: 0, status: 'paid' as const };
-        existing.totalDue += Number(fee.final_amount || fee.amount || 0);
-        existing.totalPaid += Number(fee.amount_paid || 0);
-        if (fee.status === 'waived') { /* skip */ }
-        else if (fee.status !== 'paid') existing.status = fee.status === 'partially_paid' ? 'partial' : 'unpaid';
-        byStudent.set(sid, existing);
+      const feesByStudent = new Map<string, any[]>();
+      for (const f of (fees || []) as any[]) {
+        const arr = feesByStudent.get(f.student_id) || [];
+        arr.push(f);
+        feesByStudent.set(f.student_id, arr);
       }
 
-      const list = [...byStudent.values()].sort((a, b) => {
-        if (a.status === 'paid' && b.status !== 'paid') return 1;
-        if (a.status !== 'paid' && b.status === 'paid') return -1;
+      const { data: feeStructures } = await supabase
+        .from('school_fee_structures')
+        .select('amount_cents, amount')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .ilike('category_code', '%tuition%')
+        .eq('is_active', true)
+        .limit(1);
+
+      const defaultTuition = feeStructures?.[0]
+        ? Number(feeStructures[0].amount_cents ? feeStructures[0].amount_cents / 100 : feeStructures[0].amount || 0)
+        : 0;
+
+      const list = students.map((s: any) => {
+        const studentFees = feesByStudent.get(s.id) || [];
+        const hasFees = studentFees.length > 0;
+
+        let totalDue = 0;
+        let totalPaid = 0;
+        let status: 'paid' | 'partial' | 'unpaid' | 'no_fee' = 'no_fee';
+
+        if (hasFees) {
+          for (const f of studentFees) {
+            if (f.status === 'waived') continue;
+            totalDue += Number(f.final_amount || f.amount || 0);
+            totalPaid += Number(f.amount_paid || 0);
+          }
+          const allPaid = studentFees.every((f: any) => f.status === 'paid' || f.status === 'waived');
+          const anyPartial = studentFees.some((f: any) => f.status === 'partially_paid');
+          status = allPaid ? 'paid' : anyPartial ? 'partial' : 'unpaid';
+        } else {
+          totalDue = defaultTuition;
+          status = 'no_fee';
+        }
+
+        return {
+          name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          studentId: s.id,
+          totalDue,
+          totalPaid,
+          status,
+        };
+      });
+
+      list.sort((a: any, b: any) => {
+        const order = { no_fee: 0, unpaid: 1, partial: 2, paid: 3 };
+        if (order[a.status as keyof typeof order] !== order[b.status as keyof typeof order]) {
+          return order[a.status as keyof typeof order] - order[b.status as keyof typeof order];
+        }
         return (b.totalDue - b.totalPaid) - (a.totalDue - a.totalPaid);
       });
 
-      const totalExpected = list.reduce((s, r) => s + r.totalDue, 0);
-      const totalCollected = list.reduce((s, r) => s + r.totalPaid, 0);
-      const paidCount = list.filter(r => r.status === 'paid').length;
-      const unpaidCount = list.filter(r => r.status !== 'paid').length;
+      const totalExpected = list.reduce((acc: number, r: any) => acc + r.totalDue, 0);
+      const totalCollected = list.reduce((acc: number, r: any) => acc + r.totalPaid, 0);
+      const paidCount = list.filter((r: any) => r.status === 'paid').length;
+      const unpaidCount = list.filter((r: any) => r.status !== 'paid').length;
+      const noFeeCount = list.filter((r: any) => r.status === 'no_fee').length;
 
-      return { students: list, totalExpected, totalCollected, paidCount, unpaidCount };
+      return { students: list, totalExpected, totalCollected, paidCount, unpaidCount, noFeeCount, totalStudents: list.length };
     },
     enabled: !!organizationId,
   });
@@ -131,7 +180,7 @@ export function FinanceReceivablesTab({
       {allStudentsFees && (
         <View style={[styles.calloutCard, { marginBottom: 8, borderLeftWidth: 4, borderLeftColor: theme.primary }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text style={styles.calloutTitle}>Expected (all {allStudentsFees.students.length} children)</Text>
+            <Text style={styles.calloutTitle}>School Total ({allStudentsFees.totalStudents} children)</Text>
             <Text style={[styles.calloutTitle, { color: theme.primary }]}>{formatCurrency(allStudentsFees.totalExpected)}</Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -143,7 +192,7 @@ export function FinanceReceivablesTab({
             <Text style={[styles.calloutText, { color: theme.error, fontWeight: '600' }]}>{formatCurrency(allStudentsFees.totalExpected - allStudentsFees.totalCollected)}</Text>
           </View>
           <Text style={[styles.calloutText, { marginTop: 4 }]}>
-            {allStudentsFees.paidCount} paid · {allStudentsFees.unpaidCount} unpaid
+            {allStudentsFees.paidCount} paid · {allStudentsFees.unpaidCount - allStudentsFees.noFeeCount} unpaid{allStudentsFees.noFeeCount > 0 ? ` · ${allStudentsFees.noFeeCount} no fee record` : ''}
           </Text>
         </View>
       )}
@@ -222,13 +271,20 @@ export function FinanceReceivablesTab({
               All Students ({allStudentsFees.students.length})
             </Text>
           </View>
-          {allStudentsFees.students.map((s) => {
+          {allStudentsFees.students.map((s: any) => {
             const isPaid = s.status === 'paid';
             const isPartial = s.status === 'partial';
+            const isNoFee = s.status === 'no_fee';
+            const borderColor = isPaid ? theme.success : isPartial ? theme.warning || '#F59E0B' : isNoFee ? theme.textSecondary : theme.error;
+            const badgeBg = isPaid ? theme.success + '20' : isPartial ? (theme.warning || '#F59E0B') + '20' : isNoFee ? theme.textSecondary + '20' : theme.error + '20';
+            const badgeColor = isPaid ? theme.success : isPartial ? theme.warning || '#F59E0B' : isNoFee ? theme.textSecondary : theme.error;
+            const badgeIcon = isPaid ? 'checkmark-circle' : isPartial ? 'pie-chart-outline' : isNoFee ? 'help-circle-outline' : 'close-circle';
+            const badgeLabel = isPaid ? 'Paid' : isPartial ? 'Partial' : isNoFee ? 'No Fee Record' : 'Not Paid';
+
             return (
               <TouchableOpacity
                 key={s.studentId}
-                style={[styles.queueCard, { borderLeftWidth: 3, borderLeftColor: isPaid ? theme.success : isPartial ? theme.warning || '#F59E0B' : theme.error }]}
+                style={[styles.queueCard, { borderLeftWidth: 3, borderLeftColor: borderColor }]}
                 onPress={() => router.push(
                   `/screens/principal-student-fees?studentId=${s.studentId}&monthIso=${monthIso}&source=receivables` as any
                 )}
@@ -236,19 +292,19 @@ export function FinanceReceivablesTab({
                 <View style={styles.rowBetween}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.queueTitle}>{s.name || 'Student'}</Text>
-                    <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
-                      Due: {formatCurrency(s.totalDue)} · Paid: {formatCurrency(s.totalPaid)}
-                    </Text>
+                    {isNoFee ? (
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2, fontStyle: 'italic' }}>
+                        No fee generated for this month{s.totalDue > 0 ? ` · Est. ${formatCurrency(s.totalDue)}` : ''}
+                      </Text>
+                    ) : (
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                        Due: {formatCurrency(s.totalDue)} · Paid: {formatCurrency(s.totalPaid)}
+                      </Text>
+                    )}
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: isPaid ? theme.success + '20' : isPartial ? (theme.warning || '#F59E0B') + '20' : theme.error + '20' }]}>
-                    <Ionicons
-                      name={isPaid ? 'checkmark-circle' : isPartial ? 'pie-chart-outline' : 'close-circle'}
-                      size={14}
-                      color={isPaid ? theme.success : isPartial ? theme.warning || '#F59E0B' : theme.error}
-                    />
-                    <Text style={[styles.statusBadgeText, { color: isPaid ? theme.success : isPartial ? theme.warning || '#F59E0B' : theme.error, marginLeft: 4 }]}>
-                      {isPaid ? 'Paid' : isPartial ? 'Partial' : 'Not Paid'}
-                    </Text>
+                  <View style={[styles.statusBadge, { backgroundColor: badgeBg }]}>
+                    <Ionicons name={badgeIcon as any} size={14} color={badgeColor} />
+                    <Text style={[styles.statusBadgeText, { color: badgeColor, marginLeft: 4 }]}>{badgeLabel}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
