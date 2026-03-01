@@ -49,6 +49,8 @@ export default function ExamGenerationScreen() {
     schoolId?: string;
     childName?: string;
     useTeacherContext?: string;
+    examId?: string;
+    loadSaved?: string;
   }>();
 
   const grade = toSafeParam(params.grade);
@@ -60,6 +62,8 @@ export default function ExamGenerationScreen() {
   const schoolId = toSafeParam(params.schoolId);
   const childName = toSafeParam(params.childName);
   const useTeacherContext = toBool(toSafeParam(params.useTeacherContext), true);
+  const savedExamId = toSafeParam(params.examId);
+  const loadSaved = toBool(toSafeParam(params.loadSaved), false);
 
   const [state, setState] = useState<GenerationState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -178,9 +182,47 @@ export default function ExamGenerationScreen() {
     }
   }, [grade, subject, examType, language, studentId, classId, schoolId, useTeacherContext, parseExamPayload]);
 
+  const loadSavedExam = useCallback(async () => {
+    if (!savedExamId) return;
+    setState('loading');
+    setError(null);
+    try {
+      const supabase = assertSupabase();
+      const { data, error: fetchError } = await supabase
+        .from('exam_generations')
+        .select('id, generated_content, display_title, grade, subject, exam_type')
+        .eq('id', savedExamId)
+        .single();
+
+      if (fetchError || !data) {
+        setError('Could not load saved exam. It may have been deleted.');
+        setState('error');
+        return;
+      }
+
+      const parsed = parseExamPayload(data.generated_content);
+      if (!parsed || parsed.sections.length === 0) {
+        setError('Exam content could not be parsed.');
+        setState('error');
+        return;
+      }
+
+      setExam(parsed);
+      setExamId(data.id);
+      setState('ready');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load exam');
+      setState('error');
+    }
+  }, [savedExamId, parseExamPayload]);
+
   useEffect(() => {
-    generateExam();
-  }, [generateExam]);
+    if (loadSaved && savedExamId) {
+      loadSavedExam();
+    } else {
+      generateExam();
+    }
+  }, [loadSaved, savedExamId, loadSavedExam, generateExam]);
 
   const handleBack = useCallback(() => {
     router.back();
