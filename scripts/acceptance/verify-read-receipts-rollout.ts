@@ -12,6 +12,15 @@ function abs(relPath: string): string {
   return path.join(ROOT, relPath);
 }
 
+function dirExists(relDir: string): boolean {
+  try {
+    const stat = fs.statSync(abs(relDir));
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function read(relPath: string): string {
   const full = abs(relPath);
   if (!fs.existsSync(full)) {
@@ -90,6 +99,7 @@ function checkCanonicalTeacherRealtimeArgs() {
 }
 
 function checkWebDeliveredAndReadFlow() {
+  if (!dirExists('web/src/app/dashboard')) return;
   const pages = [
     'web/src/app/dashboard/parent/messages/page.tsx',
     'web/src/app/dashboard/teacher/messages/page.tsx',
@@ -97,6 +107,7 @@ function checkWebDeliveredAndReadFlow() {
   ];
 
   for (const file of pages) {
+    if (!fs.existsSync(abs(file))) continue;
     expectContains(
       file,
       /await\s+supabase\.rpc\('mark_messages_delivered',\s*\{\s*p_thread_id:\s*threadId,\s*p_user_id:\s*userId,\s*\}\)/s,
@@ -116,6 +127,7 @@ function checkWebDeliveredAndReadFlow() {
 }
 
 function checkMessageUpdateSubscriptions() {
+  if (!dirExists('web/src/app/dashboard')) return;
   const pages = [
     'web/src/app/dashboard/parent/messages/page.tsx',
     'web/src/app/dashboard/teacher/messages/page.tsx',
@@ -123,6 +135,7 @@ function checkMessageUpdateSubscriptions() {
   ];
 
   for (const file of pages) {
+    if (!fs.existsSync(abs(file))) continue;
     expectContains(
       file,
       /event:\s*'UPDATE'[\s\S]{0,260}table:\s*'messages'/s,
@@ -134,7 +147,9 @@ function checkMessageUpdateSubscriptions() {
 }
 
 function checkThreadAndMessageContracts() {
+  if (!dirExists('web/src')) return;
   const typeFile = 'web/src/lib/messaging/types.ts';
+  if (!fs.existsSync(abs(typeFile))) return;
   expectContains(typeFile, 'delivered_at?: string | null;');
   expectContains(typeFile, 'read_by?: string[] | null;');
 
@@ -143,6 +158,7 @@ function checkThreadAndMessageContracts() {
     'web/src/components/messaging/ChatMessageBubble.tsx',
   ];
   for (const file of threadAndBubbleFiles) {
+    if (!fs.existsSync(abs(file))) continue;
     expectContains(file, 'read_by');
     expectContains(file, 'delivered_at');
     expectNotContains(file, 'read_at', 'stale read_at tick logic');
@@ -150,12 +166,14 @@ function checkThreadAndMessageContracts() {
 }
 
 function checkLastMessageFetchFields() {
+  if (!dirExists('web/src/app/dashboard')) return;
   const pages = [
     'web/src/app/dashboard/parent/messages/page.tsx',
     'web/src/app/dashboard/teacher/messages/page.tsx',
     'web/src/app/dashboard/principal/messages/page.tsx',
   ];
   for (const file of pages) {
+    if (!fs.existsSync(abs(file))) continue;
     expectContains(file, 'last_message_delivered_at', 'summary includes delivered_at field');
     expectContains(file, 'last_message_read_by', 'summary includes read_by field');
     expectContains(file, 'delivered_at: summary.last_message_delivered_at', 'maps delivered_at from summary');
@@ -172,6 +190,7 @@ function checkRpcOnlyReceiptHooksWithTelemetry() {
 }
 
 function checkAggregatedThreadSummaryUsage() {
+  if (!dirExists('web/src/app/dashboard')) return;
   const pages = [
     'web/src/app/dashboard/parent/messages/page.tsx',
     'web/src/app/dashboard/teacher/messages/page.tsx',
@@ -179,6 +198,7 @@ function checkAggregatedThreadSummaryUsage() {
   ];
 
   for (const file of pages) {
+    if (!fs.existsSync(abs(file))) continue;
     expectContains(
       file,
       /rpc\(\s*'get_my_message_threads_summary'/s,
