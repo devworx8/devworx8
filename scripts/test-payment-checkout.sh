@@ -15,13 +15,13 @@ if [ -f .env ]; then
   export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Get Supabase URL and keys
-SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-https://lvvvjywrmpcqrpvuptdi.supabase.co}"
-ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+# Get Supabase URL and keys (accept either NEXT_PUBLIC_* or EXPO_PUBLIC_* aliases)
+SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-${EXPO_PUBLIC_SUPABASE_URL:-https://lvvvjywrmpcqrpvuptdi.supabase.co}}"
+ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-${EXPO_PUBLIC_SUPABASE_ANON_KEY}}"
 
 if [ -z "$ANON_KEY" ]; then
-  echo "❌ Error: NEXT_PUBLIC_SUPABASE_ANON_KEY not found in .env"
-  echo "Please set it in your .env file"
+  echo "❌ Error: Supabase anon key not found in .env"
+  echo "Please set NEXT_PUBLIC_SUPABASE_ANON_KEY or EXPO_PUBLIC_SUPABASE_ANON_KEY"
   exit 1
 fi
 
@@ -112,4 +112,3 @@ echo "   1. Check Supabase Dashboard logs for detailed function execution"
 echo "   2. Verify PayFast secrets are set correctly"
 echo "   3. Test with real user ID and email from your database"
 echo ""
-

@@ -258,6 +258,7 @@ function buildMinimalProfile(user: User): EnhancedUserProfile | null {
     full_name: meta.full_name || meta.name || '',
     organization_id: meta.organization_id || meta.preschool_id || null,
     organization_name: meta.organization_name || null,
+    school_type: meta.school_type || appMeta.school_type || null,
     seat_status: 'active',
     capabilities: [],
   });

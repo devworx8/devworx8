@@ -31,6 +31,22 @@ describe('schoolTypeResolver', () => {
     expect(resolveSchoolTypeFromProfile(null)).toBe('preschool');
   });
 
+  it('infers k12 from organization names that include community school', () => {
+    expect(
+      resolveSchoolTypeFromProfile({
+        organization_name: 'EduDash Pro Community School',
+      })
+    ).toBe('k12_school');
+  });
+
+  it('infers k12 from known Community School organization id', () => {
+    expect(
+      resolveSchoolTypeFromProfile({
+        organization_id: '00000000-0000-0000-0000-000000000001',
+      })
+    ).toBe('k12_school');
+  });
+
   it('resolves organization id with organization-first fallback chain', () => {
     expect(resolveOrganizationId({ organization_id: 'org-1', preschool_id: 'pre-1' })).toBe('org-1');
     expect(resolveOrganizationId({ preschool_id: 'pre-1' })).toBe('pre-1');
