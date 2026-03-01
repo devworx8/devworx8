@@ -1,35 +1,6 @@
 -- Fix classes table RLS policies to avoid infinite recursion
 -- Using security definer functions to bypass RLS checks
 
--- Ensure classes table and required columns exist (shadow DB compatibility)
-CREATE TABLE IF NOT EXISTS public.classes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID,
-  teacher_id UUID,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'classes'
-      AND column_name = 'preschool_id'
-  ) THEN
-    ALTER TABLE public.classes ADD COLUMN preschool_id UUID;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'classes'
-      AND column_name = 'teacher_id'
-  ) THEN
-    ALTER TABLE public.classes ADD COLUMN teacher_id UUID;
-  END IF;
-END $$;
-
 -- Drop existing policies
 DROP POLICY IF EXISTS "classes_admin_all" ON public.classes;
 DROP POLICY IF EXISTS "classes_school_staff_manage" ON public.classes;
@@ -37,7 +8,6 @@ DROP POLICY IF EXISTS "classes_teacher_read_own" ON public.classes;
 DROP POLICY IF EXISTS "classes_teacher_select" ON public.classes;
 DROP POLICY IF EXISTS "classes_service_full" ON public.classes;
 DROP POLICY IF EXISTS "classes_service_role" ON public.classes;
-
 -- Create security definer function to check if user can manage classes for a preschool
 CREATE OR REPLACE FUNCTION public.user_can_manage_classes(preschool_org_id UUID)
 RETURNS BOOLEAN
@@ -57,7 +27,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Create security definer function to check if user can view classes for a preschool
 CREATE OR REPLACE FUNCTION public.user_can_view_classes(preschool_org_id UUID, class_teacher_id UUID)
 RETURNS BOOLEAN
@@ -88,7 +57,6 @@ BEGIN
   RETURN FALSE;
 END;
 $$;
-
 -- Re-create policies using security definer functions
 
 -- Service role has full access
@@ -98,7 +66,6 @@ FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
-
 -- Admins can manage all classes in their preschool/organization
 CREATE POLICY "classes_admin_all"
 ON public.classes
@@ -110,7 +77,6 @@ USING (
 WITH CHECK (
   public.user_can_manage_classes(preschool_id)
 );
-
 -- Teachers and staff can view classes in their preschool/organization
 CREATE POLICY "classes_teacher_select"
 ON public.classes
@@ -119,16 +85,12 @@ TO authenticated
 USING (
   public.user_can_view_classes(preschool_id, teacher_id)
 );
-
 -- Add comments
 COMMENT ON FUNCTION public.user_can_manage_classes(UUID) IS
 'Security definer function to check if user can manage classes for a preschool/organization';
-
 COMMENT ON FUNCTION public.user_can_view_classes(UUID, UUID) IS
 'Security definer function to check if user can view classes for a preschool/organization';
-
 COMMENT ON POLICY "classes_admin_all" ON public.classes IS
 'Allows admins and principals to manage classes in their preschool/organization';
-
 COMMENT ON POLICY "classes_teacher_select" ON public.classes IS
 'Allows teachers and staff to view classes in their preschool/organization';

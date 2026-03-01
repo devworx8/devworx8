@@ -61,7 +61,6 @@ BEGIN
     a.name;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.get_superadmin_autonomous_tasks()
 RETURNS TABLE(
   id text,
@@ -99,7 +98,6 @@ BEGIN
   ORDER BY t.is_enabled DESC, t.name;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.get_superadmin_integrations()
 RETURNS TABLE(
   id text,
@@ -131,7 +129,6 @@ BEGIN
   ORDER BY i.is_enabled DESC, i.name;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.get_superadmin_platform_insights(limit_count integer DEFAULT 10)
 RETURNS TABLE(
   id uuid,
@@ -177,7 +174,6 @@ BEGIN
   LIMIT limit_count;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.toggle_superadmin_agent(agent_id_param text, new_status text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -199,7 +195,6 @@ BEGIN
   RETURN FOUND;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.toggle_superadmin_task(task_id_param text, is_enabled_param boolean)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -217,7 +212,6 @@ BEGIN
   RETURN FOUND;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.process_superadmin_agent_execution(execution_id_param uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -646,7 +640,6 @@ EXCEPTION
     );
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.process_pending_superadmin_agent_executions(max_rows integer DEFAULT 10)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -692,7 +685,6 @@ BEGIN
   );
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.execute_superadmin_agent(agent_id_param text)
 RETURNS uuid
 LANGUAGE plpgsql
@@ -736,7 +728,6 @@ BEGIN
   RETURN v_execution_id;
 END;
 $function$;
-
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN

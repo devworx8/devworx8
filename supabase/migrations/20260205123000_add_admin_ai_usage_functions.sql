@@ -41,7 +41,6 @@ BEGIN
            COALESCE(u.chat_messages_today, 0) DESC;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.admin_get_image_uploads_today()
 RETURNS TABLE (
   user_id uuid,

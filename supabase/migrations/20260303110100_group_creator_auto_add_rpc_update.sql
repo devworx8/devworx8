@@ -94,7 +94,7 @@ BEGIN
 
   -- Add creator as admin: always when principal/admin; when teacher, only if setting is on
   IF (p_created_by != v_teacher_id OR v_teacher_id IS NULL) THEN
-    IF v_creator_role IN ('principal', 'admin', 'principal_admin', 'super_admin') THEN
+    IF v_creator_role IN ('principal', 'admin', 'principal_admin', 'super_admin', 'super_admin') THEN
       -- Principals/admins always added
       INSERT INTO message_participants (thread_id, user_id, role, is_admin, can_send_messages)
       VALUES (v_thread_id, p_created_by, COALESCE(v_creator_role, 'teacher'), TRUE, TRUE)
@@ -123,7 +123,6 @@ BEGIN
   RETURN v_thread_id;
 END;
 $$;
-
 -- create_parent_group: creator is always added (they need to manage the group they created)
 -- The setting only affects create_class_group.
 CREATE OR REPLACE FUNCTION create_parent_group(

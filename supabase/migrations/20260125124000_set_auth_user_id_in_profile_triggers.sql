@@ -32,7 +32,6 @@ EXCEPTION
     RETURN NEW;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.create_profile_for_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -87,4 +86,3 @@ EXCEPTION
     RETURN NEW;
 END;
 $$;
-

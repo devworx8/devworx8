@@ -5,6 +5,7 @@
  */
 
 export type SupportedLanguage = 'en' | 'af' | 'zu' | 'xh' | 'nso';
+export const GUARANTEED_VOICE_LANGUAGES: SupportedLanguage[] = ['en', 'af', 'zu', 'xh', 'nso'];
 
 export interface VoicePreference {
   user_id: string;

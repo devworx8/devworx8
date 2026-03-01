@@ -28,10 +28,12 @@ export function findAgeGroup(
   ageMonths: number,
   ageGroups: AgeGroup[],
 ): AgeGroup | undefined {
-  return ageGroups.find(
-    (group) =>
-      ageMonths >= group.min_age_months && ageMonths <= group.max_age_months,
-  );
+  return ageGroups.find((group) => {
+    const min = group.min_age_months;
+    const max = group.max_age_months;
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return false;
+    return ageMonths >= (min as number) && ageMonths <= (max as number);
+  });
 }
 
 export function formatAge(
@@ -54,14 +56,55 @@ export function formatAge(
 /** Preschool age group names configurable per school (principals/admins). */
 export const PRESCHOOL_AGE_GROUP_NAMES = ['Curious Cubs', 'Little Explorers', 'Panda'] as const;
 
+const CUSTOM_PRESCHOOL_COLORS = [
+  '#F97316',
+  '#14B8A6',
+  '#0EA5E9',
+  '#A855F7',
+  '#EF4444',
+  '#22C55E',
+  '#EAB308',
+  '#06B6D4',
+  '#F43F5E',
+  '#10B981',
+] as const;
+
+function colorFromName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0; // Keep 32-bit.
+  }
+  const index = Math.abs(hash) % CUSTOM_PRESCHOOL_COLORS.length;
+  return CUSTOM_PRESCHOOL_COLORS[index];
+}
+
+export function resolveStudentGroupName(params: {
+  className?: string | null;
+  ageMonths: number;
+  ageGroups: AgeGroup[];
+}): string {
+  const className = (params.className || '').trim();
+  if (className) return className;
+
+  const dobGroup = findAgeGroup(params.ageMonths, params.ageGroups);
+  const dobGroupName = (dobGroup?.name || '').trim();
+  if (dobGroupName) return dobGroupName;
+
+  return 'Unassigned';
+}
+
 export function getAgeGroupColor(
   ageGroupName: string | undefined,
   schoolType: string,
 ): string {
   if (!ageGroupName) return '#9CA3AF';
 
+  const normalizedName = ageGroupName.trim();
+  if (!normalizedName) return '#9CA3AF';
+
   if (schoolType === 'preschool') {
-    switch (ageGroupName) {
+    switch (normalizedName) {
       case 'Curious Cubs':
         return '#EC4899';
       case 'Little Explorers':
@@ -76,16 +119,20 @@ export function getAgeGroupColor(
         return '#3B82F6';
       case 'Pre-K (Reception)':
         return '#059669';
+      case 'Pre-K':
+        return '#8B5CF6';
+      case 'Kindergarten':
+        return '#3B82F6';
       default:
-        return '#6B7280';
+        return colorFromName(normalizedName);
     }
   }
 
-  if (ageGroupName?.includes('Grade R') || ageGroupName?.includes('Grade 1-3'))
+  if (normalizedName.includes('Grade R') || normalizedName.includes('Grade 1-3'))
     return '#059669';
-  if (ageGroupName?.includes('Grade 4-6')) return '#3B82F6';
-  if (ageGroupName?.includes('Grade 7-9')) return '#8B5CF6';
-  if (ageGroupName?.includes('Grade 10-12')) return '#DC2626';
+  if (normalizedName.includes('Grade 4-6')) return '#3B82F6';
+  if (normalizedName.includes('Grade 7-9')) return '#8B5CF6';
+  if (normalizedName.includes('Grade 10-12')) return '#DC2626';
   return '#6B7280';
 }
 
@@ -109,6 +156,9 @@ export function filterStudents(
   filters: FilterOptions,
 ): Student[] {
   return students.filter((student) => {
+    const groupName = (student.age_group_name || '').trim();
+    const resolvedGroupName = groupName || 'Unassigned';
+
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
       const fullName =
@@ -117,11 +167,7 @@ export function filterStudents(
     }
 
     if (filters.ageGroup) {
-      if (filters.ageGroup === 'Unassigned') {
-        if (student.age_group_name) return false;
-      } else {
-        if (student.age_group_name !== filters.ageGroup) return false;
-      }
+      if (resolvedGroupName !== filters.ageGroup) return false;
     }
     if (filters.status && student.status !== filters.status) return false;
     if (filters.classId && student.class_id !== filters.classId) return false;
@@ -130,35 +176,46 @@ export function filterStudents(
   });
 }
 
-/**
- * Returns age group counts. For preschool, only Curious Cubs, Little Explorers, Panda
- * (and Other, Unassigned) are shown; other names are collapsed into "Other".
- */
 export function getAgeGroupStats(
   students: Student[],
   schoolType: string = 'preschool',
+  orderedGroupNames: string[] = [],
 ): Record<string, number> {
   const raw: Record<string, number> = {};
   students.forEach((student) => {
-    const group = student.age_group_name || 'Unassigned';
+    const group = (student.age_group_name || '').trim() || 'Unassigned';
     raw[group] = (raw[group] || 0) + 1;
   });
-  if (schoolType !== 'preschool') return raw;
+  if (Object.keys(raw).length === 0) return {};
+
+  const configuredOrder = [...new Set(
+    orderedGroupNames
+      .map((name) => String(name || '').trim())
+      .filter(Boolean),
+  )];
+
   const stats: Record<string, number> = {};
-  let otherCount = 0;
-  Object.entries(raw).forEach(([name, count]) => {
-    if (PRESCHOOL_AGE_GROUP_NAMES.includes(name as any)) {
-      stats[name] = count;
-    } else if (name === 'Unassigned') {
-      stats[name] = count;
-    } else {
-      otherCount += count;
+
+  configuredOrder.forEach((groupName) => {
+    if (raw[groupName] > 0) {
+      stats[groupName] = raw[groupName];
     }
   });
-  if (otherCount > 0) stats['Other'] = otherCount;
-  PRESCHOOL_AGE_GROUP_NAMES.forEach((name) => {
-    if (!(name in stats)) stats[name] = 0;
+
+  const remaining = Object.keys(raw)
+    .filter((groupName) => groupName !== 'Unassigned' && !configuredOrder.includes(groupName))
+    .sort((a, b) => {
+      if (schoolType === 'preschool') return a.localeCompare(b);
+      return a.localeCompare(b);
+    });
+
+  remaining.forEach((groupName) => {
+    stats[groupName] = raw[groupName];
   });
-  if (!('Unassigned' in stats)) stats['Unassigned'] = 0;
+
+  if (raw.Unassigned > 0) {
+    stats.Unassigned = raw.Unassigned;
+  }
+
   return stats;
 }

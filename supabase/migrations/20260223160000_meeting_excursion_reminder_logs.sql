@@ -2,7 +2,6 @@
 -- Used by calendar-reminders-cron for meeting/excursion reminders
 
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.school_meeting_reminder_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   meeting_id UUID NOT NULL REFERENCES public.school_meetings(id) ON DELETE CASCADE,
@@ -15,12 +14,9 @@ CREATE TABLE IF NOT EXISTS public.school_meeting_reminder_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT school_meeting_reminder_logs_unique UNIQUE (meeting_id, reminder_offset_days, target_role)
 );
-
 CREATE INDEX IF NOT EXISTS idx_school_meeting_reminder_logs_meeting
   ON public.school_meeting_reminder_logs (meeting_id, reminder_offset_days);
-
 ALTER TABLE public.school_meeting_reminder_logs ENABLE ROW LEVEL SECURITY;
-
 CREATE TABLE IF NOT EXISTS public.school_excursion_reminder_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   excursion_id UUID NOT NULL REFERENCES public.school_excursions(id) ON DELETE CASCADE,
@@ -33,10 +29,7 @@ CREATE TABLE IF NOT EXISTS public.school_excursion_reminder_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT school_excursion_reminder_logs_unique UNIQUE (excursion_id, reminder_offset_days, target_role)
 );
-
 CREATE INDEX IF NOT EXISTS idx_school_excursion_reminder_logs_excursion
   ON public.school_excursion_reminder_logs (excursion_id, reminder_offset_days);
-
 ALTER TABLE public.school_excursion_reminder_logs ENABLE ROW LEVEL SECURITY;
-
 COMMIT;

@@ -27,7 +27,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
     END IF;
 END $$;
-
 -- message_threads: UPDATE (last_message_at, snippet changes)
 DO $$
 BEGIN
@@ -40,7 +39,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.message_threads;
     END IF;
 END $$;
-
 -- message_participants: UPDATE (unread_count, last_read_at)
 DO $$
 BEGIN
@@ -53,7 +51,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.message_participants;
     END IF;
 END $$;
-
 -- message_reactions: INSERT, DELETE (emoji reactions on messages)
 DO $$
 BEGIN
@@ -66,7 +63,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.message_reactions;
     END IF;
 END $$;
-
 -- active_calls: INSERT (incoming call), UPDATE (answered/ended/missed)
 DO $$
 BEGIN
@@ -79,7 +75,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.active_calls;
     END IF;
 END $$;
-
 -- call_signals: INSERT (backup meeting URL delivery)
 DO $$
 BEGIN
@@ -92,7 +87,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.call_signals;
     END IF;
 END $$;
-
 -- announcements: INSERT (new announcements)
 DO $$
 BEGIN
@@ -105,7 +99,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
     END IF;
 END $$;
-
 -- notifications: INSERT, UPDATE (in-app notification system)
 DO $$
 BEGIN
@@ -118,7 +111,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
     END IF;
 END $$;
-
 -- student_activity_feed: INSERT, UPDATE (activity feed for parents)
 DO $$
 BEGIN
@@ -131,7 +123,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.student_activity_feed;
     END IF;
 END $$;
-
 -- activity_reactions: INSERT, DELETE (reactions on activities)
 DO $$
 BEGIN
@@ -144,7 +135,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_reactions;
     END IF;
 END $$;
-
 -- activity_comments: INSERT (comments on activities)
 DO $$
 BEGIN
@@ -157,7 +147,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_comments;
     END IF;
 END $$;
-
 -- attendance: INSERT, UPDATE (attendance tracking)
 DO $$
 BEGIN
@@ -170,7 +159,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.attendance;
     END IF;
 END $$;
-
 -- student_fees: UPDATE (payment status changes)
 DO $$
 BEGIN
@@ -183,7 +171,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.student_fees;
     END IF;
 END $$;
-
 -- pop_uploads: INSERT, UPDATE (proof of payment uploads)
 DO $$
 BEGIN
@@ -196,7 +183,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.pop_uploads;
     END IF;
 END $$;
-
 -- aftercare_registrations: INSERT, DELETE (aftercare spots)
 DO $$
 BEGIN
@@ -209,7 +195,6 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.aftercare_registrations;
     END IF;
 END $$;
-
 -- ---------------------------------------------------------------------------
 -- 2. Set REPLICA IDENTITY FULL on tables that need UPDATE payloads
 -- ---------------------------------------------------------------------------
@@ -231,7 +216,6 @@ ALTER TABLE public.notifications REPLICA IDENTITY FULL;
 ALTER TABLE public.student_fees REPLICA IDENTITY FULL;
 ALTER TABLE public.pop_uploads REPLICA IDENTITY FULL;
 ALTER TABLE public.attendance REPLICA IDENTITY FULL;
-
 -- ---------------------------------------------------------------------------
 -- 3. Verification query (informational, runs after migration)
 -- ---------------------------------------------------------------------------
@@ -240,4 +224,4 @@ ALTER TABLE public.attendance REPLICA IDENTITY FULL;
 --   FROM pg_publication_tables
 --   WHERE pubname = 'supabase_realtime'
 --   ORDER BY tablename;
--- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------;

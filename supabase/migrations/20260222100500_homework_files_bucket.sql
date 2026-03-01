@@ -1,5 +1,4 @@
 BEGIN;
-
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'homework-files',
@@ -19,16 +18,13 @@ VALUES (
   ]::text[]
 )
 ON CONFLICT (id) DO NOTHING;
-
 UPDATE storage.buckets
 SET public = true
 WHERE id = 'homework-files';
-
 DROP POLICY IF EXISTS homework_files_select ON storage.objects;
 DROP POLICY IF EXISTS homework_files_insert ON storage.objects;
 DROP POLICY IF EXISTS homework_files_update ON storage.objects;
 DROP POLICY IF EXISTS homework_files_delete ON storage.objects;
-
 CREATE POLICY homework_files_select
   ON storage.objects
   FOR SELECT
@@ -60,7 +56,6 @@ CREATE POLICY homework_files_select
       )
     )
   );
-
 CREATE POLICY homework_files_insert
   ON storage.objects
   FOR INSERT
@@ -89,7 +84,6 @@ CREATE POLICY homework_files_insert
       )
     )
   );
-
 CREATE POLICY homework_files_update
   ON storage.objects
   FOR UPDATE
@@ -113,7 +107,6 @@ CREATE POLICY homework_files_update
   WITH CHECK (
     bucket_id = 'homework-files'
   );
-
 CREATE POLICY homework_files_delete
   ON storage.objects
   FOR DELETE
@@ -134,5 +127,4 @@ CREATE POLICY homework_files_delete
       )
     )
   );
-
 COMMIT;

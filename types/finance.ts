@@ -176,6 +176,10 @@ export interface FinanceReceivablesSummary {
   excluded_inactive_students?: number;
   excluded_future_enrollment_students?: number;
   excluded_unverified_students?: number;
+  /** Total number of students with unpaid fees (before the display cap is applied) */
+  students_total_unpaid?: number;
+  /** Maximum number of student rows returned in the students array */
+  students_display_cap?: number;
 }
 
 export interface FinanceReceivableStudentRow {

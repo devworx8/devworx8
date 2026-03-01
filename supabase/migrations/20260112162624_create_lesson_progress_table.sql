@@ -36,14 +36,12 @@ CREATE TABLE IF NOT EXISTS public.lesson_progress (
     -- Unique constraint: one progress record per user per lesson
     UNIQUE(lesson_id, user_id)
 );
-
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_user_id ON public.lesson_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_lesson_id ON public.lesson_progress(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_status ON public.lesson_progress(status);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_last_accessed ON public.lesson_progress(last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_user_lesson ON public.lesson_progress(user_id, lesson_id);
-
 -- Create updated_at trigger
 CREATE OR REPLACE FUNCTION update_lesson_progress_updated_at()
 RETURNS TRIGGER AS $$
@@ -52,16 +50,13 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS lesson_progress_updated_at ON public.lesson_progress;
 CREATE TRIGGER lesson_progress_updated_at
     BEFORE UPDATE ON public.lesson_progress
     FOR EACH ROW
     EXECUTE FUNCTION update_lesson_progress_updated_at();
-
 -- Enable RLS
 ALTER TABLE public.lesson_progress ENABLE ROW LEVEL SECURITY;
-
 -- RLS Policies
 
 -- Users can view their own progress
@@ -69,26 +64,22 @@ CREATE POLICY "Users can view own lesson progress"
     ON public.lesson_progress
     FOR SELECT
     USING (auth.uid() = user_id);
-
 -- Users can insert their own progress
 CREATE POLICY "Users can insert own lesson progress"
     ON public.lesson_progress
     FOR INSERT
     WITH CHECK (auth.uid() = user_id);
-
 -- Users can update their own progress
 CREATE POLICY "Users can update own lesson progress"
     ON public.lesson_progress
     FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
-
 -- Users can delete their own progress
 CREATE POLICY "Users can delete own lesson progress"
     ON public.lesson_progress
     FOR DELETE
     USING (auth.uid() = user_id);
-
 -- Teachers/Principals can view progress of students in their school
 CREATE POLICY "Teachers can view student lesson progress"
     ON public.lesson_progress
@@ -103,10 +94,8 @@ CREATE POLICY "Teachers can view student lesson progress"
             )
         )
     );
-
 -- Grant permissions
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.lesson_progress TO authenticated;
-
 -- Add helpful comments
 COMMENT ON TABLE public.lesson_progress IS 'Tracks user progress through lessons including completion status, time spent, and assessment scores';
 COMMENT ON COLUMN public.lesson_progress.status IS 'Current progress status: not_started, in_progress, completed, or paused';

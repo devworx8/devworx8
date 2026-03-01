@@ -130,6 +130,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: '#14B8A6',
     category: 'classroom',
   },
+  year_plan: {
+    path: '/screens/teacher-year-plan-view' as Href,
+    title: 'Year Plan',
+    titleKey: 'dashboard.year_planner',
+    icon: 'calendar',
+    color: '#3B82F6',
+    category: 'classroom',
+  },
   view_timetable: {
     path: '/screens/teacher-timetable' as Href,
     title: 'My Timetable',
@@ -348,6 +356,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'assign_homework',
   'my_class',
   'daily_program',
+  'year_plan',
   'room_display_connect',
   'view_timetable',
   'activity_samples',

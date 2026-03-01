@@ -10,7 +10,6 @@ const repoRoot = path.resolve(__dirname, '..');
 const OCR_SOURCE_PATH = path.join(repoRoot, 'lib/dash-ai/ocrPrompts.ts');
 const PHONICS_SOURCE_PATH = path.join(repoRoot, 'lib/dash-ai/phonicsPrompt.ts');
 
-const WEB_OCR_TARGET_PATH = path.join(repoRoot, 'web/src/lib/dash-ai/ocrPrompts.ts');
 const EDGE_OCR_TARGET_PATH = path.join(repoRoot, 'supabase/functions/ai-proxy/generated/ocrPrompts.ts');
 const EDGE_PHONICS_TARGET_PATH = path.join(repoRoot, 'supabase/functions/ai-proxy/generated/phonicsPrompt.ts');
 
@@ -88,7 +87,6 @@ function main() {
   const phonicsSource = fs.readFileSync(PHONICS_SOURCE_PATH, 'utf8');
 
   const outputs = [
-    [WEB_OCR_TARGET_PATH, buildWebOcrContent(ocrSource)],
     [EDGE_OCR_TARGET_PATH, buildEdgeOcrContent(ocrSource)],
     [EDGE_PHONICS_TARGET_PATH, buildEdgePhonicsContent(phonicsSource)],
   ];

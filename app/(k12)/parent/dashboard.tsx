@@ -194,6 +194,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     { id: 'menu', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', route: K12_PARENT_ACTIONS.weekly_menu.route },
     { id: 'daily_program', label: t('dashboard.parent.nav.daily_routine', { defaultValue: 'Daily Routine' }), icon: 'time', route: K12_PARENT_ACTIONS.daily_program.route },
     { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: K12_PARENT_ACTIONS.weekly_report.route },
+    { id: 'timetable', label: t('dashboard.parent.nav.timetable', { defaultValue: 'Timetable' }), icon: 'time', route: K12_PARENT_ACTIONS.timetable.route },
+    { id: 'exam_history', label: t('dashboard.parent.nav.my_exams', { defaultValue: 'My Exams & Scores' }), icon: 'bar-chart', route: K12_PARENT_ACTIONS.exam_history.route },
+    { id: 'groups', label: t('dashboard.parent.nav.groups', { defaultValue: 'Groups' }), icon: 'people-circle', route: K12_PARENT_ACTIONS.groups.route },
     { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: K12_PARENT_ACTIONS.documents.route },
     { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: K12_PARENT_ACTIONS.account.route },
     { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: K12_PARENT_ACTIONS.settings.route },
@@ -308,10 +311,29 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
 
         <K12ParentQuickActions onActionPress={handleQuickAction} theme={theme} quickWinsEnabled={quickWinsEnabled} />
 
+        {/* Timetable Card */}
+        <TouchableOpacity
+          style={[styles.section, { marginHorizontal: 16 }]}
+          activeOpacity={0.85}
+          onPress={() => { track('k12.parent.timetable_tap', { user_id: user?.id }); pushAction('timetable'); }}
+        >
+          <View style={{ backgroundColor: theme.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: theme.primary + '20', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="calendar" size={22} color={theme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>{t('dashboard.parent.timetable', { defaultValue: "Today's Timetable" })}</Text>
+              <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>{t('dashboard.parent.timetable_hint', { defaultValue: 'View class schedule, subjects & teachers' })}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </View>
+        </TouchableOpacity>
+
         <K12ParentLearningHub
           leadChildName={dashboardSummary.activeChildName}
           onOpenTutor={openTutorSession}
           onExamBuilder={handleExamBuilderPress}
+          onExamHistory={() => { track('k12.parent.exam_history_tap', { user_id: user?.id }); pushAction('exam_history'); }}
           onHomework={() => handleQuickAction('homework')}
           canShowExamPrep={canShowExamPrep}
           quickWinsEnabled={quickWinsEnabled}

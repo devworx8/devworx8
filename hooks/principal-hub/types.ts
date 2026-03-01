@@ -15,6 +15,10 @@ export interface SchoolStats {
   monthlyRevenue: { total: number; trend: string };
   attendanceRate: { percentage: number; trend: string };
   registrationFees?: { total: number; trend: string };
+  /** Tuition fees expected for the current billing month (billed/pending + paid rows) */
+  expectedTuitionIncome?: { total: number; trend: string };
+  /** Tuition fees actually collected (paid rows only) for the current billing month */
+  collectedTuitionAmount?: { total: number; trend: string };
   timestamp: string;
 }
 

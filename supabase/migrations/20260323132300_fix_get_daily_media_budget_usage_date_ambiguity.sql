@@ -55,7 +55,6 @@ BEGIN
     CASE WHEN v_limit < 0 THEN -1 ELSE greatest(0, v_limit - v_used) END;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.consume_daily_media_budget(
   p_feature text,
   p_amount bigint DEFAULT 1,

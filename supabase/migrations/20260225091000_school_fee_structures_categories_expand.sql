@@ -1,7 +1,6 @@
 -- Expand school_fee_structures fee_category values for preschool/aftercare/K-12 parity.
 
 BEGIN;
-
 DO $$
 DECLARE
   v_constraint record;
@@ -92,5 +91,4 @@ BEGIN
     );
 END
 $$;
-
 COMMIT;

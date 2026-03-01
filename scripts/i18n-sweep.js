@@ -17,12 +17,11 @@ const REPORT_DIR = path.join(__dirname, 'reports');
 
 const NATIVE_EN_COMMON_PATH = path.join(PROJECT_ROOT, 'locales/en/common.json');
 const NATIVE_EN_WHATSAPP_PATH = path.join(PROJECT_ROOT, 'locales/en/whatsapp.json');
-const WEB_EN_COMMON_PATH = path.join(PROJECT_ROOT, 'web/src/locales/en/common.json');
 
 const NATIVE_PROPAGATE_LOCALES = ['af', 'de', 'es', 'fr', 'nso', 'pt', 'st', 'zu'];
 const WEB_PROPAGATE_LOCALES = ['af', 'zu'];
 
-const SCAN_DIRS = ['app', 'components', 'contexts', 'hooks', 'lib', 'web/src'];
+const SCAN_DIRS = ['app', 'components', 'contexts', 'hooks', 'lib'];
 const SCAN_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 const IGNORE_DIRS = new Set([
   'node_modules',
@@ -512,7 +511,7 @@ function loadEnglishStores() {
   return {
     nativeCommon: readJson(NATIVE_EN_COMMON_PATH),
     nativeWhatsapp: fs.existsSync(NATIVE_EN_WHATSAPP_PATH) ? readJson(NATIVE_EN_WHATSAPP_PATH) : {},
-    webCommon: readJson(WEB_EN_COMMON_PATH),
+    webCommon: {},
   };
 }
 
@@ -614,20 +613,11 @@ function main() {
     if (fs.existsSync(NATIVE_EN_WHATSAPP_PATH) || report.apply.englishAdded.nativeWhatsapp > 0) {
       writeJson(NATIVE_EN_WHATSAPP_PATH, stores.nativeWhatsapp);
     }
-    writeJson(WEB_EN_COMMON_PATH, stores.webCommon);
-
     const nativeEnglishFlat = flatten(stores.nativeCommon);
     for (const locale of NATIVE_PROPAGATE_LOCALES) {
       const localePath = path.join(PROJECT_ROOT, `locales/${locale}/common.json`);
       const result = propagateLocaleFromEnglish(localePath, nativeEnglishFlat);
       report.apply.propagation.native.push(result);
-    }
-
-    const webEnglishFlat = flatten(stores.webCommon);
-    for (const locale of WEB_PROPAGATE_LOCALES) {
-      const localePath = path.join(PROJECT_ROOT, `web/src/locales/${locale}/common.json`);
-      const result = propagateLocaleFromEnglish(localePath, webEnglishFlat);
-      report.apply.propagation.web.push(result);
     }
 
     const afterStores = loadEnglishStores();

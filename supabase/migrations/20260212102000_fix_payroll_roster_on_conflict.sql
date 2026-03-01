@@ -3,16 +3,13 @@
 --   42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
 
 BEGIN;
-
 -- Ensure expected partial unique indexes exist.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payroll_recipients_teacher
   ON public.payroll_recipients(organization_id, teacher_id)
   WHERE teacher_id IS NOT NULL;
-
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payroll_recipients_principal_profile
   ON public.payroll_recipients(organization_id, role_type, profile_id)
   WHERE role_type = 'principal' AND profile_id IS NOT NULL;
-
 CREATE OR REPLACE FUNCTION public.get_payroll_roster(
   p_org_id uuid,
   p_month date
@@ -149,7 +146,5 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_payroll_roster(uuid, date) TO authenticated;
-
 COMMIT;

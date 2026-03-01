@@ -138,6 +138,11 @@ export async function getReceivablesSnapshot(
 
   let feesData: any[] = [];
 
+  // Hard limit prevents unbounded JSON payloads that can OOM the JS heap on
+  // large schools. The 60-row student cap in the output keeps the UI fast;
+  // 2000 rows is more than enough for any realistic school roster.
+  const QUERY_LIMIT = 2000;
+
   const monthScopedQuery = await assertSupabase()
     .from('student_fees')
     .select(
@@ -145,7 +150,8 @@ export async function getReceivablesSnapshot(
     )
     .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
     .eq('billing_month', month)
-    .in('status', unpaidStatuses);
+    .in('status', unpaidStatuses)
+    .limit(QUERY_LIMIT);
 
   const missingBillingMonth =
     Boolean(monthScopedQuery.error) &&
@@ -163,7 +169,8 @@ export async function getReceivablesSnapshot(
       .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
       .gte('due_date', month)
       .lt('due_date', next)
-      .in('status', unpaidStatuses);
+      .in('status', unpaidStatuses)
+      .limit(QUERY_LIMIT);
     if (fallbackQuery.error) {
       throw new Error(fallbackQuery.error.message || 'Failed to load receivables');
     }
@@ -249,6 +256,8 @@ export async function getReceivablesSnapshot(
     studentMap.set(studentId, existing);
   }
 
+  const ROW_CAP = 60;
+  const totalUnpaidStudents = studentMap.size;
   const students = Array.from(studentMap.values())
     .sort((a, b) => {
       if (b.outstanding_amount !== a.outstanding_amount) {
@@ -259,7 +268,7 @@ export async function getReceivablesSnapshot(
       }
       return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
     })
-    .slice(0, 60)
+    .slice(0, ROW_CAP)
     .map((row) => ({
       ...row,
       outstanding_amount: Number(row.outstanding_amount.toFixed(2)),
@@ -274,8 +283,11 @@ export async function getReceivablesSnapshot(
       overdue_count: overdueCount,
       pending_students: pendingStudents.size,
       overdue_students: overdueStudents.size,
-      outstanding_students: studentMap.size,
+      outstanding_students: totalUnpaidStudents,
       outstanding_amount: Number((pendingAmount + overdueAmount).toFixed(2)),
+      // Expose when the displayed list has been capped so the UI can warn
+      students_display_cap: ROW_CAP,
+      students_total_unpaid: totalUnpaidStudents,
     },
     students,
   };

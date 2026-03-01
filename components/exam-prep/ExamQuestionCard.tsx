@@ -5,11 +5,15 @@
  * answer options / text input, and post-submission feedback.
  */
 
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
+import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
+import { containsMathDelimiters, parseMathSegments } from '@/components/exam-prep/mathSegments';
+
+type WorkspaceTab = 'answer' | 'work';
 
 interface ExamQuestionCardProps {
   section: ExamSection;
@@ -42,6 +46,34 @@ function questionTypeIcon(type: ExamQuestion['type']): { name: string; label: st
   }
 }
 
+const MATH_HINT = 'Use LaTeX for maths: \\frac{1}{2}  \\sqrt{x}  x^2  \\times  \\div';
+
+const isOpenAnswer = (type: ExamQuestion['type']) =>
+  type === 'short_answer' || type === 'essay' || type === 'fill_blank' || type === 'fill_in_blank';
+
+function parseStandaloneMath(value: string): { expression: string; displayMode: boolean } | null {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  const blockMatch = trimmed.match(/^\$\$([\s\S]+)\$\$$/);
+  if (blockMatch?.[1]) {
+    return {
+      expression: blockMatch[1].trim(),
+      displayMode: true,
+    };
+  }
+
+  const inlineMatch = trimmed.match(/^\$([^$\n]+)\$$/);
+  if (inlineMatch?.[1]) {
+    return {
+      expression: inlineMatch[1].trim(),
+      displayMode: false,
+    };
+  }
+
+  return null;
+}
+
 export function ExamQuestionCard({
   section,
   question,
@@ -54,6 +86,75 @@ export function ExamQuestionCard({
   theme,
 }: ExamQuestionCardProps) {
   const typeInfo = questionTypeIcon(question.type);
+  const showWorkspace = isOpenAnswer(question.type);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('answer');
+  const [workText, setWorkText] = useState('');
+  const [showMathPreview, setShowMathPreview] = useState(false);
+  const sectionInstructionsMath = parseStandaloneMath(section.instructions || '');
+  const questionMath = parseStandaloneMath(question.question);
+  const readingPassageMath = parseStandaloneMath(section.readingPassage || '');
+  const feedbackMath = parseStandaloneMath(studentAnswer?.feedback || '');
+  const correctAnswerMath = parseStandaloneMath(question.correctAnswer || '');
+
+  const renderRichMathText = (
+    value: string,
+    textStyle: any,
+    textColor: string,
+  ): React.ReactNode => {
+    const segments = parseMathSegments(value);
+    const hasBlock = segments.some((segment) => segment.type === 'block');
+
+    if (segments.length === 0 || !containsMathDelimiters(value)) {
+      return (
+        <Text style={[textStyle, { color: textColor }]}>
+          {value}
+        </Text>
+      );
+    }
+
+    if (hasBlock) {
+      return (
+        <View style={styles.mathBlockWrap}>
+          {segments.map((segment, index) => {
+            if (segment.type === 'text') {
+              return (
+                <Text key={`segment-${index}`} style={[textStyle, { color: textColor }]}>
+                  {segment.value}
+                </Text>
+              );
+            }
+
+            return (
+              <MathRenderer
+                key={`segment-${index}`}
+                expression={segment.value}
+                displayMode={segment.type === 'block'}
+              />
+            );
+          })}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.mathInlineWrap}>
+        {segments.map((segment, index) => {
+          if (segment.type === 'text') {
+            return (
+              <Text key={`segment-${index}`} style={[textStyle, { color: textColor }]}>
+                {segment.value}
+              </Text>
+            );
+          }
+          return (
+            <View key={`segment-${index}`} style={styles.mathInlineItem}>
+              <MathRenderer expression={segment.value} displayMode={false} />
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
 
   return (
     <>
@@ -63,9 +164,18 @@ export function ExamQuestionCard({
           {section.title}
         </Text>
         {section.instructions ? (
-          <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
-            {section.instructions}
-          </Text>
+          sectionInstructionsMath ? (
+            <MathRenderer
+              expression={sectionInstructionsMath.expression}
+              displayMode={sectionInstructionsMath.displayMode}
+            />
+          ) : containsMathDelimiters(section.instructions || '') ? (
+            renderRichMathText(section.instructions || '', styles.sectionInstructions, theme.textSecondary)
+          ) : (
+            <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
+              {section.instructions}
+            </Text>
+          )
         ) : null}
       </View>
 
@@ -74,13 +184,19 @@ export function ExamQuestionCard({
         <View style={[styles.readingPassageCard, { backgroundColor: theme.surface }]}>
           <View style={styles.passageLabelRow}>
             <Ionicons name="book-outline" size={14} color={theme.primary} />
-            <Text style={[styles.readingPassageTitle, { color: theme.primary }]}>
-              Passage
-            </Text>
-          </View>
-          <Text style={[styles.readingPassageText, { color: theme.text }]}>
-            {section.readingPassage}
+          <Text style={[styles.readingPassageTitle, { color: theme.primary }]}>
+            Passage
           </Text>
+        </View>
+          {readingPassageMath ? (
+            <MathRenderer expression={readingPassageMath.expression} displayMode={readingPassageMath.displayMode} />
+          ) : containsMathDelimiters(section.readingPassage || '') ? (
+            renderRichMathText(section.readingPassage || '', styles.readingPassageText, theme.text)
+          ) : (
+            <Text style={[styles.readingPassageText, { color: theme.text }]}>
+              {section.readingPassage}
+            </Text>
+          )}
         </View>
       ) : null}
 
@@ -104,9 +220,15 @@ export function ExamQuestionCard({
           </View>
         </View>
 
-        <Text style={[styles.questionText, { color: theme.text }]}>
-          {question.question}
-        </Text>
+        {questionMath ? (
+          <MathRenderer expression={questionMath.expression} displayMode={questionMath.displayMode} />
+        ) : containsMathDelimiters(question.question || '') ? (
+          renderRichMathText(question.question || '', styles.questionText, theme.text)
+        ) : (
+          <Text style={[styles.questionText, { color: theme.text }]}>
+            {question.question}
+          </Text>
+        )}
 
         {/* Multiple Choice Options */}
         {question.type === 'multiple_choice' && question.options && (
@@ -114,6 +236,7 @@ export function ExamQuestionCard({
             {question.options.map((option, index) => {
               const optionLetter = String.fromCharCode(65 + index);
               const cleanedOption = option.replace(/^\s*[A-D]\s*[\.\)\-:]\s*/i, '').trim();
+              const optionMath = parseStandaloneMath(cleanedOption);
               const isSelected =
                 currentAnswer === option ||
                 currentAnswer === cleanedOption ||
@@ -183,18 +306,48 @@ export function ExamQuestionCard({
                           <Ionicons name="checkmark" size={12} color={theme.primary} />
                         )}
                   </View>
-                  <Text
-                    style={[
-                      styles.optionText,
-                      {
-                        color: isLocked
+                  <View style={styles.optionTextWrap}>
+                    <Text
+                      style={[
+                        styles.optionText,
+                        styles.optionTextPrefix,
+                        {
+                          color: isLocked
+                            ? lockedTextColor
+                            : isSelected ? theme.primary : theme.text,
+                        },
+                      ]}
+                    >
+                      {optionLetter}.
+                    </Text>
+                    {optionMath ? (
+                      <MathRenderer
+                        expression={optionMath.expression}
+                        displayMode={false}
+                      />
+                    ) : containsMathDelimiters(cleanedOption) ? (
+                      renderRichMathText(
+                        cleanedOption,
+                        styles.optionText,
+                        isLocked
                           ? lockedTextColor
                           : isSelected ? theme.primary : theme.text,
-                      },
-                    ]}
-                  >
-                    {optionLetter}. {cleanedOption}
-                  </Text>
+                      )
+                    ) : (
+                      <Text
+                        style={[
+                          styles.optionText,
+                          {
+                            color: isLocked
+                              ? lockedTextColor
+                              : isSelected ? theme.primary : theme.text,
+                          },
+                        ]}
+                      >
+                        {cleanedOption}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -286,29 +439,112 @@ export function ExamQuestionCard({
           </View>
         )}
 
-        {/* Text-based Input */}
-        {(question.type === 'short_answer' ||
-          question.type === 'essay' ||
-          question.type === 'fill_blank') && (
-          <TextInput
-            style={[
-              styles.answerInput,
-              question.type === 'essay' && styles.essayInput,
-              {
-                backgroundColor: isLocked ? theme.background + '80' : theme.background,
-                borderColor: theme.border,
-                color: theme.text,
-              },
-              isLocked && { opacity: 0.7 },
-            ]}
-            value={currentAnswer}
-            onChangeText={onChangeAnswer}
-            placeholder="Type your answer here..."
-            placeholderTextColor={theme.textTertiary}
-            multiline={question.type === 'essay'}
-            numberOfLines={question.type === 'essay' ? 6 : 2}
-            editable={!isLocked}
-          />
+        {/* Tabbed Workspace (Answer + Show Work) */}
+        {showWorkspace && (
+          <View style={styles.workspaceContainer}>
+            {/* Tab Row */}
+            <View style={[styles.tabRow, { borderBottomColor: theme.border }]}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'answer' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+                onPress={() => setActiveTab('answer')}
+              >
+                <Ionicons name="pencil" size={14} color={activeTab === 'answer' ? theme.primary : theme.textSecondary} />
+                <Text style={[styles.tabLabel, { color: activeTab === 'answer' ? theme.primary : theme.textSecondary }]}>
+                  Answer
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'work' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+                onPress={() => setActiveTab('work')}
+              >
+                <Ionicons name="calculator" size={14} color={activeTab === 'work' ? theme.primary : theme.textSecondary} />
+                <Text style={[styles.tabLabel, { color: activeTab === 'work' ? theme.primary : theme.textSecondary }]}>
+                  Show Work
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Answer Tab */}
+            {activeTab === 'answer' && (
+              <TextInput
+                style={[
+                  styles.answerInput,
+                  question.type === 'essay' && styles.essayInput,
+                  {
+                    backgroundColor: isLocked ? theme.background + '80' : theme.background,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                  isLocked && { opacity: 0.7 },
+                ]}
+                value={currentAnswer}
+                onChangeText={onChangeAnswer}
+                placeholder="Type your answer here..."
+                placeholderTextColor={theme.textTertiary}
+                multiline
+                numberOfLines={question.type === 'essay' ? 6 : 3}
+                editable={!isLocked}
+              />
+            )}
+
+            {/* Show Work Tab */}
+            {activeTab === 'work' && (
+              <View style={styles.workTab}>
+                <View style={[styles.workHintRow, { backgroundColor: theme.primary + '18' }]}>
+                  <Ionicons name="information-circle-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.workHint, { color: theme.primary }]}>{MATH_HINT}</Text>
+                </View>
+
+                <TextInput
+                  style={[
+                    styles.workInput,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                    isLocked && { opacity: 0.7 },
+                  ]}
+                  value={workText}
+                  onChangeText={setWorkText}
+                  placeholder="Write your working here… steps, calculations, diagrams described in text or LaTeX"
+                  placeholderTextColor={theme.textTertiary}
+                  multiline
+                  numberOfLines={6}
+                  editable={!isLocked}
+                  textAlignVertical="top"
+                />
+
+                {/* LaTeX Preview toggle */}
+                {workText.trim().length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.previewToggle, { borderColor: theme.border }]}
+                    onPress={() => setShowMathPreview(p => !p)}
+                  >
+                    <Ionicons
+                      name={showMathPreview ? 'eye-off-outline' : 'eye-outline'}
+                      size={16}
+                      color={theme.textSecondary}
+                    />
+                    <Text style={[styles.previewToggleLabel, { color: theme.textSecondary }]}>
+                      {showMathPreview ? 'Hide preview' : 'Preview maths'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {showMathPreview && workText.trim().length > 0 && (
+                  <View style={[styles.mathPreviewCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Text style={[styles.mathPreviewTitle, { color: theme.textSecondary }]}>
+                      Rendered preview
+                    </Text>
+                    <ScrollView>
+                      <MathRenderer expression={workText} displayMode />
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         )}
 
         {/* Feedback after submission */}
@@ -347,17 +583,29 @@ export function ExamQuestionCard({
                 </Text>
               )}
             </View>
-            <Text style={[styles.feedbackText, { color: theme.text }]}>
-              {studentAnswer.feedback}
-            </Text>
+            {feedbackMath ? (
+              <MathRenderer expression={feedbackMath.expression} displayMode={feedbackMath.displayMode} />
+            ) : containsMathDelimiters(studentAnswer.feedback || '') ? (
+              renderRichMathText(studentAnswer.feedback || '', styles.feedbackText, theme.text)
+            ) : (
+              <Text style={[styles.feedbackText, { color: theme.text }]}>
+                {studentAnswer.feedback}
+              </Text>
+            )}
             {!studentAnswer.isCorrect && question.correctAnswer && (
               <View style={styles.correctAnswerRow}>
                 <Text style={[styles.correctAnswerLabel, { color: '#10b981' }]}>
                   Correct answer:
                 </Text>
-                <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
-                  {question.correctAnswer}
-                </Text>
+                {correctAnswerMath ? (
+                  <MathRenderer expression={correctAnswerMath.expression} displayMode={false} />
+                ) : containsMathDelimiters(question.correctAnswer || '') ? (
+                  renderRichMathText(question.correctAnswer || '', styles.correctAnswerValue, theme.text)
+                ) : (
+                  <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
+                    {question.correctAnswer}
+                  </Text>
+                )}
               </View>
             )}
           </View>
@@ -379,6 +627,19 @@ const styles = StyleSheet.create({
   sectionInstructions: {
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  mathBlockWrap: {
+    gap: 8,
+  },
+  mathInlineWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: 4,
+    rowGap: 4,
+  },
+  mathInlineItem: {
+    minWidth: 32,
   },
   readingPassageCard: {
     borderRadius: 12,
@@ -457,19 +718,100 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optionText: {
-    flex: 1,
     fontSize: 15,
+  },
+  optionTextWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  optionTextPrefix: {
+    minWidth: 18,
+  },
+  workspaceContainer: {
+    marginTop: 8,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    marginBottom: 10,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    marginBottom: -1,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   answerInput: {
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
     fontSize: 15,
-    marginTop: 8,
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
   essayInput: {
     minHeight: 120,
     textAlignVertical: 'top',
+  },
+  workTab: {
+    gap: 10,
+  },
+  workHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  workHint: {
+    fontSize: 11,
+    fontFamily: 'monospace' as const,
+    flex: 1,
+    flexWrap: 'wrap' as const,
+  },
+  workInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 140,
+    fontFamily: 'monospace' as const,
+    textAlignVertical: 'top' as const,
+  },
+  previewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start' as const,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  previewToggleLabel: {
+    fontSize: 13,
+  },
+  mathPreviewCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    maxHeight: 200,
+  },
+  mathPreviewTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   feedbackCard: {
     marginTop: 16,

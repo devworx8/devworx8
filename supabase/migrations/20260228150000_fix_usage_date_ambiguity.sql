@@ -70,7 +70,6 @@ begin
       end;
 end;
 $$;
-
 drop function if exists public.consume_daily_media_budget(text, bigint, text);
 create function public.consume_daily_media_budget(
   p_feature text,
@@ -174,6 +173,5 @@ begin
       end;
 end;
 $$;
-
 grant execute on function public.get_daily_media_budget(text, text) to authenticated, service_role;
 grant execute on function public.consume_daily_media_budget(text, bigint, text) to authenticated, service_role;

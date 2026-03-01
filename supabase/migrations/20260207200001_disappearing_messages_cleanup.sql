@@ -5,7 +5,6 @@
 -- On Supabase, pg_cron runs in the 'postgres' database on the 'cron' schema.
 -- CREATE EXTENSION is idempotent with IF NOT EXISTS.
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
-
 -- ─── Create the cleanup function ─────────────────────────────────
 CREATE OR REPLACE FUNCTION public.cleanup_disappearing_messages()
 RETURNS INTEGER
@@ -31,10 +30,8 @@ BEGIN
   RETURN deleted_count;
 END;
 $$;
-
 COMMENT ON FUNCTION public.cleanup_disappearing_messages()
   IS 'Deletes messages that have exceeded their thread disappear_after_seconds TTL. Called by pg_cron every 5 minutes.';
-
 -- ─── Schedule via pg_cron (if available) ─────────────────────────
 -- pg_cron must be enabled in Supabase Dashboard > Database > Extensions
 DO $$
@@ -62,16 +59,13 @@ EXCEPTION
     RAISE NOTICE 'Could not schedule pg_cron job: %. Run manually after enabling pg_cron.', SQLERRM;
 END;
 $$;
-
 -- ─── Also add forwarded_from_id and edited_at columns to messages ─
 ALTER TABLE public.messages
   ADD COLUMN IF NOT EXISTS forwarded_from_id UUID REFERENCES public.messages(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ DEFAULT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_messages_forwarded
   ON public.messages (forwarded_from_id)
   WHERE forwarded_from_id IS NOT NULL;
-
 COMMENT ON COLUMN public.messages.forwarded_from_id
   IS 'References the original message this was forwarded from';
 COMMENT ON COLUMN public.messages.edited_at

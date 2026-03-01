@@ -276,13 +276,31 @@ export async function resolveSuggestedTuitionFee(
 ): Promise<FeeStructureRow | null> {
   try {
     const supabase = assertSupabase();
-    const { data, error } = await supabase
+
+    const { data: feeStructureData, error: feeStructureError } = await supabase
       .from('fee_structures')
       .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
       .eq('preschool_id', organizationId)
       .eq('is_active', true)
       .order('effective_from', { ascending: false })
       .order('created_at', { ascending: false });
+
+    let data = feeStructureData;
+    let error = feeStructureError;
+
+    if ((!data || data.length === 0) && !error) {
+      const fallback = await supabase
+        .from('fee_structures')
+        .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (fallback.data && fallback.data.length > 0) {
+        data = fallback.data;
+        error = fallback.error;
+      }
+    }
 
     if (error) throw error;
 

@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '17'
   EXPO_PUBLIC_PLATFORM_TESTING: 'android'
   EXPO_PUBLIC_USE_PRODUCTION_DB_AS_DEV: 'true'
@@ -42,13 +42,14 @@ jobs:
           echo "Production DB as dev: $EXPO_PUBLIC_USE_PRODUCTION_DB_AS_DEV"
           echo "AdMob test IDs only: $EXPO_PUBLIC_ADMOB_TEST_IDS_ONLY"
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: TypeScript type checking
         run: npm run typecheck
 
       - name: Lint code
-        run: |
-          # Basic linting - add eslint later if needed
-          echo "Code linting placeholder"
+        run: npm run lint
 
       - name: Security audit
         run: |

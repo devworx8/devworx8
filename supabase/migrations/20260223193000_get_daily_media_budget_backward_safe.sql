@@ -70,6 +70,5 @@ begin
       end;
 end;
 $$;
-
 revoke all on function public.get_daily_media_budget(text, text) from public;
 grant execute on function public.get_daily_media_budget(text, text) to authenticated, service_role;

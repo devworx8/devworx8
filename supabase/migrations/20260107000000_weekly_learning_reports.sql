@@ -5,21 +5,6 @@
 -- Purpose: Store AI-generated weekly learning reports for parents
 -- ============================================================================
 
--- Ensure base tables exist for foreign keys (shadow DB safety)
-CREATE TABLE IF NOT EXISTS public.preschools (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  role TEXT,
-  preschool_id UUID
-);
-
-CREATE TABLE IF NOT EXISTS public.students (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
 -- Create weekly_learning_reports table
 CREATE TABLE IF NOT EXISTS public.weekly_learning_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,24 +38,19 @@ CREATE TABLE IF NOT EXISTS public.weekly_learning_reports (
   -- Ensure one report per student per week
   UNIQUE(student_id, week_start)
 );
-
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_parent ON public.weekly_learning_reports(parent_id, week_start DESC);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_student_week ON public.weekly_learning_reports(student_id, week_start DESC);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_preschool ON public.weekly_learning_reports(preschool_id, week_start DESC);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_generated ON public.weekly_learning_reports(generated_at DESC);
-
 -- Add comments
 COMMENT ON TABLE public.weekly_learning_reports IS 'AI-generated weekly progress reports for parents';
-
 -- Enable Row Level Security
 ALTER TABLE public.weekly_learning_reports ENABLE ROW LEVEL SECURITY;
-
 -- RLS Policies
 DROP POLICY IF EXISTS "weekly_reports_parent_select" ON public.weekly_learning_reports;
 CREATE POLICY "weekly_reports_parent_select" ON public.weekly_learning_reports
   FOR SELECT USING (parent_id = auth.uid());
-
 DROP POLICY IF EXISTS "weekly_reports_school_select" ON public.weekly_learning_reports;
 CREATE POLICY "weekly_reports_school_select" ON public.weekly_learning_reports
   FOR SELECT USING (
@@ -81,9 +61,7 @@ CREATE POLICY "weekly_reports_school_select" ON public.weekly_learning_reports
       AND p.role IN ('teacher', 'principal', 'principal_admin')
     )
   );
-
 DROP POLICY IF EXISTS "weekly_reports_system_insert" ON public.weekly_learning_reports;
 CREATE POLICY "weekly_reports_system_insert" ON public.weekly_learning_reports
   FOR INSERT WITH CHECK (true);
-
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.weekly_learning_reports TO authenticated;

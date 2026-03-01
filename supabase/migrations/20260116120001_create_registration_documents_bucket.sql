@@ -13,7 +13,6 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
-
 -- RLS Policies for the bucket
 
 -- Policy: Allow authenticated users to upload their own documents
@@ -25,7 +24,6 @@ WITH CHECK (
   bucket_id = 'registration-documents' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
-
 -- Policy: Allow users to view their own documents
 DROP POLICY IF EXISTS "Users can view own registration documents" ON storage.objects;
 CREATE POLICY "Users can view own registration documents"
@@ -35,7 +33,6 @@ USING (
   bucket_id = 'registration-documents' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
-
 -- Policy: Allow users to update their own documents
 DROP POLICY IF EXISTS "Users can update own registration documents" ON storage.objects;
 CREATE POLICY "Users can update own registration documents"
@@ -45,7 +42,6 @@ USING (
   bucket_id = 'registration-documents' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
-
 -- Policy: Allow users to delete their own documents
 DROP POLICY IF EXISTS "Users can delete own registration documents" ON storage.objects;
 CREATE POLICY "Users can delete own registration documents"
@@ -55,7 +51,6 @@ USING (
   bucket_id = 'registration-documents' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
-
 -- Policy: Allow principals/teachers to view documents for their organization
 DROP POLICY IF EXISTS "Staff can view org registration documents" ON storage.objects;
 CREATE POLICY "Staff can view org registration documents"

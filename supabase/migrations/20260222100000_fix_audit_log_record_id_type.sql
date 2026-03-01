@@ -11,7 +11,6 @@
 -- Step 1: Alter audit log column from UUID → TEXT
 ALTER TABLE IF EXISTS public.superadmin_audit_log
   ALTER COLUMN record_id TYPE text USING record_id::text;
-
 -- Step 2: Re-create superadmin_update_entity_type with corrected audit insert
 -- (record_id no longer needs ::text cast — column is now TEXT)
 CREATE OR REPLACE FUNCTION public.superadmin_update_entity_type(
@@ -182,7 +181,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Step 3: Re-create superadmin_update_entity_profile with corrected audit insert
 CREATE OR REPLACE FUNCTION public.superadmin_update_entity_profile(
   p_entity_type text,
@@ -385,7 +383,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Grants (re-apply)
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_type TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_profile TO authenticated, service_role;

@@ -65,7 +65,6 @@ BEGIN
   RETURN NULL;
 END;
 $function$;
-
 -- Add comment explaining the function
 COMMENT ON FUNCTION public.current_preschool_id() IS 
 'Returns the current user''s organization/preschool ID for RLS policies. 

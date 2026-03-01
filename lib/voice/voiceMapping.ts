@@ -33,8 +33,8 @@ function toShortCode(lang: string): TTSShortLang {
   if (raw.startsWith('af')) return 'af';
   if (raw.startsWith('zu')) return 'zu';
   if (raw.startsWith('xh')) return 'xh';
-  if (raw.startsWith('nso') || raw === 'st' || raw.includes('sotho')) return 'nso';
   if (raw.startsWith('st')) return 'st';
+  if (raw.startsWith('nso') || raw.includes('sepedi') || raw.includes('northern sotho')) return 'nso';
   if (raw.startsWith('fr')) return 'fr';
   if (raw.startsWith('pt')) return 'pt';
   if (raw.startsWith('es')) return 'es';

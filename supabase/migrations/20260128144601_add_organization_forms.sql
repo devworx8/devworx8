@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.organization_forms (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -14,17 +13,13 @@ CREATE TABLE IF NOT EXISTS public.organization_forms (
   updated_at timestamptz NOT NULL DEFAULT now(),
   published_at timestamptz
 );
-
 ALTER TABLE public.organization_forms
   ADD CONSTRAINT organization_forms_audience_check
   CHECK (audience <@ ARRAY['parents', 'teachers', 'staff']::text[]);
-
 CREATE INDEX IF NOT EXISTS idx_organization_forms_org_id
   ON public.organization_forms(organization_id);
-
 CREATE INDEX IF NOT EXISTS idx_organization_forms_status
   ON public.organization_forms(status);
-
 CREATE OR REPLACE FUNCTION public.set_organization_form_meta()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -43,14 +38,11 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_organization_forms_meta ON public.organization_forms;
 CREATE TRIGGER trg_organization_forms_meta
 BEFORE INSERT OR UPDATE ON public.organization_forms
 FOR EACH ROW EXECUTE FUNCTION public.set_organization_form_meta();
-
 ALTER TABLE public.organization_forms ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS organization_forms_select ON public.organization_forms;
 CREATE POLICY organization_forms_select ON public.organization_forms
 FOR SELECT TO authenticated
@@ -73,7 +65,6 @@ USING (
       )
   )
 );
-
 DROP POLICY IF EXISTS organization_forms_insert ON public.organization_forms;
 CREATE POLICY organization_forms_insert ON public.organization_forms
 FOR INSERT TO authenticated
@@ -86,7 +77,6 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = organization_forms.organization_id
   )
 );
-
 DROP POLICY IF EXISTS organization_forms_update ON public.organization_forms;
 CREATE POLICY organization_forms_update ON public.organization_forms
 FOR UPDATE TO authenticated
@@ -108,7 +98,6 @@ WITH CHECK (
       AND COALESCE(p.organization_id, p.preschool_id) = organization_forms.organization_id
   )
 );
-
 DROP POLICY IF EXISTS organization_forms_delete ON public.organization_forms;
 CREATE POLICY organization_forms_delete ON public.organization_forms
 FOR DELETE TO authenticated
@@ -121,5 +110,4 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = organization_forms.organization_id
   )
 );
-
 COMMIT;

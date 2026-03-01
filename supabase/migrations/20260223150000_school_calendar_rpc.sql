@@ -1,6 +1,5 @@
 -- School Calendar RPC for parents and teachers (SECURITY DEFINER)
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.get_school_calendar_for_parent()
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public
@@ -45,7 +44,6 @@ BEGIN
   RETURN jsonb_build_object('events',COALESCE(v_events,'[]'::jsonb),'meetings',COALESCE(v_meetings,'[]'::jsonb),'excursions',COALESCE(v_excursions,'[]'::jsonb));
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.get_school_calendar_for_teacher()
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public
@@ -80,5 +78,4 @@ BEGIN
   RETURN jsonb_build_object('events',COALESCE(v_events,'[]'::jsonb),'meetings',COALESCE(v_meetings,'[]'::jsonb),'excursions',COALESCE(v_excursions,'[]'::jsonb));
 END;
 $$;
-
 COMMIT;

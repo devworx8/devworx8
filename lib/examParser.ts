@@ -313,6 +313,41 @@ function calculateSectionMarks(questions: any[]): number {
   return questions.reduce((sum, q) => sum + (q.marks || 1), 0);
 }
 
+function normalizeComparableText(value: string): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeMathExpression(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/\$\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\left|\\right/gi, '')
+    .replace(/\\times/gi, '*')
+    .replace(/\\cdot/gi, '*')
+    .replace(/\\div/gi, '/')
+    .replace(/\\pm/gi, '+/-')
+    .replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gi, '($1)/($2)')
+    .replace(/\\sqrt\s*\{([^{}]+)\}/gi, 'sqrt($1)')
+    .replace(/[{}]/g, '')
+    .replace(/\(([\p{L}\p{N}.\-+]+)\)/gu, '$1')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function areMathEquivalent(a: string, b: string): boolean {
+  const normalizedA = normalizeMathExpression(a);
+  const normalizedB = normalizeMathExpression(b);
+  if (!normalizedA || !normalizedB) return false;
+  return normalizedA === normalizedB;
+}
+
 /**
  * Grade student answer against correct answer
  */
@@ -328,15 +363,8 @@ export function gradeAnswer(
     };
   }
 
-  const answer = studentAnswer.trim().toLowerCase();
-
-  const normalize = (value: string) =>
-    value
-      .trim()
-      .toLowerCase()
-      .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, ' ');
+  const answer = studentAnswer.trim();
+  const normalize = (value: string) => normalizeComparableText(value);
 
   // Multiple choice - flexible matching
   if (question.type === 'multiple_choice' && question.correctAnswer) {
@@ -357,6 +385,7 @@ export function gradeAnswer(
 
     const isCorrect =
       answerNormalized === correctNormalized ||
+      areMathEquivalent(answer, correctRaw) ||
       (!!answerLetter && !!correctLetter && answerLetter === correctLetter);
 
     return {
@@ -390,37 +419,96 @@ export function gradeAnswer(
   }
 
   if ((question.type === 'fill_blank' || question.type === 'fill_in_blank') && question.correctAnswer) {
-    const isCorrect = normalize(answer) === normalize(question.correctAnswer);
+    const normalizedAnswer = normalize(answer);
+    const normalizedCorrect = normalize(question.correctAnswer);
+    const isExact = normalizedAnswer === normalizedCorrect || areMathEquivalent(answer, question.correctAnswer);
+    const isClose = !isExact
+      && normalizedCorrect.length > 3
+      && normalizedAnswer.length > 0
+      && (normalizedAnswer.startsWith(normalizedCorrect) || normalizedCorrect.startsWith(normalizedAnswer)
+        || (Math.abs(normalizedAnswer.length - normalizedCorrect.length) <= 2
+          && [...normalizedCorrect].filter((c, i) => normalizedAnswer[i] !== c).length <= 1));
+
+    if (isExact) {
+      return {
+        isCorrect: true,
+        feedback: question.explanation || 'Correct!',
+        marks: question.marks,
+      };
+    } else if (isClose) {
+      return {
+        isCorrect: true,
+        feedback: `Correct (minor spelling variation accepted). The expected answer is ${question.correctAnswer}.`,
+        marks: question.marks,
+      };
+    }
     return {
-      isCorrect,
-      feedback: isCorrect
-        ? question.explanation || 'Correct!'
-        : question.explanation
+      isCorrect: false,
+      feedback: question.explanation
         ? `Incorrect. ${question.explanation}`
         : `Incorrect. The correct answer is ${question.correctAnswer}.`,
-      marks: isCorrect ? question.marks : 0,
+      marks: 0,
     };
   }
 
   if ((question.type === 'short_answer' || question.type === 'essay') && question.correctAnswer) {
-    const expectedTokens = normalize(question.correctAnswer)
-      .split(' ')
-      .filter((token) => token.length >= 4);
-    const studentTokens = normalize(answer).split(' ');
-    const matched = expectedTokens.filter((token) => studentTokens.includes(token)).length;
-    const coverage = expectedTokens.length > 0 ? matched / expectedTokens.length : 0;
-    const awarded = Math.min(question.marks, Math.max(0, Math.round(question.marks * coverage)));
+    const normalizedExpected = normalize(question.correctAnswer);
+    const normalizedStudent = normalize(answer);
+    const expectedTokens = normalizedExpected.split(' ').filter((token) => token.length >= 3);
+    const studentTokens = normalizedStudent.split(' ');
 
-    return {
-      isCorrect: coverage >= 0.6,
-      feedback:
-        coverage >= 0.6
-          ? question.explanation || 'Good answer. Key ideas are covered.'
-          : question.explanation
-          ? `Partially correct. ${question.explanation}`
-          : 'Partially correct. Add more key terms and explain your reasoning.',
-      marks: awarded,
+    const fuzzyMatch = (expected: string, student: string): boolean => {
+      if (expected === student) return true;
+      if (expected.length <= 3) return false;
+      if (student.startsWith(expected) || expected.startsWith(student)) return true;
+      let dist = 0;
+      const longer = expected.length >= student.length ? expected : student;
+      const shorter = expected.length < student.length ? expected : student;
+      if (Math.abs(longer.length - shorter.length) > 2) return false;
+      for (let i = 0; i < longer.length; i++) {
+        if (shorter[i] !== longer[i]) dist++;
+        if (dist > 1) return false;
+      }
+      return true;
     };
+
+    const matched = expectedTokens.filter((token) =>
+      studentTokens.some((st) => fuzzyMatch(token, st))
+    ).length;
+    const coverage = expectedTokens.length > 0 ? matched / expectedTokens.length : 0;
+
+    const isEssay = question.type === 'essay';
+    const wordCount = studentTokens.length;
+    const lengthBonus = isEssay && wordCount >= 15 ? 0.1 : isEssay && wordCount >= 8 ? 0.05 : 0;
+    const adjustedCoverage = Math.min(1, coverage + lengthBonus);
+    const awarded = Math.min(question.marks, Math.max(0, Math.round(question.marks * adjustedCoverage)));
+
+    const correctThreshold = isEssay ? 0.55 : 0.6;
+    const partialThreshold = 0.3;
+
+    if (adjustedCoverage >= correctThreshold) {
+      return {
+        isCorrect: true,
+        feedback: question.explanation || 'Good answer. Key ideas are covered.',
+        marks: awarded,
+      };
+    } else if (adjustedCoverage >= partialThreshold) {
+      return {
+        isCorrect: false,
+        feedback: question.explanation
+          ? `Partially correct (${Math.round(adjustedCoverage * 100)}% coverage). ${question.explanation}`
+          : `Partially correct (${Math.round(adjustedCoverage * 100)}% coverage). Include more key terms and elaborate on your reasoning.`,
+        marks: awarded,
+      };
+    } else {
+      return {
+        isCorrect: false,
+        feedback: question.explanation
+          ? `Needs improvement. ${question.explanation}`
+          : 'Needs improvement. Review the topic and focus on key concepts.',
+        marks: awarded,
+      };
+    }
   }
 
   return {

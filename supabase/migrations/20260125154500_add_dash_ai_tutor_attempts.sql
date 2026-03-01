@@ -19,14 +19,11 @@ CREATE TABLE IF NOT EXISTS public.dash_ai_tutor_attempts (
   metadata JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_dash_ai_tutor_attempts_user_id ON public.dash_ai_tutor_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_dash_ai_tutor_attempts_student_id ON public.dash_ai_tutor_attempts(student_id);
 CREATE INDEX IF NOT EXISTS idx_dash_ai_tutor_attempts_session_id ON public.dash_ai_tutor_attempts(session_id);
 CREATE INDEX IF NOT EXISTS idx_dash_ai_tutor_attempts_created_at ON public.dash_ai_tutor_attempts(created_at DESC);
-
 ALTER TABLE public.dash_ai_tutor_attempts ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS tutor_attempts_select ON public.dash_ai_tutor_attempts;
 CREATE POLICY tutor_attempts_select ON public.dash_ai_tutor_attempts
   FOR SELECT
@@ -40,7 +37,6 @@ CREATE POLICY tutor_attempts_select ON public.dash_ai_tutor_attempts
       )
     )
   );
-
 DROP POLICY IF EXISTS tutor_attempts_insert ON public.dash_ai_tutor_attempts;
 CREATE POLICY tutor_attempts_insert ON public.dash_ai_tutor_attempts
   FOR INSERT
@@ -54,7 +50,5 @@ CREATE POLICY tutor_attempts_insert ON public.dash_ai_tutor_attempts
       )
     )
   );
-
 GRANT SELECT, INSERT ON public.dash_ai_tutor_attempts TO authenticated;
-
 COMMENT ON TABLE public.dash_ai_tutor_attempts IS 'Stores learner tutoring attempts from Dash AI for performance reporting.';

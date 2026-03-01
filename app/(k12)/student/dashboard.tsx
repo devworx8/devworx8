@@ -9,7 +9,7 @@
  * AND user role is 'student'
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Dimensions, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useTranslation } from 'react-i18next';
 import { track } from '@/lib/analytics';
 import { normalizeTierName } from '@/lib/tiers';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
@@ -28,15 +29,21 @@ import { Pill } from '@/components/nextgen/Pill';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
-// Quick action items for K-12 student
-const quickActions = [
-  { id: 'classes', icon: 'grid', label: 'Classes', route: '/(k12)/student/classes', color: '#4F46E5' },
-  { id: 'assignments', icon: 'document-text', label: 'Tasks', route: '/(k12)/student/assignments', color: '#10B981' },
-  { id: 'grades', icon: 'ribbon', label: 'Grades', route: '/(k12)/student/grades', color: '#F59E0B' },
-  { id: 'schedule', icon: 'calendar', label: 'Schedule', route: '/(k12)/student/schedule', color: '#8B5CF6' },
-  { id: 'library', icon: 'library', label: 'Library', route: '/(k12)/library', color: '#3B82F6' },
-  { id: 'ai', icon: 'sparkles', label: 'Study AI', route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic', color: '#EC4899' },
-];
+const QUICK_ACTION_CONFIG = [
+  { id: 'classes', icon: 'grid', labelKey: 'dashboard.student.quick_actions.classes', labelDefault: 'Classes', route: '/(k12)/student/classes', color: '#4F46E5' },
+  { id: 'assignments', icon: 'document-text', labelKey: 'dashboard.student.quick_actions.tasks', labelDefault: 'Tasks', route: '/(k12)/student/assignments', color: '#10B981' },
+  { id: 'grades', icon: 'ribbon', labelKey: 'dashboard.student.quick_actions.grades', labelDefault: 'Grades', route: '/(k12)/student/grades', color: '#F59E0B' },
+  { id: 'schedule', icon: 'calendar', labelKey: 'dashboard.student.quick_actions.schedule', labelDefault: 'Schedule', route: '/(k12)/student/schedule', color: '#8B5CF6' },
+  { id: 'library', icon: 'library', labelKey: 'dashboard.student.quick_actions.library', labelDefault: 'Library', route: '/(k12)/library', color: '#3B82F6' },
+  {
+    id: 'ai',
+    icon: 'sparkles',
+    labelKey: 'dashboard.student.quick_actions.study_ai',
+    labelDefault: 'Study AI',
+    route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic',
+    color: '#EC4899',
+  },
+] as const;
 
 // Placeholder data — screens fetch real data via hooks, dashboard shows summary cards  
 // TODO: Wire real assignment count + class schedule from Supabase queries
@@ -79,6 +86,7 @@ export default function K12StudentDashboardScreen() {
   const permissions = usePermissions();
   const { theme } = useNextGenTheme();
   const { tier } = useSubscription();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -86,6 +94,14 @@ export default function K12StudentDashboardScreen() {
   const [upcomingAssignments, setUpcomingAssignments] = useState(EMPTY_ASSIGNMENTS);
   const [metrics, setMetrics] = useState(defaultMetrics);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const quickActions = useMemo(
+    () =>
+      QUICK_ACTION_CONFIG.map((action) => ({
+        ...action,
+        label: t(action.labelKey, { defaultValue: action.labelDefault }),
+      })),
+    [t],
+  );
 
   const toUuidOrUndefined = (value?: string | null): string | undefined => {
     const normalized = String(value || '').trim();
@@ -97,17 +113,23 @@ export default function K12StudentDashboardScreen() {
   };
 
   // Get school and user info from profile
-  const schoolName = (profile as any)?.organization_membership?.organization_name || 'Your School';
-  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'Student';
+  const schoolName =
+    (profile as any)?.organization_membership?.organization_name ||
+    t('dashboard.student.your_school', { defaultValue: 'Your School' });
+  const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.student', { defaultValue: 'Student' });
   const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
-  const grade = 'Grade 10'; // TODO: Get from profile/student record
+  const grade = t('dashboard.student.default_grade', { defaultValue: 'Grade 10' }); // TODO: Get from profile/student record
   const gradeMatch = grade.match(/\d+/);
   const gradeNumber = gradeMatch ? Number(gradeMatch[0]) : 0;
   const canBuildFormalExam = gradeNumber >= 4;
   const normalizedTier = normalizeTierName(
     String(tier || (profile as any)?.subscription_tier || 'free')
   );
-  const tierBadgeLabel = `Tier: ${normalizedTier.charAt(0).toUpperCase()}${normalizedTier.slice(1)}`;
+  const tierLabel = `${normalizedTier.charAt(0).toUpperCase()}${normalizedTier.slice(1)}`;
+  const tierBadgeLabel = t('subscription.tier_badge', {
+    defaultValue: 'Tier: {{tier}}',
+    tier: tierLabel,
+  });
 
   // RBAC checks - students use 'student' role
   const canView = permissions?.hasRole ? permissions.hasRole('student') : false;
@@ -205,9 +227,9 @@ export default function K12StudentDashboardScreen() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return t('dashboard.student.greeting.morning', { defaultValue: 'Good morning' });
+    if (hour < 17) return t('dashboard.student.greeting.afternoon', { defaultValue: 'Good afternoon' });
+    return t('dashboard.student.greeting.evening', { defaultValue: 'Good evening' });
   };
 
   // Find current class
@@ -220,7 +242,7 @@ export default function K12StudentDashboardScreen() {
         <View style={styles.loadingContainer}>
           <EduDashSpinner size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-            Loading dashboard...
+            {t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
           </Text>
         </View>
       </SafeAreaView>
@@ -246,7 +268,7 @@ export default function K12StudentDashboardScreen() {
             <TouchableOpacity
               style={styles.hamburgerButton}
               onPress={() => setIsDrawerOpen(true)}
-              accessibilityLabel="Open navigation menu"
+              accessibilityLabel={t('dashboard.student.open_navigation_menu', { defaultValue: 'Open navigation menu' })}
             >
               <Ionicons name="menu" size={28} color={theme.colors.text} />
             </TouchableOpacity>
@@ -299,21 +321,21 @@ export default function K12StudentDashboardScreen() {
         <View style={styles.quickStatsRow}>
           <QuickStat
             icon="ribbon"
-            label="Average"
+            label={t('dashboard.student.metrics.average', { defaultValue: 'Average' })}
             value={metrics.avgGrade}
             color="#F59E0B"
             colors={theme.colors}
           />
           <QuickStat
             icon="checkmark-circle"
-            label="Attendance"
+            label={t('dashboard.student.metrics.attendance', { defaultValue: 'Attendance' })}
             value={`${metrics.attendance}%`}
             color="#10B981"
             colors={theme.colors}
           />
           <QuickStat
             icon="document-text"
-            label="Pending"
+            label={t('dashboard.student.metrics.pending', { defaultValue: 'Pending' })}
             value={metrics.pendingTasks}
             color="#3B82F6"
             colors={theme.colors}
@@ -341,7 +363,7 @@ export default function K12StudentDashboardScreen() {
             >
               <View style={styles.currentClassLive}>
                 <View style={styles.liveDot} />
-                <Text style={styles.liveText}>NOW</Text>
+                <Text style={styles.liveText}>{t('dashboard.student.now', { defaultValue: 'NOW' })}</Text>
               </View>
               <View style={styles.currentClassInfo}>
                 <Text style={styles.currentClassName}>{currentClass.name}</Text>
@@ -357,32 +379,43 @@ export default function K12StudentDashboardScreen() {
         {/* Quick Actions */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Dash Learning Hub</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('dashboard.student.learning_hub.title', { defaultValue: 'Dash Learning Hub' })}
+            </Text>
           </View>
           <View style={styles.learningHubGrid}>
             <GradientActionCard
               tone="green"
               icon="school-outline"
-              badgeLabel="Tutor Mode"
-              title="Interactive Tutor Session"
-              description="Live step-by-step help. Diagnose → Teach → Practice."
-              cta="Start Tutor Session"
+              badgeLabel={t('dashboard.student.learning_hub.tutor_badge', { defaultValue: 'Tutor Mode' })}
+              title={t('dashboard.student.learning_hub.tutor_title', { defaultValue: 'Interactive Tutor Session' })}
+              description={t('dashboard.student.learning_hub.tutor_description', {
+                defaultValue: 'Live step-by-step help. Diagnose -> Teach -> Practice.',
+              })}
+              cta={t('dashboard.student.learning_hub.tutor_cta', { defaultValue: 'Start Tutor Session' })}
               onPress={openTutorSession}
             />
             <GradientActionCard
               tone="purple"
               icon="document-text-outline"
-              badgeLabel="Exam Builder"
-              title="Build Full Exam (Printable)"
-              description="Generate a CAPS-aligned formal test paper."
-              cta="Generate Formal Test Paper"
+              badgeLabel={t('dashboard.student.learning_hub.exam_badge', { defaultValue: 'Exam Builder' })}
+              title={t('dashboard.student.learning_hub.exam_title', { defaultValue: 'Build Full Exam (Printable)' })}
+              description={t('dashboard.student.learning_hub.exam_description', {
+                defaultValue: 'Generate a CAPS-aligned formal test paper.',
+              })}
+              cta={t('dashboard.student.learning_hub.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
               onPress={openExamBuilder}
               disabled={!canBuildFormalExam}
             />
             <View style={styles.learningHubHintRow}>
-              <Pill label="Tutor Session Active" tone="success" />
+              <Pill
+                label={t('dashboard.student.learning_hub.tutor_active', { defaultValue: 'Tutor Session Active' })}
+                tone="success"
+              />
               <Text style={[styles.learningHubHintText, { color: theme.colors.textSecondary }]}>
-                Mode: Diagnose → Teach → Practice
+                {t('dashboard.student.learning_hub.mode_hint', {
+                  defaultValue: 'Mode: Diagnose -> Teach -> Practice',
+                })}
               </Text>
             </View>
           </View>
@@ -390,7 +423,9 @@ export default function K12StudentDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Quick Actions</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            {t('dashboard.student.quick_actions.title', { defaultValue: 'Quick Actions' })}
+          </Text>
           <View style={styles.quickActionsGrid}>
             {quickActions.map((action) => (
               <TouchableOpacity
@@ -418,11 +453,15 @@ export default function K12StudentDashboardScreen() {
         {/* Upcoming Assignments */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Upcoming Tasks</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('dashboard.student.upcoming_tasks', { defaultValue: 'Upcoming Tasks' })}
+            </Text>
             <TouchableOpacity onPress={() => {
               track('k12.student.see_all_tasks_tap', { user_id: user?.id });
             }}>
-              <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>See All</Text>
+              <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
+                {t('common.see_all', { defaultValue: 'See All' })}
+              </Text>
             </TouchableOpacity>
           </View>
           {upcomingAssignments.map((assignment) => (
@@ -450,7 +489,7 @@ export default function K12StudentDashboardScreen() {
               <View style={styles.assignmentInfo}>
                 <Text style={[styles.assignmentTitle, { color: theme.colors.text }]}>{assignment.title}</Text>
                 <Text style={[styles.assignmentSubject, { color: theme.colors.textSecondary }]}>
-                  {assignment.subject} • Due {assignment.dueDate}
+                  {assignment.subject} • {t('dashboard.student.due', { defaultValue: 'Due' })} {assignment.dueDate}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
@@ -461,11 +500,15 @@ export default function K12StudentDashboardScreen() {
         {/* Today's Schedule */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Today's Schedule</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('dashboard.student.todays_schedule', { defaultValue: "Today's Schedule" })}
+            </Text>
             <TouchableOpacity onPress={() => {
               track('k12.student.full_week_tap', { user_id: user?.id });
             }}>
-              <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>Full Week</Text>
+              <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
+                {t('dashboard.student.full_week', { defaultValue: 'Full Week' })}
+              </Text>
             </TouchableOpacity>
           </View>
           {todaysClasses.filter(c => !c.current).map((classInfo) => (
@@ -496,16 +539,66 @@ export default function K12StudentDashboardScreen() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         navItems={[
-          { id: 'home', label: 'Dashboard', icon: 'home', route: '/(k12)/student/dashboard' },
-          { id: 'classes', label: 'Classes', icon: 'grid', route: '/(k12)/student/classes' },
-          { id: 'assignments', label: 'Assignments', icon: 'document-text', route: '/(k12)/student/assignments' },
-          { id: 'grades', label: 'Grades', icon: 'ribbon', route: '/(k12)/student/grades' },
-          { id: 'schedule', label: 'Schedule', icon: 'calendar', route: '/(k12)/student/schedule' },
-          { id: 'library', label: 'Library', icon: 'library', route: '/(k12)/library' },
-          { id: 'ai', label: 'AI Study Buddy', icon: 'sparkles', route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic' },
-          { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/(k12)/student/messages' },
-          { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
-          { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
+          {
+            id: 'home',
+            label: t('dashboard.student.nav.dashboard', { defaultValue: 'Dashboard' }),
+            icon: 'home',
+            route: '/(k12)/student/dashboard',
+          },
+          {
+            id: 'classes',
+            label: t('dashboard.student.nav.classes', { defaultValue: 'Classes' }),
+            icon: 'grid',
+            route: '/(k12)/student/classes',
+          },
+          {
+            id: 'assignments',
+            label: t('dashboard.student.nav.assignments', { defaultValue: 'Assignments' }),
+            icon: 'document-text',
+            route: '/(k12)/student/assignments',
+          },
+          {
+            id: 'grades',
+            label: t('dashboard.student.nav.grades', { defaultValue: 'Grades' }),
+            icon: 'ribbon',
+            route: '/(k12)/student/grades',
+          },
+          {
+            id: 'schedule',
+            label: t('dashboard.student.nav.schedule', { defaultValue: 'Schedule' }),
+            icon: 'calendar',
+            route: '/(k12)/student/schedule',
+          },
+          {
+            id: 'library',
+            label: t('dashboard.student.nav.library', { defaultValue: 'Library' }),
+            icon: 'library',
+            route: '/(k12)/library',
+          },
+          {
+            id: 'ai',
+            label: t('dashboard.student.nav.ai_study_buddy', { defaultValue: 'AI Study Buddy' }),
+            icon: 'sparkles',
+            route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic',
+          },
+          {
+            id: 'messages',
+            label: t('navigation.messages', { defaultValue: 'Messages' }),
+            icon: 'chatbubble',
+            route: '/(k12)/student/messages',
+          },
+          {
+            id: 'account',
+            label: t('navigation.account', { defaultValue: 'Account' }),
+            icon: 'person-circle',
+            route: '/screens/account',
+          },
+          {
+            id: 'settings',
+            label: t('navigation.settings', { defaultValue: 'Settings' }),
+            icon: 'settings',
+            route: '/screens/settings',
+          },
         ]}
       />
     </SafeAreaView>

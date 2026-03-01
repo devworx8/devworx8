@@ -325,7 +325,7 @@ serve(async (req: Request): Promise<Response> => {
         // ── Fetch active students ──────────────────────────────────────
         const { data: students, error: stErr } = await supabase
           .from('students')
-          .select('id, date_of_birth, enrollment_date, class_name, preschool_id, organization_id')
+          .select('id, date_of_birth, enrollment_date, grade_level, preschool_id, organization_id')
           .or(`preschool_id.eq.${school.id},organization_id.eq.${school.id}`)
           .eq('is_active', true)
           .eq('status', 'active');
@@ -372,7 +372,14 @@ serve(async (req: Request): Promise<Response> => {
             continue; // Already has a fee for this month
           }
 
-          const selected = selectFee(tuitionFees as FeeCandidate[], student as StudentRow);
+          const selected = selectFee(
+            tuitionFees as FeeCandidate[],
+            {
+              ...(student as StudentRow),
+              // Some deployments do not have students.class_name; use grade_level as fallback label.
+              class_name: (student as { grade_level?: string | null }).grade_level ?? null,
+            }
+          );
           if (!selected) continue;
 
           feesToInsert.push({
@@ -395,7 +402,10 @@ serve(async (req: Request): Promise<Response> => {
             const chunk = feesToInsert.slice(i, i + 100);
             const { error: insertErr } = await supabase
               .from('student_fees')
-              .insert(chunk);
+              .upsert(chunk, {
+                onConflict: 'student_id,fee_structure_id,due_date',
+                ignoreDuplicates: true,
+              });
 
             if (insertErr) {
               schoolResult.errors.push(`Fee insert error (batch ${Math.floor(i / 100)}): ${insertErr.message}`);

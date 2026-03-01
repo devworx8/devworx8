@@ -16,6 +16,7 @@ interface ReviewStepProps {
   selectedExamTypeLabel: string;
   selectedExamType: string;
   selectedLanguage: keyof typeof LANGUAGE_OPTIONS;
+  generateButtonLabel: string;
   useTeacherContext: boolean;
   contextPreview: ExamContextSummary | null;
   contextLoading: boolean;
@@ -111,6 +112,7 @@ export function ExamPrepReviewStep({
   selectedExamTypeLabel,
   selectedExamType,
   selectedLanguage,
+  generateButtonLabel,
   useTeacherContext,
   contextPreview,
   contextLoading,
@@ -129,7 +131,7 @@ export function ExamPrepReviewStep({
 
       <Text style={[styles.stepTitle, { color: theme.text }]}>Review & Generate</Text>
       <Text style={[styles.stepSubtitle, { color: theme.muted }]}>
-        Confirm your setup before generating the practice exam.
+        Confirm your setup before generating your {selectedExamTypeLabel || selectedExamType}.
       </Text>
 
       <View style={[styles.reviewCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -202,7 +204,7 @@ export function ExamPrepReviewStep({
         onPress={onGenerateWithCurrentContext}
       >
         <Ionicons name="sparkles" size={22} color="#ffffff" />
-        <Text style={styles.generateButtonText}>Generate Practice Exam</Text>
+        <Text style={styles.generateButtonText}>{generateButtonLabel}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity

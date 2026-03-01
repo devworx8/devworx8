@@ -19,5 +19,4 @@ BEGIN
     SET registration_fee_amount = 200
     WHERE registration_fee_amount IS DISTINCT FROM 200;
   END IF;
-
 END $$;

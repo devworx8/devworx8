@@ -10,7 +10,6 @@
 
 -- 1. Drop the broken policy immediately
 DROP POLICY IF EXISTS "Users can view profiles in same org" ON profiles;
-
 -- 2. Create a SECURITY DEFINER helper that reads the current user's
 --    org_id from their profile without triggering RLS.
 CREATE OR REPLACE FUNCTION public.current_user_org_id()
@@ -25,7 +24,6 @@ AS $$
     WHERE id = auth.uid()
     LIMIT 1;
 $$;
-
 -- 3. Re-create the policy using the helper function (no recursion)
 CREATE POLICY "Users can view profiles in same org" ON profiles
     FOR SELECT
@@ -39,7 +37,6 @@ CREATE POLICY "Users can view profiles in same org" ON profiles
             SELECT role FROM public.profiles WHERE id = auth.uid()
         ) = 'super_admin'
     );
-
 -- NOTE: The super_admin subquery above also queries profiles, but it
 -- only matches the row where id = auth.uid() (which is already allowed
 -- by the first condition "id = auth.uid()"), so it won't recurse.
@@ -47,7 +44,6 @@ CREATE POLICY "Users can view profiles in same org" ON profiles
 
 -- Drop and recreate with JWT-based super_admin check
 DROP POLICY IF EXISTS "Users can view profiles in same org" ON profiles;
-
 CREATE POLICY "Users can view profiles in same org" ON profiles
     FOR SELECT
     USING (

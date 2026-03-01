@@ -15,6 +15,5 @@ USING (
     WHERE p.id = auth.uid() AND p.preschool_id IS NOT NULL
   )
 );
-
 COMMENT ON POLICY "preschools_user_read_via_preschool_id" ON public.preschools IS
 'Allows users (especially teachers) to read preschool data where their profile.preschool_id matches';

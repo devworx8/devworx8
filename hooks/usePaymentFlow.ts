@@ -10,7 +10,12 @@ import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import type { SchoolBankDetails } from '@/types/payments';
-import { SA_BANKING_APPS, type BankApp, type ResolvedBankApp } from '@/lib/payments/bankingApps';
+import {
+  SA_BANKING_APPS,
+  buildAndroidIntentUrls,
+  type BankApp,
+  type ResolvedBankApp,
+} from '@/lib/payments/bankingApps';
 
 // Lazy load IntentLauncher - prevents crashes if the module isn't available in OTA builds
 let IntentLauncher: typeof import('expo-intent-launcher') | null = null;
@@ -22,7 +27,7 @@ try {
 }
 
 type LaunchState = 'idle' | 'launched' | 'manual_confirmed';
-type LaunchMethod = 'package' | 'scheme';
+type LaunchMethod = 'package' | 'intent_uri' | 'scheme';
 
 interface PaymentFlowParams {
   feeId?: string;
@@ -47,7 +52,7 @@ interface UsePaymentFlowReturn {
   launchState: LaunchState;
   canUploadProof: boolean;
   copyToClipboard: (text: string, field: string) => Promise<void>;
-  openBankingApp: (bank?: BankApp) => Promise<void>;
+  openBankingApp: (bank?: BankApp | ResolvedBankApp) => Promise<void>;
   confirmManualPayment: () => void;
   sharePaymentDetails: () => Promise<void>;
 }
@@ -55,6 +60,10 @@ interface UsePaymentFlowReturn {
 type LaunchAttemptResult = {
   opened: boolean;
   method?: LaunchMethod;
+};
+
+type LaunchAttemptOptions = {
+  allowGenericSchemeFallback?: boolean;
 };
 
 export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn {
@@ -89,15 +98,31 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
         SA_BANKING_APPS.map(async (bank) => {
           let detected = false;
 
-          for (const scheme of bank.schemes) {
-            try {
-              const canOpen = await Linking.canOpenURL(scheme);
-              if (canOpen) {
-                detected = true;
-                break;
+          if (Platform.OS === 'android') {
+            for (const intentUrl of buildAndroidIntentUrls(bank)) {
+              try {
+                const canOpenIntent = await Linking.canOpenURL(intentUrl);
+                if (canOpenIntent) {
+                  detected = true;
+                  break;
+                }
+              } catch (error) {
+                logger.warn('usePaymentFlow', `Intent detection failed for ${intentUrl}`, error);
               }
-            } catch (error) {
-              logger.warn('usePaymentFlow', `Scheme check failed for ${scheme}`, error);
+            }
+          }
+
+          if (!detected) {
+            for (const scheme of bank.schemes) {
+              try {
+                const canOpen = await Linking.canOpenURL(scheme);
+                if (canOpen) {
+                  detected = true;
+                  break;
+                }
+              } catch (error) {
+                logger.warn('usePaymentFlow', `Scheme check failed for ${scheme}`, error);
+              }
             }
           }
 
@@ -321,7 +346,12 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     );
   }, [confirmManualPayment, openStoreForBank, openWebsiteForBank, t]);
 
-  const tryOpenBankApp = useCallback(async (bank: BankApp): Promise<LaunchAttemptResult> => {
+  const tryOpenBankApp = useCallback(async (
+    bank: BankApp,
+    options?: LaunchAttemptOptions,
+  ): Promise<LaunchAttemptResult> => {
+    const allowGenericSchemeFallback = options?.allowGenericSchemeFallback ?? true;
+
     // Strategy 1: Android IntentLauncher (most reliable - opens by package name)
     if (Platform.OS === 'android' && IntentLauncher) {
       for (const packageName of bank.packageIds) {
@@ -337,22 +367,40 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       }
     }
 
-    // Strategy 2: URL scheme (iOS only - Android schemes trigger the wrong "Open with" chooser)
-    if (Platform.OS !== 'android') {
-      for (const scheme of bank.schemes) {
+    // Strategy 2: Android intent:// URIs (reliable, doesn't trigger wrong chooser)
+    if (Platform.OS === 'android') {
+      for (const intentUrl of buildAndroidIntentUrls(bank)) {
         try {
-          const canOpen = await Linking.canOpenURL(scheme);
-          if (canOpen) {
-            await Linking.openURL(scheme);
-            return { opened: true, method: 'scheme' };
+          const canOpenIntent = await Linking.canOpenURL(intentUrl);
+          if (canOpenIntent) {
+            await Linking.openURL(intentUrl);
+            return { opened: true, method: 'intent_uri' };
           }
         } catch (error) {
-          logger.warn('usePaymentFlow', `Scheme open failed for ${scheme}`, error);
+          logger.warn('usePaymentFlow', `Intent URI open failed for ${intentUrl}`, error);
         }
       }
     }
 
-    // Strategy 3: Android Play Store deep link (opens bank's store page when direct launch fails)
+    // Skip generic scheme fallback for undetected banks (avoids wrong "Open with" chooser)
+    if (!allowGenericSchemeFallback) {
+      return { opened: false };
+    }
+
+    // Strategy 3: URL scheme fallback (iOS or detected Android banks)
+    for (const scheme of bank.schemes) {
+      try {
+        const canOpen = await Linking.canOpenURL(scheme);
+        if (canOpen) {
+          await Linking.openURL(scheme);
+          return { opened: true, method: 'scheme' };
+        }
+      } catch (error) {
+        logger.warn('usePaymentFlow', `Scheme open failed for ${scheme}`, error);
+      }
+    }
+
+    // Strategy 4: Android Play Store deep link as last resort
     if (Platform.OS === 'android' && bank.packageIds.length > 0) {
       try {
         const marketUrl = `market://details?id=${bank.packageIds[0]}`;
@@ -383,13 +431,22 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     return true;
   }, [t]);
 
-  const openBankingApp = useCallback(async (bank?: BankApp) => {
+  const openBankingApp = useCallback(async (bank?: BankApp | ResolvedBankApp) => {
     setBankHint(null);
 
     if (bank) {
-      const launchResult = await tryOpenBankApp(bank);
+      const isDetectedBank = 'detected' in bank ? Boolean(bank.detected) : false;
+      const launchResult = await tryOpenBankApp(bank, {
+        allowGenericSchemeFallback: isDetectedBank,
+      });
       if (!handleLaunchResult(bank, launchResult)) {
-        setBankHint(t('payments.could_not_open_bank', { bank: bank.name, defaultValue: `Could not open ${bank.name} automatically. Use a fallback option below.` }));
+        if (Platform.OS === 'android' && !IntentLauncher && !isDetectedBank) {
+          setBankHint(
+            t('payments.bank_not_verified', { bank: bank.name, defaultValue: `${bank.name} could not be verified on this app build. Update to the latest app for direct launch, or use fallback options now.` }),
+          );
+        } else {
+          setBankHint(t('payments.could_not_open_bank', { bank: bank.name, defaultValue: `Could not open ${bank.name} automatically. Use a fallback option below.` }));
+        }
         showBankFallbackOptions(bank);
       }
       return;
@@ -399,7 +456,9 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
 
     if (detectedBanks.length === 1) {
       const detectedBank = detectedBanks[0];
-      const launchResult = await tryOpenBankApp(detectedBank);
+      const launchResult = await tryOpenBankApp(detectedBank, {
+        allowGenericSchemeFallback: true,
+      });
       if (!handleLaunchResult(detectedBank, launchResult)) {
         setBankHint(t('payments.could_not_open_bank', { bank: detectedBank.name, defaultValue: `Could not open ${detectedBank.name} automatically. Use a fallback option below.` }));
         showBankFallbackOptions(detectedBank);
@@ -417,24 +476,12 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
 
     // No detected banks - show actionable prompt instead of passive hint
     logger.debug('usePaymentFlow', 'No detected banking apps', { totalBanks: bankApps.length });
-    setBankHint(t('payments.no_bank_detected', { defaultValue: 'No bank app was detected. Select your bank below and use fallback options if needed.' }));
-
-    // On Android without IntentLauncher, proactively offer to open Play Store or manual confirm
     if (Platform.OS === 'android' && !IntentLauncher) {
-      Alert.alert(
-        t('payments.update_required', { defaultValue: 'Update Required' }),
-        t('payments.bank_launcher_unavailable', { defaultValue: 'This feature needs the latest app update. Please update and try again.' }),
-        [
-          {
-            text: t('payments.i_paid_manually', { defaultValue: 'I paid manually' }),
-            onPress: confirmManualPayment,
-          },
-          {
-            text: t('common.ok', { defaultValue: 'OK' }),
-            style: 'cancel',
-          },
-        ]
+      setBankHint(
+        t('payments.no_bank_verified_ota', { defaultValue: 'No bank app could be verified on this app build. Please update the app for direct bank launch, or select your bank below and use fallback options.' }),
       );
+    } else {
+      setBankHint(t('payments.no_bank_detected', { defaultValue: 'No bank app was detected. Select your bank below and use fallback options if needed.' }));
     }
   }, [bankApps, handleLaunchResult, showBankFallbackOptions, tryOpenBankApp, confirmManualPayment, t]);
 

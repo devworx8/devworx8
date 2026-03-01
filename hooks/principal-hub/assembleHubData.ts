@@ -26,6 +26,11 @@ export function buildSchoolStats(
   registrationFeesCollected: number,
   t: TFunc,
 ): SchoolStats {
+  const collectionRate =
+    raw.expectedTuitionIncome > 0
+      ? raw.collectedTuitionAmount / raw.expectedTuitionIncome
+      : 0;
+
   return {
     students: {
       total: raw.studentsCount,
@@ -86,6 +91,21 @@ export function buildSchoolStats(
     registrationFees: {
       total: registrationFeesCollected,
       trend: registrationFeesCollected > 0 ? t('trends.up') : t('trends.stable'),
+    },
+    expectedTuitionIncome: {
+      total: raw.expectedTuitionIncome,
+      trend: raw.expectedTuitionIncome > 0 ? t('trends.up') : t('trends.stable'),
+    },
+    collectedTuitionAmount: {
+      total: raw.collectedTuitionAmount,
+      trend:
+        collectionRate >= 0.9
+          ? t('trends.excellent')
+          : collectionRate >= 0.6
+            ? t('trends.good')
+            : raw.collectedTuitionAmount > 0
+              ? t('trends.up')
+              : t('trends.stable'),
     },
     monthlyRevenue: {
       total: monthlyRevenue,

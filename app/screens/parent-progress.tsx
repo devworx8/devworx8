@@ -8,10 +8,11 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveChild } from '@/contexts/ActiveChildContext';
 import { useParentProgress, useLessonProgress } from '@/hooks/useLessonProgress';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -28,8 +29,13 @@ export default function ParentProgressScreen() {
   const headerGradientColors: [string, string] = isNextGenParentTheme
     ? ['#23214D', '#5A409D']
     : ['#10B981', '#059669'];
-  
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+
+  const params = useLocalSearchParams<{ childId?: string }>();
+  const { activeChildId: globalActiveChildId } = useActiveChild();
+  const paramChildId = Array.isArray(params.childId) ? params.childId[0] : params.childId;
+  // Prefer URL param, then global context (AsyncStorage-backed), then null
+  const initialChildId = paramChildId ?? globalActiveChildId ?? null;
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(initialChildId || null);
   const [refreshing, setRefreshing] = useState(false);
   
   // Fetch all children's progress summary
@@ -57,12 +63,20 @@ export default function ParentProgressScreen() {
     });
   }, [refetchChildren, refetchDetails]);
   
-  // Auto-select first child if none selected
+  // Once childrenProgress loads, pick the right child.
+  // Priority: globalActiveChildId (AsyncStorage-backed) > first child.
+  // Also self-corrects if current selection is stale (not in list).
   React.useEffect(() => {
-    if (!selectedChildId && childrenProgress.length > 0) {
-      setSelectedChildId(childrenProgress[0].studentId);
-    }
-  }, [childrenProgress, selectedChildId]);
+    if (childrenProgress.length === 0) return;
+    const currentIsValid = childrenProgress.some(c => c.studentId === selectedChildId);
+    if (currentIsValid) return;
+    // Current selection is missing from the list — pick the best available
+    const preferred = globalActiveChildId
+      ? childrenProgress.find(c => c.studentId === globalActiveChildId)
+      : null;
+    setSelectedChildId(preferred?.studentId ?? childrenProgress[0].studentId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childrenProgress, globalActiveChildId]);
   
   const selectedChild = childrenProgress.find(c => c.studentId === selectedChildId);
   
@@ -91,7 +105,16 @@ export default function ParentProgressScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Learning Progress</Text>
-            <Text style={styles.headerSubtitle}>Track your children's achievements</Text>
+            {selectedChild ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Ionicons name="person-circle-outline" size={13} color="rgba(255,255,255,0.8)" />
+                <Text style={[styles.headerSubtitle, { fontWeight: '600' }]}>
+                  {selectedChild.studentName.split(' ')[0]}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.headerSubtitle}>Track your children's achievements</Text>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -140,13 +163,21 @@ export default function ParentProgressScreen() {
         )}
         
         {/* No Children State */}
-        {childrenProgress.length === 0 && (
+        {childrenProgress.length === 0 && !isLoadingChildren && (
           <View style={styles.emptyContainer}>
             <Ionicons name="school-outline" size={64} color={theme.textSecondary} />
             <Text style={styles.emptyTitle}>No Children Enrolled</Text>
             <Text style={styles.emptyText}>
               Your children's progress will appear here once they are enrolled.
             </Text>
+          </View>
+        )}
+
+        {/* Selecting child (context / AsyncStorage not yet resolved) */}
+        {childrenProgress.length > 0 && !selectedChild && (
+          <View style={[styles.emptyContainer, { paddingVertical: 40 }]}>
+            <EduDashSpinner size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { marginTop: 12 }]}>Loading progress…</Text>
           </View>
         )}
         
@@ -227,7 +258,7 @@ export default function ParentProgressScreen() {
                 </View>
               </View>
 
-              {selectedProgress?.averageStars !== null && (
+              {selectedProgress != null && selectedProgress.averageStars != null && (
                 <View style={styles.starsSummaryRow}>
                   <Ionicons name="star" size={16} color="#F59E0B" />
                   <Text style={styles.starsSummaryText}>
@@ -323,11 +354,11 @@ export default function ParentProgressScreen() {
                   </View>
                 )}
 
-                {selectedProgress?.domainBreakdown?.length > 0 && (
+                {selectedProgress?.domainBreakdown && selectedProgress.domainBreakdown.length > 0 && (
                   <View style={styles.topSubjectsContainer}>
                     <Text style={styles.topSubjectsTitle}>Domain Progress</Text>
                     <View style={styles.domainBreakdownContainer}>
-                      {selectedProgress.domainBreakdown.slice(0, 4).filter(Boolean).map((domain) => (
+                      {(selectedProgress?.domainBreakdown ?? []).slice(0, 4).filter(Boolean).map((domain) => (
                         <View key={domain?.domain ?? 'unknown'} style={styles.domainItem}>
                           <View style={styles.domainLabelRow}>
                             <Text style={styles.domainLabel}>

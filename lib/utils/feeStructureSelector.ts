@@ -63,8 +63,8 @@ function toMonths(value: number, unit: AgeUnit): number {
 
 function detectLabelUnit(text: string): AgeUnit | null {
   const normalized = text.toLowerCase();
-  if (/\bmonth|months|\bmo\b|\bmos\b/.test(normalized)) return 'months';
-  if (/\byear|years|\byr\b|\byrs\b/.test(normalized)) return 'years';
+  if (/\bmonths?\b|\bmo\b|\bmos\b/.test(normalized)) return 'months';
+  if (/\byears?\b|\byr\b|\byrs\b/.test(normalized)) return 'years';
   return null;
 }
 
@@ -78,9 +78,9 @@ function parseAgeRange(text: string): AgeRange | null {
     if (!Number.isNaN(startValue) && !Number.isNaN(endValue)) {
       const startUnit = normalizeUnit(rangeMatch[2]) || normalizeUnit(rangeMatch[4]) || labelUnit || 'years';
       const endUnit = normalizeUnit(rangeMatch[4]) || normalizeUnit(rangeMatch[2]) || labelUnit || 'years';
-      const min = toMonths(Math.min(startValue, endValue), startUnit);
-      const max = toMonths(Math.max(startValue, endValue), endUnit);
-      return { minMonths: Math.min(min, max), maxMonths: Math.max(min, max) };
+      const startMonths = toMonths(startValue, startUnit);
+      const endMonths = toMonths(endValue, endUnit);
+      return { minMonths: Math.min(startMonths, endMonths), maxMonths: Math.max(startMonths, endMonths) };
     }
   }
 

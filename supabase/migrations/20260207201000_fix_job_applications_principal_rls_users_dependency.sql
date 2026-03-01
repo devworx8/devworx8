@@ -15,10 +15,8 @@
 -- =============================================================================
 
 ALTER TABLE public.job_applications ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "principals_view_applications" ON public.job_applications;
 DROP POLICY IF EXISTS "principals_update_applications" ON public.job_applications;
-
 CREATE POLICY "principals_view_applications"
 ON public.job_applications
 FOR SELECT
@@ -32,7 +30,6 @@ USING (
       AND jp.preschool_id = public.get_current_user_preschool_id()
   )
 );
-
 CREATE POLICY "principals_update_applications"
 ON public.job_applications
 FOR UPDATE

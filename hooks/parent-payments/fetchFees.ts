@@ -142,14 +142,38 @@ export async function fetchPaymentFees(
         ? selectFeeStructureForChild(tuitionFees as FeeStructureCandidate[], buildFeeContext(selectedChild)) || tuitionFees[0]
         : null;
       if (selectedFee && (!fees || fees.length === 0 || !hasTuitionFeesForChild)) {
-        const { month, year } = getNextFeeMonth();
-        mappedFees = [...mappedFees, {
-          id: `pending-${MONTH_NAMES[month].toLowerCase()}-${year}`, student_id: selectedChildId,
-          fee_type: 'monthly_tuition',
-          description: `${MONTH_NAMES[month]} ${year} School Fees${selectedFee.age_group ? ` (${selectedFee.age_group})` : ''}`,
-          amount: selectedFee.amount, due_date: `${year}-${String(month + 1).padStart(2, '0')}-01`,
-          grace_period_days: 7, status: 'pending',
-        }];
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const existingMonths = new Set(
+          mappedFees.map(f => {
+            const d = new Date(f.due_date);
+            return `${d.getFullYear()}-${d.getMonth()}`;
+          })
+        );
+
+        const currentKey = `${currentYear}-${currentMonth}`;
+        if (!existingMonths.has(currentKey)) {
+          mappedFees = [{
+            id: `pending-${MONTH_NAMES[currentMonth].toLowerCase()}-${currentYear}`, student_id: selectedChildId,
+            fee_type: 'monthly_tuition',
+            description: `${MONTH_NAMES[currentMonth]} ${currentYear} School Fees${selectedFee.age_group ? ` (${selectedFee.age_group})` : ''}`,
+            amount: selectedFee.amount, due_date: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+            grace_period_days: 7, status: 'pending',
+          }, ...mappedFees];
+        }
+
+        const { month: nextMonth, year: nextYear } = getNextFeeMonth();
+        const nextKey = `${nextYear}-${nextMonth}`;
+        if (!existingMonths.has(nextKey) && nextKey !== currentKey) {
+          mappedFees = [...mappedFees, {
+            id: `pending-${MONTH_NAMES[nextMonth].toLowerCase()}-${nextYear}`, student_id: selectedChildId,
+            fee_type: 'monthly_tuition',
+            description: `${MONTH_NAMES[nextMonth]} ${nextYear} School Fees${selectedFee.age_group ? ` (${selectedFee.age_group})` : ''}`,
+            amount: selectedFee.amount, due_date: `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-01`,
+            grace_period_days: 7, status: 'pending',
+          }];
+        }
       }
     }
     const { data: paymentMethodsData } = await supabase

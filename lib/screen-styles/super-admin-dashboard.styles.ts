@@ -41,6 +41,8 @@ export interface QuickAction {
   route: string;
   color: string;
   badge?: number;
+  /** When set, opens this URL in browser instead of in-app route (e.g. Sentry) */
+  externalUrl?: string;
 }
 
 // ── Style Factory ───────────────────────────────────────────────────

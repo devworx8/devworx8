@@ -36,7 +36,6 @@ BEGIN
     );
 END
 $$;
-
 CREATE OR REPLACE FUNCTION public.recalculate_student_fee_balances(
   p_student_id uuid,
   p_actor_id uuid,
@@ -190,5 +189,4 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.recalculate_student_fee_balances(uuid, uuid, text) TO authenticated;

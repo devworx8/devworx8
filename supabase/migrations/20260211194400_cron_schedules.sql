@@ -9,13 +9,11 @@
 -- Ensure pg_cron and pg_net extensions are available
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
-
 -- ============================================
 -- 1. Weekly Reports (every Sunday at 2 PM UTC = 4 PM SAST)
 -- ============================================
 SELECT cron.unschedule('weekly-report-generation')
   WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'weekly-report-generation');
-
 SELECT cron.schedule(
   'weekly-report-generation',
   '0 14 * * 0',  -- 2:00 PM UTC every Sunday (= 4:00 PM SAST)
@@ -30,13 +28,11 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- ============================================
 -- 2. Fee Reminders (1st and 15th of month at 6 AM UTC = 8 AM SAST)
 -- ============================================
 SELECT cron.unschedule('fee-reminders-monthly')
   WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fee-reminders-monthly');
-
 SELECT cron.schedule(
   'fee-reminders-monthly',
   '0 6 1,15 * *',  -- 6:00 AM UTC on 1st and 15th
@@ -51,13 +47,11 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- ============================================
 -- 3. Social Media Agent (daily at 7 AM UTC = 9 AM SAST)
 -- ============================================
 SELECT cron.unschedule('social-agent-daily')
   WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'social-agent-daily');
-
 SELECT cron.schedule(
   'social-agent-daily',
   '0 7 * * *',  -- 7:00 AM UTC daily
@@ -72,13 +66,11 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- ============================================
 -- 4. Event Reminders (daily at 5 AM UTC = 7 AM SAST)
 -- ============================================
 SELECT cron.unschedule('event-reminders-daily')
   WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'event-reminders-daily');
-
 SELECT cron.schedule(
   'event-reminders-daily',
   '0 5 * * *',  -- 5:00 AM UTC daily
@@ -93,13 +85,11 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- ============================================
 -- 5. Social Publisher (every 2 hours for queued posts)
 -- ============================================
 SELECT cron.unschedule('social-publisher')
   WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'social-publisher');
-
 SELECT cron.schedule(
   'social-publisher',
   '0 */2 * * *',  -- Every 2 hours
@@ -114,7 +104,6 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- ============================================
 -- Verification: List all scheduled jobs
 -- ============================================
@@ -122,4 +111,4 @@ SELECT cron.schedule(
 --   SELECT jobname, schedule, active FROM cron.job ORDER BY jobname;
 -- Expected: birthday-reminders-daily, birthday-weekly-summary,
 --           event-reminders-daily, fee-reminders-monthly,
---           social-agent-daily, social-publisher, weekly-report-generation
+--           social-agent-daily, social-publisher, weekly-report-generation;

@@ -113,6 +113,5 @@ BEGIN
   );
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.complete_playground_assignment(UUID, INTEGER, INTEGER, JSONB, TIMESTAMPTZ, TEXT, JSONB) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.complete_playground_assignment(UUID, INTEGER, INTEGER, JSONB, TIMESTAMPTZ, TEXT, JSONB) TO authenticated;

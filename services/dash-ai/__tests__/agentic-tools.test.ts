@@ -270,7 +270,7 @@ describe('Agentic Tool System', () => {
 
       expect(result.success).toBe(false);
       // Guest is blocked at registry level before reaching tool-specific validation
-      expect(result.error).toContain('Insufficient permissions');
+      expect(result.error).toContain('Guest');
     });
   });
 

@@ -24,17 +24,13 @@ CREATE TABLE IF NOT EXISTS public.school_daily_menus (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (preschool_id, menu_date)
 );
-
 CREATE INDEX IF NOT EXISTS idx_school_daily_menus_school_week
   ON public.school_daily_menus (preschool_id, week_start_date, menu_date);
-
 CREATE INDEX IF NOT EXISTS idx_school_daily_menus_school_date
   ON public.school_daily_menus (preschool_id, menu_date);
-
 CREATE INDEX IF NOT EXISTS idx_school_daily_menus_announcement
   ON public.school_daily_menus (source_announcement_id)
   WHERE source_announcement_id IS NOT NULL;
-
 -- updated_at trigger helper (if missing)
 DO $$
 BEGIN
@@ -50,12 +46,10 @@ BEGIN
     $fn$;
   END IF;
 END $$;
-
 DROP TRIGGER IF EXISTS trg_school_daily_menus_updated_at ON public.school_daily_menus;
 CREATE TRIGGER trg_school_daily_menus_updated_at
 BEFORE UPDATE ON public.school_daily_menus
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 -- ---------------------------------------------------------------------------
 -- 2) Access helpers + RLS
 -- ---------------------------------------------------------------------------
@@ -80,7 +74,6 @@ AS $$
       )
   );
 $$;
-
 CREATE OR REPLACE FUNCTION public.is_school_menu_viewer(p_preschool_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -114,23 +107,19 @@ AS $$
         )
     );
 $$;
-
 ALTER TABLE public.school_daily_menus ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS school_daily_menus_select ON public.school_daily_menus;
 CREATE POLICY school_daily_menus_select
 ON public.school_daily_menus
 FOR SELECT
 TO authenticated
 USING (public.is_school_menu_viewer(preschool_id));
-
 DROP POLICY IF EXISTS school_daily_menus_insert ON public.school_daily_menus;
 CREATE POLICY school_daily_menus_insert
 ON public.school_daily_menus
 FOR INSERT
 TO authenticated
 WITH CHECK (public.is_school_menu_manager(preschool_id));
-
 DROP POLICY IF EXISTS school_daily_menus_update ON public.school_daily_menus;
 CREATE POLICY school_daily_menus_update
 ON public.school_daily_menus
@@ -138,16 +127,13 @@ FOR UPDATE
 TO authenticated
 USING (public.is_school_menu_manager(preschool_id))
 WITH CHECK (public.is_school_menu_manager(preschool_id));
-
 DROP POLICY IF EXISTS school_daily_menus_delete ON public.school_daily_menus;
 CREATE POLICY school_daily_menus_delete
 ON public.school_daily_menus
 FOR DELETE
 TO authenticated
 USING (public.is_school_menu_manager(preschool_id));
-
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.school_daily_menus TO authenticated;
-
 -- ---------------------------------------------------------------------------
 -- 3) RPCs: upsert/get week menu
 -- ---------------------------------------------------------------------------
@@ -175,7 +161,6 @@ BEGIN
   RETURN COALESCE(v_result, ARRAY[]::TEXT[]);
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.upsert_school_week_menu(
   p_preschool_id UUID,
   p_week_start_date DATE,
@@ -291,9 +276,7 @@ BEGIN
   ORDER BY m.menu_date ASC;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.upsert_school_week_menu(UUID, DATE, JSONB, TEXT, UUID) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.get_school_week_menu(
   p_preschool_id UUID,
   p_week_start_date DATE
@@ -311,9 +294,7 @@ AS $$
     AND public.is_school_menu_viewer(p_preschool_id)
   ORDER BY m.menu_date ASC;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_school_week_menu(UUID, DATE) TO authenticated;
-
 -- ---------------------------------------------------------------------------
 -- 4) Backfill helper from announcements attachments (bridge -> dedicated)
 -- ---------------------------------------------------------------------------
@@ -446,7 +427,6 @@ BEGIN
   RETURN v_count;
 END;
 $$;
-
 -- ---------------------------------------------------------------------------
 -- 5) Storage bucket for original uploaded menu files
 -- ---------------------------------------------------------------------------
@@ -464,7 +444,6 @@ SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types,
   public = EXCLUDED.public;
-
 -- RLS is already enabled on storage.objects by Supabase — do NOT alter it here.
 
 DROP POLICY IF EXISTS school_menu_uploads_insert ON storage.objects;
@@ -478,7 +457,6 @@ WITH CHECK (
   AND (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND public.is_school_menu_manager(((storage.foldername(name))[1])::UUID)
 );
-
 DROP POLICY IF EXISTS school_menu_uploads_select ON storage.objects;
 CREATE POLICY school_menu_uploads_select
 ON storage.objects
@@ -490,7 +468,6 @@ USING (
   AND (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND public.is_school_menu_manager(((storage.foldername(name))[1])::UUID)
 );
-
 DROP POLICY IF EXISTS school_menu_uploads_update ON storage.objects;
 CREATE POLICY school_menu_uploads_update
 ON storage.objects
@@ -508,7 +485,6 @@ WITH CHECK (
   AND (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND public.is_school_menu_manager(((storage.foldername(name))[1])::UUID)
 );
-
 DROP POLICY IF EXISTS school_menu_uploads_delete ON storage.objects;
 CREATE POLICY school_menu_uploads_delete
 ON storage.objects
@@ -520,6 +496,5 @@ USING (
   AND (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND public.is_school_menu_manager(((storage.foldername(name))[1])::UUID)
 );
-
 -- Initial backfill (non-fatal, idempotent)
 SELECT public.backfill_school_daily_menus_from_announcements(NULL, 500);

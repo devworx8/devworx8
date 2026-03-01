@@ -18,21 +18,32 @@ export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVeri
   // Count of fees that are truly pending (not awaiting verification)
   const trulyPendingCount = upcomingFeesCount - pendingVerificationCount;
   
-  // Determine if any fee is overdue or due within 7 days (approaching)
   const today = new Date();
-  const hasOverdueOrApproaching = upcomingFees.some(fee => {
-    if (fee.status === 'pending_verification') return false; // Don't count these
+  today.setHours(0, 0, 0, 0);
+
+  const activeFees = upcomingFees.filter(fee => fee.status !== 'pending_verification');
+  const overdueFees = activeFees.filter(fee => {
     const dueDate = new Date(fee.due_date);
-    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return fee.status === 'overdue' || daysUntilDue <= 7; // Overdue or due within 7 days
+    dueDate.setHours(0, 0, 0, 0);
+    return fee.status === 'overdue' || dueDate.getTime() < today.getTime();
   });
-  
-  // Balance is red only if overdue/approaching, otherwise green if balance exists
-  const balanceColor = outstandingBalance === 0 
-    ? styles.balanceAmountGreen 
-    : hasOverdueOrApproaching 
-      ? styles.balanceAmountRed 
-      : styles.balanceAmountGreen;
+  const approachingFees = activeFees.filter(fee => {
+    const dueDate = new Date(fee.due_date);
+    dueDate.setHours(0, 0, 0, 0);
+    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntilDue >= 0 && daysUntilDue <= 7;
+  });
+  const hasOverdue = overdueFees.length > 0;
+  const hasApproaching = approachingFees.length > 0;
+  const hasOverdueOrApproaching = hasOverdue || hasApproaching;
+
+  const balanceColor = outstandingBalance === 0
+    ? styles.balanceAmountGreen
+    : hasOverdue
+      ? styles.balanceAmountRed
+      : hasApproaching
+        ? styles.balanceAmountOrange
+        : styles.balanceAmountGreen;
 
   return (
     <View style={styles.balanceCard}>
@@ -52,18 +63,28 @@ export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVeri
           </Text>
         </View>
       )}
-      {/* Show due soon badge only if approaching due date (within 7 days) or overdue */}
       {trulyPendingCount > 0 && (
         <>
           <Text style={styles.balanceSubtext}>
             {trulyPendingCount} payment{trulyPendingCount !== 1 ? 's' : ''} due
           </Text>
-          {hasOverdueOrApproaching ? (
+          {hasOverdue ? (
+            <View style={styles.overdueBadge}>
+              <Ionicons name="alert-circle" size={12} color="#ef4444" />
+              <Text style={styles.overdueText}>
+                {overdueFees.length} overdue
+              </Text>
+            </View>
+          ) : hasApproaching ? (
             <View style={styles.dueSoonBadge}>
-              <Text style={styles.dueSoonText}>Due Soon</Text>
+              <Ionicons name="time-outline" size={12} color="#f97316" />
+              <Text style={styles.dueSoonText}>
+                {approachingFees.length} due within 7 days
+              </Text>
             </View>
           ) : (
             <View style={[styles.dueSoonBadge, { backgroundColor: theme.success + '20' }]}>
+              <Ionicons name="checkmark-circle-outline" size={12} color={theme.success} />
               <Text style={[styles.dueSoonText, { color: theme.success }]}>On Track</Text>
             </View>
           )}
@@ -205,17 +226,33 @@ const createStyles = (theme: any) => StyleSheet.create({
   balanceLabel: { fontSize: 14, color: theme.textSecondary },
   balanceAmount: { fontSize: 32, fontWeight: '700', color: theme.text, marginBottom: 4 },
   balanceAmountRed: { color: '#ef4444' },
+  balanceAmountOrange: { color: '#f97316' },
   balanceAmountGreen: { color: '#22c55e' },
   balanceSubtext: { fontSize: 12, color: theme.textSecondary },
-  dueSoonBadge: {
+  overdueBadge: {
     marginTop: 12,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
-  dueSoonText: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
+  overdueText: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
+  dueSoonBadge: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(249, 115, 22, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  dueSoonText: { fontSize: 12, color: '#f97316', fontWeight: '600' },
   pendingVerificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',

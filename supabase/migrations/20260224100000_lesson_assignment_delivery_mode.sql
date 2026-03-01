@@ -9,7 +9,6 @@
 ALTER TABLE lesson_assignments
   ADD COLUMN IF NOT EXISTS delivery_mode TEXT NOT NULL DEFAULT 'class_activity'
     CHECK (delivery_mode IN ('class_activity', 'playground', 'take_home'));
-
 -- Back-fill existing rows: assignments with a playground activity → 'playground', rest → 'class_activity'
 UPDATE lesson_assignments
   SET delivery_mode = CASE
@@ -17,11 +16,9 @@ UPDATE lesson_assignments
     ELSE 'class_activity'
   END
 WHERE delivery_mode = 'class_activity';
-
 -- Index for the common filtered queries
 CREATE INDEX IF NOT EXISTS idx_lesson_assignments_delivery_mode
   ON lesson_assignments (delivery_mode);
-
 CREATE INDEX IF NOT EXISTS idx_lesson_assignments_student_delivery
   ON lesson_assignments (student_id, delivery_mode)
   WHERE student_id IS NOT NULL;

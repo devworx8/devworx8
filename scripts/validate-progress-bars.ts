@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 type Candidate = {
@@ -12,7 +12,8 @@ type Candidate = {
 
 const ROOT = process.cwd();
 const INVENTORY_PATH = path.join(ROOT, 'docs/audits/progress-bars-inventory.md');
-const SCAN_CMD = "rg -n 'width:\\s*`\\$\\{[^`]*%`' app components web/src --glob '!components/wireframes/**'";
+const SCAN_CMD = "rg -n 'width:\\s*`\\$\\{[^`]*%`' app components --glob '!components/wireframes/**'";
+const WIDTH_PATTERN = /width:\s*`\$\{[^`]*%`/;
 
 function loadInventoryAllowlist(): Set<string> {
   const allowlist = new Set<string>();
@@ -35,10 +36,9 @@ function loadInventoryAllowlist(): Set<string> {
   return allowlist;
 }
 
-function scanDynamicWidthCandidates(): Candidate[] {
+function scanWithRipgrep(): Candidate[] {
   const raw = execSync(SCAN_CMD, { cwd: ROOT, encoding: 'utf8' }).trim();
   if (!raw) return [];
-
   return raw
     .split('\n')
     .map((entry) => {
@@ -52,6 +52,57 @@ function scanDynamicWidthCandidates(): Candidate[] {
       return { file, line, content };
     })
     .filter((entry): entry is Candidate => Boolean(entry));
+}
+
+function walkTsx(dir: string, base = ''): string[] {
+  const entries = readdirSync(path.join(ROOT, dir), { withFileTypes: true });
+  const files: string[] = [];
+  for (const e of entries) {
+    const rel = base ? `${base}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      if (rel === 'components/wireframes') continue;
+      files.push(...walkTsx(path.join(dir, e.name), rel));
+    } else if (e.name.endsWith('.tsx')) {
+      files.push(rel);
+    }
+  }
+  return files;
+}
+
+function scanWithNode(): Candidate[] {
+  const candidates: Candidate[] = [];
+  for (const dir of ['app', 'components']) {
+    const files = walkTsx(dir);
+    for (const file of files) {
+      const fullPath = path.join(ROOT, file);
+      let content = '';
+      try {
+        content = readFileSync(fullPath, 'utf8');
+      } catch {
+        continue;
+      }
+      const lines = content.split('\n');
+      lines.forEach((line, i) => {
+        if (WIDTH_PATTERN.test(line)) {
+          candidates.push({ file, line: i + 1, content: line.trim() });
+        }
+      });
+    }
+  }
+  return candidates;
+}
+
+function scanDynamicWidthCandidates(): Candidate[] {
+  try {
+    return scanWithRipgrep();
+  } catch (err: unknown) {
+    const msg = String((err as { message?: string })?.message ?? err);
+    if (msg.includes('rg: not found') || (err as { status?: number })?.status === 127) {
+      console.warn('[validate-progress-bars] ripgrep (rg) not found; using Node.js fallback. Install rg for faster runs.');
+      return scanWithNode();
+    }
+    throw err;
+  }
 }
 
 function collectClampedVarsByFile(candidates: Candidate[]): Map<string, Set<string>> {

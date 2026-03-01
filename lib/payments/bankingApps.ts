@@ -105,3 +105,31 @@ export const SA_BANKING_APPS: BankApp[] = [
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.africanbank.application',
   },
 ];
+
+function stripSchemeDelimiter(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/:\/\/*$/g, '')
+    .replace(/[^a-z0-9+.-]/gi, '');
+}
+
+/**
+ * Build explicit Android intent URLs that target a package.
+ * This is safer than raw scheme opens because it avoids broad chooser matches.
+ */
+export function buildAndroidIntentUrls(bank: BankApp): string[] {
+  const urls: string[] = [];
+
+  bank.packageIds.forEach((packageId) => {
+    const cleanPackage = String(packageId || '').trim();
+    if (!cleanPackage) return;
+
+    bank.schemes.forEach((scheme) => {
+      const cleanScheme = stripSchemeDelimiter(scheme);
+      if (!cleanScheme) return;
+      urls.push(`intent://open#Intent;scheme=${cleanScheme};package=${cleanPackage};end`);
+    });
+  });
+
+  return [...new Set(urls)];
+}

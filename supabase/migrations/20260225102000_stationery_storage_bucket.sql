@@ -1,5 +1,4 @@
 BEGIN;
-
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'stationery-evidence',
@@ -9,12 +8,10 @@ VALUES (
   ARRAY['image/png', 'image/jpeg', 'image/webp']::text[]
 )
 ON CONFLICT (id) DO NOTHING;
-
 DROP POLICY IF EXISTS stationery_evidence_select ON storage.objects;
 DROP POLICY IF EXISTS stationery_evidence_insert ON storage.objects;
 DROP POLICY IF EXISTS stationery_evidence_update ON storage.objects;
 DROP POLICY IF EXISTS stationery_evidence_delete ON storage.objects;
-
 CREATE POLICY stationery_evidence_select
   ON storage.objects
   FOR SELECT
@@ -38,7 +35,6 @@ CREATE POLICY stationery_evidence_select
       )
     )
   );
-
 CREATE POLICY stationery_evidence_insert
   ON storage.objects
   FOR INSERT
@@ -62,7 +58,6 @@ CREATE POLICY stationery_evidence_insert
       )
     )
   );
-
 CREATE POLICY stationery_evidence_update
   ON storage.objects
   FOR UPDATE
@@ -81,7 +76,6 @@ CREATE POLICY stationery_evidence_update
     )
   )
   WITH CHECK (bucket_id = 'stationery-evidence');
-
 CREATE POLICY stationery_evidence_delete
   ON storage.objects
   FOR DELETE
@@ -99,5 +93,4 @@ CREATE POLICY stationery_evidence_delete
       )
     )
   );
-
 COMMIT;

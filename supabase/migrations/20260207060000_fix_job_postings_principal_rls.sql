@@ -20,7 +20,6 @@
 -- =============================================================================
 
 ALTER TABLE public.job_postings ENABLE ROW LEVEL SECURITY;
-
 -- Public read for active postings (web apply / teacher sign-up pages)
 DROP POLICY IF EXISTS "public_view_active_job_postings" ON public.job_postings;
 CREATE POLICY "public_view_active_job_postings"
@@ -31,13 +30,11 @@ USING (
   status = 'active'
   AND (expires_at IS NULL OR expires_at > now())
 );
-
 -- Remove legacy principal policies that incorrectly apply to anon/public.
 DROP POLICY IF EXISTS "principals_create_job_postings" ON public.job_postings;
 DROP POLICY IF EXISTS "principals_update_job_postings" ON public.job_postings;
 DROP POLICY IF EXISTS "principals_delete_job_postings" ON public.job_postings;
 DROP POLICY IF EXISTS "principals_view_own_school_job_postings" ON public.job_postings;
-
 -- Principal/admin visibility: see all job postings for their school (including drafts/expired).
 CREATE POLICY "principals_view_own_school_job_postings"
 ON public.job_postings
@@ -47,7 +44,6 @@ USING (
   public.is_preschool_admin()
   AND preschool_id = public.get_current_user_preschool_id()
 );
-
 -- Principal/admin create: require created_by = auth.uid() for audit correctness.
 CREATE POLICY "principals_create_job_postings"
 ON public.job_postings
@@ -58,7 +54,6 @@ WITH CHECK (
   AND preschool_id = public.get_current_user_preschool_id()
   AND created_by = auth.uid()
 );
-
 -- Principal/admin update: allow edits within their school.
 CREATE POLICY "principals_update_job_postings"
 ON public.job_postings
@@ -72,7 +67,6 @@ WITH CHECK (
   public.is_preschool_admin()
   AND preschool_id = public.get_current_user_preschool_id()
 );
-
 -- Principal/admin delete: allow deletes within their school.
 CREATE POLICY "principals_delete_job_postings"
 ON public.job_postings
@@ -82,4 +76,3 @@ USING (
   public.is_preschool_admin()
   AND preschool_id = public.get_current_user_preschool_id()
 );
-

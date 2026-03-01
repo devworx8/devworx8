@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS exam_accessibility_preferences (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (user_id)
 );
-
 -- Updated-at trigger
 CREATE OR REPLACE FUNCTION update_exam_accessibility_preferences_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -29,24 +28,19 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_exam_accessibility_preferences_updated_at ON exam_accessibility_preferences;
 CREATE TRIGGER trg_exam_accessibility_preferences_updated_at
   BEFORE UPDATE ON exam_accessibility_preferences
   FOR EACH ROW EXECUTE FUNCTION update_exam_accessibility_preferences_updated_at();
-
 -- RLS
 ALTER TABLE exam_accessibility_preferences ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY exam_accessibility_preferences_owner
   ON exam_accessibility_preferences
   FOR ALL
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
 -- Allow upsert from the client
 GRANT SELECT, INSERT, UPDATE ON exam_accessibility_preferences TO authenticated;
-
 -- ── exam_question_alt_texts ─────────────────────────────────────────────────
 -- Caches per-question simplified and translated versions so we don't re-generate.
 
@@ -61,21 +55,16 @@ CREATE TABLE IF NOT EXISTS exam_question_alt_texts (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (generation_id, question_id, alt_type, target_language)
 );
-
 ALTER TABLE exam_question_alt_texts ENABLE ROW LEVEL SECURITY;
-
 -- Anyone authenticated can read cached alt texts (they're not sensitive)
 CREATE POLICY exam_question_alt_texts_select
   ON exam_question_alt_texts FOR SELECT
   USING (auth.uid() IS NOT NULL);
-
 -- Only the requesting user can insert their own alt texts
 CREATE POLICY exam_question_alt_texts_insert
   ON exam_question_alt_texts FOR INSERT
   WITH CHECK (user_id = auth.uid());
-
 GRANT SELECT, INSERT ON exam_question_alt_texts TO authenticated;
-
 -- Index for fast lookup
 CREATE INDEX IF NOT EXISTS idx_exam_alt_texts_lookup
   ON exam_question_alt_texts (generation_id, question_id, alt_type, target_language);

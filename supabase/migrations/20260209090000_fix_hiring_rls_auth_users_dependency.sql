@@ -35,9 +35,7 @@ AS $$
       AND lower(p_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
     );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.is_candidate_profile_owner(uuid, text) TO authenticated;
-
 -- ---------------------------------------------------------------------------
 -- Helper: candidate owns an application via candidate_profile_id
 -- SECURITY DEFINER prevents policy-time dependency on caller table privileges.
@@ -58,9 +56,7 @@ AS $$
       AND public.is_candidate_profile_owner(cp.user_id, cp.email)
   );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.is_candidate_owner(uuid) TO authenticated;
-
 -- ---------------------------------------------------------------------------
 -- Helper: principal/admin can view candidate profile if linked to their school
 -- through at least one job application -> job posting.
@@ -95,9 +91,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.can_principal_view_candidate_profile(uuid) TO authenticated;
-
 -- ---------------------------------------------------------------------------
 -- candidate_profiles policies (remove auth.users references)
 -- ---------------------------------------------------------------------------
@@ -109,7 +103,6 @@ TO authenticated
 USING (
   public.is_candidate_profile_owner(user_id, email)
 );
-
 DROP POLICY IF EXISTS "candidates_update_own_profile" ON public.candidate_profiles;
 CREATE POLICY "candidates_update_own_profile"
 ON public.candidate_profiles
@@ -121,7 +114,6 @@ USING (
 WITH CHECK (
   public.is_candidate_profile_owner(user_id, email)
 );
-
 DROP POLICY IF EXISTS "principals_view_candidate_profiles_for_school_applications" ON public.candidate_profiles;
 CREATE POLICY "principals_view_candidate_profiles_for_school_applications"
 ON public.candidate_profiles
@@ -130,7 +122,6 @@ TO authenticated
 USING (
   public.can_principal_view_candidate_profile(id)
 );
-
 -- ---------------------------------------------------------------------------
 -- job_applications candidate-own policy (remove auth.users dependency)
 -- ---------------------------------------------------------------------------

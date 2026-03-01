@@ -4,27 +4,6 @@
 -- Purpose: Prevent multiple registrations for the same child from the same parent
 -- ============================================================================
 
--- Shadow DB safety: ensure base table/columns exist
-CREATE TABLE IF NOT EXISTS aftercare_registrations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  parent_email TEXT,
-  child_first_name TEXT,
-  child_last_name TEXT,
-  child_date_of_birth DATE,
-  preschool_id UUID,
-  status TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE aftercare_registrations
-  ADD COLUMN IF NOT EXISTS parent_email TEXT,
-  ADD COLUMN IF NOT EXISTS child_first_name TEXT,
-  ADD COLUMN IF NOT EXISTS child_last_name TEXT,
-  ADD COLUMN IF NOT EXISTS child_date_of_birth DATE,
-  ADD COLUMN IF NOT EXISTS preschool_id UUID,
-  ADD COLUMN IF NOT EXISTS status TEXT,
-  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
-
 -- Create unique partial index to prevent duplicates
 -- Only applies when status is NOT 'cancelled' (allows re-registration after cancellation)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aftercare_registrations_unique_child
@@ -36,7 +15,6 @@ ON aftercare_registrations (
   preschool_id
 )
 WHERE status != 'cancelled';
-
 -- Add function to check for duplicates before insert (additional safety)
 CREATE OR REPLACE FUNCTION check_duplicate_aftercare_registration()
 RETURNS TRIGGER AS $$
@@ -64,14 +42,12 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Create trigger for INSERT operations
 DROP TRIGGER IF EXISTS prevent_duplicate_aftercare_insert ON aftercare_registrations;
 CREATE TRIGGER prevent_duplicate_aftercare_insert
   BEFORE INSERT ON aftercare_registrations
   FOR EACH ROW
   EXECUTE FUNCTION check_duplicate_aftercare_registration();
-
 -- Create trigger for UPDATE operations (in case status changes from cancelled)
 DROP TRIGGER IF EXISTS prevent_duplicate_aftercare_update ON aftercare_registrations;
 CREATE TRIGGER prevent_duplicate_aftercare_update
@@ -79,7 +55,6 @@ CREATE TRIGGER prevent_duplicate_aftercare_update
   FOR EACH ROW
   WHEN (NEW.status != 'cancelled')
   EXECUTE FUNCTION check_duplicate_aftercare_registration();
-
 -- Add helpful view to identify any existing duplicates (for cleanup)
 CREATE OR REPLACE VIEW duplicate_aftercare_registrations AS
 SELECT 
@@ -96,9 +71,7 @@ FROM aftercare_registrations
 WHERE status != 'cancelled'
 GROUP BY parent_email, child_first_name, child_last_name, child_date_of_birth, preschool_id
 HAVING COUNT(*) > 1;
-
 COMMENT ON VIEW duplicate_aftercare_registrations IS 
 'Shows duplicate aftercare registrations that need to be cleaned up. This should be empty after applying the unique constraint.';
-
 -- Grant access to the view
 GRANT SELECT ON duplicate_aftercare_registrations TO authenticated;

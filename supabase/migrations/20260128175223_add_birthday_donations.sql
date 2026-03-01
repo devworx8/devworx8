@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.birthday_donation_days (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -14,10 +13,8 @@ CREATE TABLE IF NOT EXISTS public.birthday_donation_days (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, donation_date)
 );
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donation_days_org_date
   ON public.birthday_donation_days(organization_id, donation_date);
-
 CREATE TABLE IF NOT EXISTS public.birthday_donations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -28,13 +25,10 @@ CREATE TABLE IF NOT EXISTS public.birthday_donations (
   recorded_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donations_org_date
   ON public.birthday_donations(organization_id, donation_date);
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donations_recorded_by
   ON public.birthday_donations(recorded_by);
-
 CREATE OR REPLACE FUNCTION public.set_birthday_donation_day_meta()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -50,12 +44,10 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_birthday_donation_days_meta ON public.birthday_donation_days;
 CREATE TRIGGER trg_birthday_donation_days_meta
 BEFORE INSERT OR UPDATE ON public.birthday_donation_days
 FOR EACH ROW EXECUTE FUNCTION public.set_birthday_donation_day_meta();
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -150,10 +142,8 @@ BEGIN
   RETURN day_row;
 END;
 $$;
-
 ALTER TABLE public.birthday_donation_days ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.birthday_donations ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS birthday_donation_days_select ON public.birthday_donation_days;
 CREATE POLICY birthday_donation_days_select ON public.birthday_donation_days
 FOR SELECT TO authenticated
@@ -166,7 +156,6 @@ USING (
       AND p.role IN ('teacher', 'principal', 'principal_admin', 'admin', 'superadmin', 'super_admin', 'staff')
   )
 );
-
 DROP POLICY IF EXISTS birthday_donations_select ON public.birthday_donations;
 CREATE POLICY birthday_donations_select ON public.birthday_donations
 FOR SELECT TO authenticated
@@ -179,8 +168,6 @@ USING (
       AND p.role IN ('teacher', 'principal', 'principal_admin', 'admin', 'superadmin', 'super_admin', 'staff')
   )
 );
-
 GRANT SELECT ON public.birthday_donation_days TO authenticated;
 GRANT SELECT ON public.birthday_donations TO authenticated;
-
 COMMIT;

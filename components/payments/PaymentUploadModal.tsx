@@ -102,7 +102,7 @@ export function PaymentUploadModal({
   const paymentForLabel = paymentForMonth
     ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
     : null;
-  const isPaymentForLocked = Boolean(paymentForDate);
+  const hasSuggestedPaymentForMonth = Boolean(paymentForDate);
   const showPaymentForField = !isUniformPayment;
   const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment) && Boolean(categoryCode);
 
@@ -508,25 +508,19 @@ export function PaymentUploadModal({
             <>
               <Text style={styles.modalLabel}>Payment For Month *</Text>
               <TouchableOpacity
-                style={[
-                  styles.datePickerButton,
-                  isPaymentForLocked && styles.datePickerButtonDisabled,
-                ]}
-                onPress={() => {
-                  if (!isPaymentForLocked) setShowPaymentForPicker(true);
-                }}
-                activeOpacity={isPaymentForLocked ? 1 : 0.7}
+                style={styles.datePickerButton}
+                onPress={() => setShowPaymentForPicker(true)}
               >
                 <Ionicons name="calendar-outline" size={20} color={theme.primary} />
                 <Text style={styles.datePickerText}>
                   {paymentForLabel || 'Select month'}
                 </Text>
-                {!isPaymentForLocked && (
-                  <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
-                )}
+                <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
               <Text style={styles.referenceHint}>
-                This proof of payment will be matched to the selected billing month.
+                {hasSuggestedPaymentForMonth
+                  ? 'Prefilled from the fee due date. Tap to adjust if needed.'
+                  : 'This proof of payment will be matched to the selected billing month.'}
               </Text>
             </>
           ) : (
@@ -766,9 +760,6 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) => St
     flex: 1,
     fontSize: 16,
     color: theme.text,
-  },
-  datePickerButtonDisabled: {
-    opacity: 0.7,
   },
   currencyPrefix: { fontSize: 16, color: theme.textSecondary, marginRight: 4 },
   textInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: theme.text },

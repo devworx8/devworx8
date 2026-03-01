@@ -18,39 +18,30 @@ CREATE TABLE IF NOT EXISTS public.active_sessions (
     -- One row per user per device
     CONSTRAINT uq_active_sessions_user_device UNIQUE (user_id, device_id)
 );
-
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_active_sessions_user_active
     ON public.active_sessions (user_id)
     WHERE is_active = true;
-
 CREATE INDEX IF NOT EXISTS idx_active_sessions_last_active
     ON public.active_sessions (last_active_at);
-
 -- RLS: users can only see/manage their own sessions
 ALTER TABLE public.active_sessions ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Users can view their own sessions"
     ON public.active_sessions FOR SELECT
     USING (auth.uid() = user_id);
-
 CREATE POLICY "Users can insert their own sessions"
     ON public.active_sessions FOR INSERT
     WITH CHECK (auth.uid() = user_id);
-
 CREATE POLICY "Users can update their own sessions"
     ON public.active_sessions FOR UPDATE
     USING (auth.uid() = user_id);
-
 CREATE POLICY "Users can delete their own sessions"
     ON public.active_sessions FOR DELETE
     USING (auth.uid() = user_id);
-
 -- Super-admin bypass (service role can see all)
 CREATE POLICY "Service role full access"
     ON public.active_sessions FOR ALL
     USING (auth.role() = 'service_role');
-
 -- Cleanup function: mark stale sessions (inactive > 7 days) as signed out
 CREATE OR REPLACE FUNCTION public.cleanup_stale_sessions()
 RETURNS void
@@ -65,7 +56,6 @@ BEGIN
       AND last_active_at < now() - interval '7 days';
 END;
 $$;
-
 -- RPC: register or refresh a device session, returns other active devices
 CREATE OR REPLACE FUNCTION public.register_device_session(
     p_device_id text,
@@ -118,7 +108,6 @@ BEGIN
     );
 END;
 $$;
-
 -- RPC: sign out a device session
 CREATE OR REPLACE FUNCTION public.sign_out_device_session(
     p_device_id text

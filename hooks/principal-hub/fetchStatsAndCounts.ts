@@ -32,6 +32,8 @@ export interface StatsRawResult {
   registrationFeesCollected: number;
   pendingRegistrationPayments: number;
   combinedPendingPayments: number;
+  expectedTuitionIncome: number;
+  collectedTuitionAmount: number;
 }
 
 export async function fetchStatsAndCounts(
@@ -186,6 +188,8 @@ export async function fetchStatsAndCounts(
   let pendingPaymentsCount = legacyPendingPaymentsCount;
   let pendingPaymentsAmount = 0;
   let pendingPaymentsOverdueAmount = 0;
+  let expectedTuitionIncome = 0;
+  let collectedTuitionAmount = 0;
   try {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -198,6 +202,55 @@ export async function fetchStatsAndCounts(
       reason: receivablesError?.message || 'Unknown receivables error',
       legacyPendingPaymentsCount,
     });
+  }
+
+  try {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const [feesResult, structResult] = await Promise.all([
+      safe(supabase
+        .from('student_fees')
+        .select('student_id, final_amount, amount, amount_paid, status')
+        .or(`organization_id.eq.${preschoolId},preschool_id.eq.${preschoolId}`)
+        .eq('billing_month', currentMonth)
+        .neq('status', 'waived')),
+      safe(supabase
+        .from('school_fee_structures')
+        .select('amount_cents, amount')
+        .or(`organization_id.eq.${preschoolId},preschool_id.eq.${preschoolId}`)
+        .ilike('category_code', '%tuition%')
+        .eq('is_active', true)
+        .limit(1)),
+    ]);
+
+    const monthFees = (v(feesResult).data || []) as any[];
+    const feeStruct = (v(structResult).data || []) as any[];
+    const defaultTuition = feeStruct[0]
+      ? Number(feeStruct[0].amount_cents ? feeStruct[0].amount_cents / 100 : feeStruct[0].amount || 0)
+      : 0;
+
+    const studentsWithFees = new Set(monthFees.map((f: any) => f.student_id));
+    const studentsWithoutFees = studentsCount - studentsWithFees.size;
+
+    const feeBasedExpected = monthFees.reduce((sum: number, f: any) => {
+      const amt = Number(f.final_amount || f.amount || 0);
+      return sum + (Number.isFinite(amt) ? amt : 0);
+    }, 0);
+    const projectedExpected = studentsWithoutFees > 0 ? studentsWithoutFees * defaultTuition : 0;
+    expectedTuitionIncome = feeBasedExpected + projectedExpected;
+
+    collectedTuitionAmount = monthFees
+      .filter((f: any) => f.status === 'paid')
+      .reduce((sum: number, f: any) => {
+        const paid =
+          f.amount_paid != null
+            ? Number(f.amount_paid)
+            : Number(f.final_amount ?? f.amount ?? 0);
+        return sum + (Number.isFinite(paid) ? paid : 0);
+      }, 0);
+  } catch (tuitionError: any) {
+    logger.info('Tuition income calculation failed', { reason: tuitionError?.message });
   }
 
   // "Unpaid fees" widgets must stay fee-ledger scoped (not mixed with registrations/POP queue).
@@ -233,5 +286,7 @@ export async function fetchStatsAndCounts(
     registrationFeesCollected,
     pendingRegistrationPayments,
     combinedPendingPayments,
+    expectedTuitionIncome,
+    collectedTuitionAmount,
   };
 }

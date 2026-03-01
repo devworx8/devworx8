@@ -2,20 +2,6 @@
 -- This migration fixes all functions that query profiles table with WHERE id = auth.uid()
 -- The correct pattern is WHERE auth_user_id = auth.uid()
 
-DO $sql$
-BEGIN
-  IF to_regclass('public.profiles') IS NOT NULL THEN
-    ALTER TABLE public.profiles
-      ADD COLUMN IF NOT EXISTS auth_user_id uuid,
-      ADD COLUMN IF NOT EXISTS email text,
-      ADD COLUMN IF NOT EXISTS role text,
-      ADD COLUMN IF NOT EXISTS preschool_id uuid,
-      ADD COLUMN IF NOT EXISTS organization_id uuid,
-      ADD COLUMN IF NOT EXISTS first_name text,
-      ADD COLUMN IF NOT EXISTS last_name text;
-  END IF;
-END $sql$;
-
 -- ============================================================================
 -- 1. Fix get_user_preschool_id
 -- ============================================================================
@@ -31,7 +17,6 @@ AS $$
   WHERE auth_user_id = auth.uid()  -- FIXED
   LIMIT 1;
 $$;
-
 -- ============================================================================
 -- 2. Fix get_user_org_id
 -- ============================================================================
@@ -47,7 +32,6 @@ AS $$
   WHERE auth_user_id = auth.uid()  -- FIXED
   LIMIT 1;
 $$;
-
 -- ============================================================================
 -- 3. Fix get_user_role
 -- ============================================================================
@@ -63,7 +47,6 @@ AS $$
   WHERE auth_user_id = auth.uid()  -- FIXED
   LIMIT 1;
 $$;
-
 -- ============================================================================
 -- 4. Fix get_current_user_role
 -- ============================================================================
@@ -79,7 +62,6 @@ AS $$
   WHERE auth_user_id = auth.uid()  -- FIXED
   LIMIT 1;
 $$;
-
 -- ============================================================================
 -- 5. Fix get_current_user_profile
 -- ============================================================================
@@ -112,7 +94,6 @@ AS $$
   WHERE p.auth_user_id = auth.uid()  -- FIXED
   LIMIT 1;
 $$;
-
 -- ============================================================================
 -- 6. Fix is_superadmin
 -- ============================================================================
@@ -129,7 +110,6 @@ AS $$
     AND role IN ('superadmin', 'super_admin')
   );
 $$;
-
 -- ============================================================================
 -- 7. Fix is_superadmin_safe
 -- ============================================================================
@@ -151,7 +131,6 @@ BEGIN
   RETURN user_role IN ('superadmin', 'super_admin');
 END;
 $$;
-
 -- ============================================================================
 -- 8. Fix is_super_admin
 -- ============================================================================
@@ -168,7 +147,6 @@ AS $$
     AND role IN ('superadmin', 'super_admin')
   );
 $$;
-
 -- ============================================================================
 -- 9. Fix is_admin_level
 -- ============================================================================
@@ -185,7 +163,6 @@ AS $$
     AND role IN ('superadmin', 'super_admin', 'principal', 'principal_admin', 'admin', 'preschool_admin')
   );
 $$;
-
 -- ============================================================================
 -- 10. Fix is_preschool_admin
 -- ============================================================================
@@ -202,7 +179,6 @@ AS $$
     AND role IN ('principal', 'principal_admin', 'admin', 'preschool_admin')
   );
 $$;
-
 -- ============================================================================
 -- 11. Fix is_instructor_level
 -- ============================================================================
@@ -219,11 +195,10 @@ AS $$
     AND role IN ('teacher', 'instructor', 'coach')
   );
 $$;
-
 -- ============================================================================
 -- 12. Fix user_can_read_profile
 -- ============================================================================
-CREATE OR REPLACE FUNCTION public.user_can_read_profile(profile_user_id uuid)
+CREATE OR REPLACE FUNCTION public.user_can_read_profile(target_profile_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -249,14 +224,14 @@ BEGIN
   END IF;
 
   -- Can always read own profile
-  IF current_user_profile.id = profile_user_id THEN
+  IF current_user_profile.id = target_profile_id THEN
     RETURN TRUE;
   END IF;
 
   -- Get target profile
   SELECT * INTO target_profile
   FROM public.profiles
-  WHERE id = profile_user_id;
+  WHERE id = target_profile_id;
 
   IF target_profile IS NULL THEN
     RETURN FALSE;
@@ -271,7 +246,6 @@ BEGIN
   RETURN FALSE;
 END;
 $$;
-
 -- ============================================================================
 -- 13. Fix log_activity
 -- ============================================================================
@@ -323,7 +297,6 @@ EXCEPTION
     RETURN NULL;
 END;
 $$;
-
 -- ============================================================================
 -- 14. Fix can_self_enroll_in_course
 -- ============================================================================
@@ -361,7 +334,6 @@ BEGIN
     AND v_course.is_published = TRUE;
 END;
 $$;
-
 -- ============================================================================
 -- Add comments
 -- ============================================================================

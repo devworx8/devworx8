@@ -24,7 +24,7 @@ interface SavedExam {
   display_title: string;
   grade: string;
   subject: string;
-  generated_content: string;
+  generated_content: unknown;
   created_at: string;
   exam_type: string;
   progress?: {
@@ -83,11 +83,14 @@ export default function ParentMyExamsScreen() {
   };
 
   const handleOpenExam = (exam: SavedExam) => {
-    // Navigate to exam prep with the exam ID
     router.push({
-      pathname: '/screens/dash-assistant',
+      pathname: '/screens/exam-generation',
       params: {
-        initialMessage: `Show me my practice exam "${exam.display_title}" for ${exam.subject} ${exam.grade.replace('grade_', 'Grade ')}`,
+        examId: exam.id,
+        grade: exam.grade,
+        subject: exam.subject,
+        examType: exam.exam_type || 'practice_test',
+        loadSaved: '1',
       },
     });
   };

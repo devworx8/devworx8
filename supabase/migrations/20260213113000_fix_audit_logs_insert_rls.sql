@@ -2,7 +2,6 @@
 -- This unblocks super-admin and principal/admin client-side audit inserts.
 
 DROP POLICY IF EXISTS "Admin users can insert audit logs" ON public.audit_logs;
-
 CREATE POLICY "Admin users can insert audit logs"
 ON public.audit_logs
 FOR INSERT
@@ -26,4 +25,3 @@ WITH CHECK (
     )
   )
 );
-

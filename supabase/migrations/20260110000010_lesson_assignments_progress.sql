@@ -1,55 +1,6 @@
 -- Lesson Assignments and Progress Tracking Tables
 -- Created for the complete aftercare teaching system
 
--- Shadow DB safety: ensure base tables exist
-CREATE TABLE IF NOT EXISTS preschools (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
-CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  role TEXT,
-  preschool_id UUID,
-  organization_id UUID
-);
-
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS role TEXT,
-  ADD COLUMN IF NOT EXISTS preschool_id UUID,
-  ADD COLUMN IF NOT EXISTS organization_id UUID;
-
-CREATE TABLE IF NOT EXISTS students (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID,
-  parent_id UUID,
-  guardian_id UUID
-);
-
-ALTER TABLE students
-  ADD COLUMN IF NOT EXISTS preschool_id UUID,
-  ADD COLUMN IF NOT EXISTS parent_id UUID,
-  ADD COLUMN IF NOT EXISTS guardian_id UUID;
-
-CREATE TABLE IF NOT EXISTS classes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID
-);
-
-CREATE TABLE IF NOT EXISTS lessons (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID
-);
-
-CREATE TABLE IF NOT EXISTS lesson_activities (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  lesson_id UUID,
-  preschool_id UUID
-);
-
-CREATE TABLE IF NOT EXISTS teacher_invites (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
 -- ================================================================
 -- LESSON ASSIGNMENTS TABLE
 -- Tracks which lessons are assigned to which students/classes
@@ -72,7 +23,6 @@ CREATE TABLE IF NOT EXISTS lesson_assignments (
   -- At least one of student_id or class_id must be set
   CONSTRAINT lesson_assignment_target CHECK (student_id IS NOT NULL OR class_id IS NOT NULL)
 );
-
 -- ================================================================
 -- LESSON COMPLETIONS TABLE
 -- Tracks student completion of assigned lessons
@@ -95,7 +45,6 @@ CREATE TABLE IF NOT EXISTS lesson_completions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- ================================================================
 -- ACTIVITY PROGRESS TABLE
 -- Tracks student progress on individual activities within lessons
@@ -117,7 +66,6 @@ CREATE TABLE IF NOT EXISTS activity_progress (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (activity_id, student_id)
 );
-
 -- ================================================================
 -- STUDENT PROGRESS SUMMARY TABLE
 -- Aggregated progress data for quick access
@@ -150,7 +98,6 @@ CREATE TABLE IF NOT EXISTS student_progress_summary (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (student_id, period_type, period_start)
 );
-
 -- ================================================================
 -- TEACHER APPROVAL STATUS TRACKING
 -- For pending teacher approvals after invitation acceptance
@@ -172,7 +119,6 @@ CREATE TABLE IF NOT EXISTS teacher_approvals (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (teacher_id, preschool_id)
 );
-
 -- ================================================================
 -- INDEXES FOR PERFORMANCE
 -- ================================================================
@@ -181,20 +127,15 @@ CREATE INDEX IF NOT EXISTS idx_lesson_assignments_class ON lesson_assignments(cl
 CREATE INDEX IF NOT EXISTS idx_lesson_assignments_preschool ON lesson_assignments(preschool_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_assignments_status ON lesson_assignments(status);
 CREATE INDEX IF NOT EXISTS idx_lesson_assignments_due_date ON lesson_assignments(due_date);
-
 CREATE INDEX IF NOT EXISTS idx_lesson_completions_student ON lesson_completions(student_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_completions_lesson ON lesson_completions(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_completions_preschool ON lesson_completions(preschool_id);
-
 CREATE INDEX IF NOT EXISTS idx_activity_progress_student ON activity_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_activity_progress_activity ON activity_progress(activity_id);
-
 CREATE INDEX IF NOT EXISTS idx_student_progress_summary_student ON student_progress_summary(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_progress_summary_period ON student_progress_summary(period_type, period_start);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_approvals_preschool ON teacher_approvals(preschool_id);
 CREATE INDEX IF NOT EXISTS idx_teacher_approvals_status ON teacher_approvals(status);
-
 -- ================================================================
 -- RLS POLICIES
 -- ================================================================
@@ -205,7 +146,6 @@ ALTER TABLE lesson_completions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE student_progress_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_approvals ENABLE ROW LEVEL SECURITY;
-
 -- Lesson Assignments: Teachers and principals can manage for their school
 CREATE POLICY "teachers_manage_lesson_assignments" ON lesson_assignments
   FOR ALL USING (
@@ -216,7 +156,6 @@ CREATE POLICY "teachers_manage_lesson_assignments" ON lesson_assignments
       AND COALESCE(p.organization_id, p.preschool_id) = lesson_assignments.preschool_id
     )
   );
-
 -- Lesson Assignments: Parents can view their children's assignments
 CREATE POLICY "parents_view_child_assignments" ON lesson_assignments
   FOR SELECT USING (
@@ -226,7 +165,6 @@ CREATE POLICY "parents_view_child_assignments" ON lesson_assignments
       AND s.parent_id = auth.uid()
     )
   );
-
 -- Lesson Completions: Teachers and principals can manage for their school
 CREATE POLICY "teachers_manage_lesson_completions" ON lesson_completions
   FOR ALL USING (
@@ -237,7 +175,6 @@ CREATE POLICY "teachers_manage_lesson_completions" ON lesson_completions
       AND COALESCE(p.organization_id, p.preschool_id) = lesson_completions.preschool_id
     )
   );
-
 -- Lesson Completions: Parents can view their children's completions
 CREATE POLICY "parents_view_child_completions" ON lesson_completions
   FOR SELECT USING (
@@ -247,7 +184,6 @@ CREATE POLICY "parents_view_child_completions" ON lesson_completions
       AND s.parent_id = auth.uid()
     )
   );
-
 -- Activity Progress: Teachers and principals can manage for their school
 CREATE POLICY "teachers_manage_activity_progress" ON activity_progress
   FOR ALL USING (
@@ -258,7 +194,6 @@ CREATE POLICY "teachers_manage_activity_progress" ON activity_progress
       AND COALESCE(p.organization_id, p.preschool_id) = activity_progress.preschool_id
     )
   );
-
 -- Activity Progress: Parents can view their children's progress
 CREATE POLICY "parents_view_child_activity_progress" ON activity_progress
   FOR SELECT USING (
@@ -268,7 +203,6 @@ CREATE POLICY "parents_view_child_activity_progress" ON activity_progress
       AND s.parent_id = auth.uid()
     )
   );
-
 -- Student Progress Summary: Teachers and principals can manage for their school
 CREATE POLICY "teachers_manage_progress_summary" ON student_progress_summary
   FOR ALL USING (
@@ -279,7 +213,6 @@ CREATE POLICY "teachers_manage_progress_summary" ON student_progress_summary
       AND COALESCE(p.organization_id, p.preschool_id) = student_progress_summary.preschool_id
     )
   );
-
 -- Student Progress Summary: Parents can view their children's summary
 CREATE POLICY "parents_view_child_progress_summary" ON student_progress_summary
   FOR SELECT USING (
@@ -289,7 +222,6 @@ CREATE POLICY "parents_view_child_progress_summary" ON student_progress_summary
       AND s.parent_id = auth.uid()
     )
   );
-
 -- Teacher Approvals: Principals can manage for their school
 CREATE POLICY "principals_manage_teacher_approvals" ON teacher_approvals
   FOR ALL USING (
@@ -300,11 +232,9 @@ CREATE POLICY "principals_manage_teacher_approvals" ON teacher_approvals
       AND COALESCE(p.organization_id, p.preschool_id) = teacher_approvals.preschool_id
     )
   );
-
 -- Teacher Approvals: Teachers can view their own approval status
 CREATE POLICY "teachers_view_own_approval" ON teacher_approvals
   FOR SELECT USING (teacher_id = auth.uid());
-
 -- ================================================================
 -- TRIGGERS FOR UPDATED_AT
 -- ================================================================
@@ -315,27 +245,21 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER update_lesson_assignments_updated_at
   BEFORE UPDATE ON lesson_assignments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_lesson_completions_updated_at
   BEFORE UPDATE ON lesson_completions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_activity_progress_updated_at
   BEFORE UPDATE ON activity_progress
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_student_progress_summary_updated_at
   BEFORE UPDATE ON student_progress_summary
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_teacher_approvals_updated_at
   BEFORE UPDATE ON teacher_approvals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- ================================================================
 -- FUNCTION: Auto-update assignment status when lesson completed
 -- ================================================================
@@ -350,13 +274,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER trigger_update_assignment_on_completion
   AFTER INSERT ON lesson_completions
   FOR EACH ROW
   WHEN (NEW.status = 'completed')
   EXECUTE FUNCTION update_assignment_on_completion();
-
 -- ================================================================
 -- GRANTS
 -- ================================================================

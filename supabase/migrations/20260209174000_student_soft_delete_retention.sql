@@ -6,7 +6,6 @@ ALTER TABLE public.students
   ADD COLUMN IF NOT EXISTS deleted_by UUID,
   ADD COLUMN IF NOT EXISTS delete_reason TEXT,
   ADD COLUMN IF NOT EXISTS permanent_delete_after TIMESTAMPTZ;
-
 COMMENT ON COLUMN public.students.deleted_at IS
 'Timestamp when the student was soft-deleted/deactivated.';
 COMMENT ON COLUMN public.students.deleted_by IS
@@ -15,11 +14,9 @@ COMMENT ON COLUMN public.students.delete_reason IS
 'Reason captured when the student was deactivated.';
 COMMENT ON COLUMN public.students.permanent_delete_after IS
 'Timestamp after which a soft-deleted student can be permanently purged.';
-
 CREATE INDEX IF NOT EXISTS idx_students_soft_delete_purge
   ON public.students (permanent_delete_after)
   WHERE is_active = false AND permanent_delete_after IS NOT NULL;
-
 CREATE OR REPLACE FUNCTION public.deactivate_student(
   student_uuid UUID,
   reason TEXT DEFAULT 'left_school'
@@ -75,12 +72,9 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
-
 COMMENT ON FUNCTION public.deactivate_student(UUID, TEXT) IS
 'Deactivates a student and schedules permanent deletion 30 days later. Preserves data for recovery.';
-
 GRANT EXECUTE ON FUNCTION public.deactivate_student(UUID, TEXT) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.reactivate_student(
   student_uuid UUID
 )
@@ -116,12 +110,9 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
-
 COMMENT ON FUNCTION public.reactivate_student(UUID) IS
 'Reactivates a previously deactivated student and clears pending permanent deletion metadata.';
-
 GRANT EXECUTE ON FUNCTION public.reactivate_student(UUID) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.purge_soft_deleted_students(
   p_limit INTEGER DEFAULT 200
 )
@@ -165,15 +156,11 @@ BEGIN
   RETURN deleted_count;
 END;
 $$;
-
 COMMENT ON FUNCTION public.purge_soft_deleted_students(INTEGER) IS
 'Hard deletes soft-deleted students whose permanent_delete_after has passed. Intended for daily pg_cron use.';
-
 REVOKE ALL ON FUNCTION public.purge_soft_deleted_students(INTEGER) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.purge_soft_deleted_students(INTEGER) TO service_role;
-
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
-
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN

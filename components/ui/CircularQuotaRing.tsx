@@ -1,0 +1,206 @@
+/**
+ * CircularQuotaRing
+ *
+ * A circular progress ring showing how much AI / generation quota
+ * the user has remaining. Used across principal, teacher, parent,
+ * and admin dashboards wherever AI generation is in progress.
+ *
+ * Usage:
+ *   <CircularQuotaRing used={3} limit={10} label="Exams" />
+ */
+
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+
+interface CircularQuotaRingProps {
+  used: number;
+  limit: number;
+  size?: number;
+  strokeWidth?: number;
+  label?: string;
+  showPercentage?: boolean;
+  colorFull?: string;
+  colorEmpty?: string;
+  colorWarning?: string;
+  colorCritical?: string;
+}
+
+export function CircularQuotaRing({
+  used,
+  limit,
+  size = 80,
+  strokeWidth = 7,
+  label,
+  showPercentage = false,
+  colorFull = '#10B981',
+  colorEmpty = 'rgba(255,255,255,0.08)',
+  colorWarning = '#F59E0B',
+  colorCritical = '#EF4444',
+}: CircularQuotaRingProps) {
+  const remaining = Math.max(0, limit - used);
+  const percentUsed = limit > 0 ? Math.min(1, used / limit) : 0;
+  const percentRemaining = 1 - percentUsed;
+
+  const ringColor = useMemo(() => {
+    if (percentRemaining <= 0.1) return colorCritical;
+    if (percentRemaining <= 0.3) return colorWarning;
+    return colorFull;
+  }, [percentRemaining, colorFull, colorWarning, colorCritical]);
+
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const filledLength = circumference * percentRemaining;
+  const center = size / 2;
+
+  const segments = useMemo(() => {
+    const totalSegments = 36;
+    const filledSegments = Math.round(totalSegments * percentRemaining);
+    const segmentAngle = 360 / totalSegments;
+    const gapAngle = 2;
+    const arcAngle = segmentAngle - gapAngle;
+
+    return Array.from({ length: totalSegments }, (_, i) => {
+      const startAngle = (i * segmentAngle - 90) * (Math.PI / 180);
+      const endAngle = ((i * segmentAngle + arcAngle) - 90) * (Math.PI / 180);
+      const isFilled = i < filledSegments;
+
+      const x1 = center + radius * Math.cos(startAngle);
+      const y1 = center + radius * Math.sin(startAngle);
+      const x2 = center + radius * Math.cos(endAngle);
+      const y2 = center + radius * Math.sin(endAngle);
+
+      return { x1, y1, x2, y2, isFilled };
+    });
+  }, [center, radius, percentRemaining]);
+
+  const displayValue = showPercentage
+    ? `${Math.round(percentRemaining * 100)}%`
+    : `${remaining}`;
+
+  return (
+    <View style={[styles.container, { width: size, height: size }]}>
+      {/* Ring segments rendered as positioned dot pairs */}
+      <View style={[styles.ring, { width: size, height: size }]}>
+        {segments.map((seg, i) => {
+          const midAngle = ((i * 10 + 4) - 90) * (Math.PI / 180);
+          const dotX = center + radius * Math.cos(midAngle);
+          const dotY = center + radius * Math.sin(midAngle);
+          return (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  width: strokeWidth,
+                  height: strokeWidth,
+                  borderRadius: strokeWidth / 2,
+                  left: dotX - strokeWidth / 2,
+                  top: dotY - strokeWidth / 2,
+                  backgroundColor: seg.isFilled ? ringColor : colorEmpty,
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+
+      {/* Center content */}
+      <View style={styles.centerContent}>
+        <Text style={[styles.valueText, { fontSize: size * 0.22, color: ringColor }]}>
+          {displayValue}
+        </Text>
+        {label && (
+          <Text style={[styles.labelText, { fontSize: size * 0.12 }]} numberOfLines={1}>
+            {label}
+          </Text>
+        )}
+        {!showPercentage && limit > 0 && (
+          <Text style={[styles.ofText, { fontSize: size * 0.1 }]}>
+            of {limit}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+interface QuotaRingWithStatusProps extends CircularQuotaRingProps {
+  featureName: string;
+  isGenerating?: boolean;
+}
+
+export function QuotaRingWithStatus({
+  featureName,
+  isGenerating = false,
+  ...ringProps
+}: QuotaRingWithStatusProps) {
+  const remaining = Math.max(0, ringProps.limit - ringProps.used);
+  const isExhausted = ringProps.limit > 0 && remaining <= 0;
+
+  return (
+    <View style={styles.statusContainer}>
+      <CircularQuotaRing {...ringProps} />
+      <View style={styles.statusInfo}>
+        <Text style={styles.featureName}>{featureName}</Text>
+        <Text style={[styles.statusText, isExhausted && styles.exhaustedText]}>
+          {isGenerating
+            ? 'Generating...'
+            : isExhausted
+              ? 'Daily limit reached'
+              : `${remaining} remaining today`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ring: {
+    position: 'absolute',
+  },
+  dot: {
+    position: 'absolute',
+  },
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valueText: {
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  labelText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  ofText: {
+    color: 'rgba(255,255,255,0.35)',
+    fontWeight: '500',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  statusInfo: {
+    flex: 1,
+  },
+  featureName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+  },
+  statusText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  exhaustedText: {
+    color: '#EF4444',
+  },
+});

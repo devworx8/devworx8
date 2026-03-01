@@ -5,11 +5,12 @@
  * into a single hook consumed by the thin dashboard shell.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useK12ParentData } from '@/domains/k12/hooks/useK12ParentData';
 import { useParentProgress } from '@/hooks/useLessonProgress';
 import { calculateAge } from '@/lib/date-utils';
 import type { Child } from '@/domains/k12/components/K12ParentChildCard';
+import { useActiveChild } from '@/contexts/ActiveChildContext';
 
 export interface UrgentItem {
   id: string;
@@ -69,6 +70,7 @@ export function useK12ParentDashboard(
   organizationId: string | undefined,
 ) {
   const [activeChildIndex, setActiveChildIndex] = useState(0);
+  const { setActiveChildId: setGlobalActiveChildId, activeChildId: globalActiveChildId, isHydrated } = useActiveChild();
 
   const {
     children,
@@ -86,9 +88,27 @@ export function useK12ParentDashboard(
     return children[idx] ?? null;
   }, [children, activeChildIndex]);
 
+  // When children load, restore selection from the global context (AsyncStorage-backed)
+  useEffect(() => {
+    if (!isHydrated || children.length === 0) return;
+    if (globalActiveChildId) {
+      const idx = children.findIndex((c) => c.id === globalActiveChildId);
+      if (idx >= 0 && idx !== activeChildIndex) {
+        setActiveChildIndex(idx);
+        return;
+      }
+    }
+    // No stored selection — persist the default (index 0)
+    if (children[0]?.id) {
+      setGlobalActiveChildId(children[0].id);
+    }
+  }, [isHydrated, children, globalActiveChildId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const switchChild = useCallback((index: number) => {
     setActiveChildIndex(index);
-  }, []);
+    const id = children[index]?.id;
+    if (id) setGlobalActiveChildId(id);
+  }, [children, setGlobalActiveChildId]);
 
   const dashboardSummary: DashboardSummary = useMemo(() => {
     const totalChildren = children.length;

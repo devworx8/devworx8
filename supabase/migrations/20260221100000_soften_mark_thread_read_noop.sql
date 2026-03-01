@@ -2,7 +2,6 @@
 -- return no-op for non-participants instead of raising 42501.
 
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.mark_thread_messages_as_read(
   p_thread_id uuid DEFAULT NULL,
   p_reader_id uuid DEFAULT NULL,
@@ -51,10 +50,7 @@ BEGIN
     AND mp.user_id = v_caller;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.mark_thread_messages_as_read(uuid, uuid, uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.mark_thread_messages_as_read(uuid, uuid, uuid, uuid) TO service_role;
-
 NOTIFY pgrst, 'reload schema';
-
 COMMIT;

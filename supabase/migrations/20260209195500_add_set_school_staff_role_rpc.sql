@@ -145,6 +145,5 @@ BEGIN
 
   GRANT EXECUTE ON FUNCTION public.set_school_staff_role(uuid, uuid, text) TO authenticated;
 END $sql$;
-
 COMMENT ON FUNCTION public.set_school_staff_role(uuid, uuid, text)
   IS 'Promotes/demotes school staff role (teacher/admin/principal_admin) with principal/admin authorization.';

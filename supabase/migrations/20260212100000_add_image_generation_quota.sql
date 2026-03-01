@@ -2,7 +2,6 @@
 
 ALTER TABLE public.ai_usage_tiers
   ADD COLUMN IF NOT EXISTS images_per_month integer;
-
 UPDATE public.ai_usage_tiers
 SET images_per_month = CASE
     WHEN images_per_month IS NOT NULL THEN images_per_month
@@ -13,27 +12,20 @@ SET images_per_month = CASE
     ELSE 30
   END
 WHERE images_per_month IS NULL;
-
 ALTER TABLE public.ai_usage_tiers
   ALTER COLUMN images_per_month SET NOT NULL;
-
 ALTER TABLE public.user_ai_usage
   ADD COLUMN IF NOT EXISTS images_generated_this_month integer DEFAULT 0;
-
 ALTER TABLE public.user_ai_usage
   ADD COLUMN IF NOT EXISTS total_images_generated integer DEFAULT 0;
-
 UPDATE public.user_ai_usage
 SET
   images_generated_this_month = COALESCE(images_generated_this_month, 0),
   total_images_generated = COALESCE(total_images_generated, 0);
-
 ALTER TABLE public.user_ai_usage
   ALTER COLUMN images_generated_this_month SET NOT NULL;
-
 ALTER TABLE public.user_ai_usage
   ALTER COLUMN total_images_generated SET NOT NULL;
-
 CREATE OR REPLACE FUNCTION public.check_ai_usage_limit(p_user_id uuid, p_request_type character varying)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -137,7 +129,6 @@ BEGIN
   );
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.increment_ai_usage(
   p_user_id uuid,
   p_request_type character varying,
@@ -186,7 +177,6 @@ BEGIN
   VALUES (p_user_id, p_request_type, p_status, p_metadata);
 END;
 $function$;
-
 DO $$
 BEGIN
   IF to_regclass('storage.objects') IS NULL THEN

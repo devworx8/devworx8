@@ -15,26 +15,21 @@ CREATE TABLE IF NOT EXISTS public.exam_history (
   title         text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
-
 -- Index for fast lookups by user, ordered by recency
 CREATE INDEX IF NOT EXISTS idx_exam_history_user_created
   ON public.exam_history (user_id, created_at DESC);
-
 -- Enable RLS
 ALTER TABLE public.exam_history ENABLE ROW LEVEL SECURITY;
-
 -- Users can read their own exam history
 DROP POLICY IF EXISTS exam_history_select_own ON public.exam_history;
 CREATE POLICY exam_history_select_own ON public.exam_history
   FOR SELECT
   USING (auth.uid() = user_id);
-
 -- Users can insert their own exams
 DROP POLICY IF EXISTS exam_history_insert_own ON public.exam_history;
 CREATE POLICY exam_history_insert_own ON public.exam_history
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
-
 -- Users can delete their own exams
 DROP POLICY IF EXISTS exam_history_delete_own ON public.exam_history;
 CREATE POLICY exam_history_delete_own ON public.exam_history

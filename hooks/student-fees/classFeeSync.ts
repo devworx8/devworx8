@@ -140,6 +140,15 @@ export async function syncPendingTuitionFees(
     return { updated: 0 };
   }
 
+  // ── Strategy 1: Use server-side RPC (single source of truth) ──
+  // The DB has age_min_months/age_max_months on fee_structures and
+  // get_tuition_fee_for_age() for deterministic age-based fee lookup.
+  if (targetStudent.date_of_birth) {
+    const rpcResult = await tryRpcSync(supabase, targetStudent, resolvedClassName);
+    if (rpcResult) return rpcResult;
+  }
+
+  // ── Strategy 2: Client-side resolution fallback ──
   const selectedTuitionFee = await resolveSuggestedTuitionFee(
     organizationId,
     targetStudent,
@@ -157,6 +166,7 @@ export async function syncPendingTuitionFees(
       amount_paid,
       discount_amount,
       amount_outstanding,
+      billing_month,
       category_code,
       fee_structures!student_fees_fee_structure_id_fkey(fee_type, name, description)
     `)
@@ -190,27 +200,98 @@ export async function syncPendingTuitionFees(
 
   const nowIso = new Date().toISOString();
   const normalizedAmount = Number(selectedTuitionFee.amount);
-  await Promise.all(
-    eligibleFeeIds.map((feeId) =>
-      supabase
-        .from('student_fees')
-        .update({
-          fee_structure_id: selectedTuitionFee.id,
-          amount: normalizedAmount,
-          final_amount: normalizedAmount,
-          amount_outstanding: normalizedAmount,
-          updated_at: nowIso,
-        })
-        .eq('id', feeId)
-        .throwOnError(),
-    ),
-  );
+  let updatedCount = 0;
+
+  for (const feeId of eligibleFeeIds) {
+    const { error: updateError } = await supabase
+      .from('student_fees')
+      .update({
+        fee_structure_id: selectedTuitionFee.id,
+        amount: normalizedAmount,
+        final_amount: normalizedAmount,
+        amount_outstanding: normalizedAmount,
+        updated_at: nowIso,
+      })
+      .eq('id', feeId);
+
+    if (updateError) {
+      console.warn('[SyncTuition] Update failed for fee', feeId?.slice(0, 8), updateError.code, updateError.message);
+    } else {
+      updatedCount++;
+    }
+  }
 
   return {
-    updated: eligibleFeeIds.length,
+    updated: updatedCount,
     amount: normalizedAmount,
     className: resolvedClassName,
   };
+}
+
+async function tryRpcSync(
+  supabase: ReturnType<typeof assertSupabase>,
+  student: Student,
+  className: string,
+): Promise<TuitionSyncResult | null> {
+  try {
+    const { data: feeRows } = await supabase
+      .from('student_fees')
+      .select('id, billing_month, status, category_code, amount_paid')
+      .eq('student_id', student.id)
+      .in('status', ['pending', 'overdue'])
+      .eq('category_code', 'tuition');
+
+    const eligibleMonths = [
+      ...new Set(
+        (feeRows || [])
+          .filter((r: any) => Number(r.amount_paid || 0) < 0.01)
+          .map((r: any) => r.billing_month as string)
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!eligibleMonths.length) {
+      return null;
+    }
+
+    let updatedCount = 0;
+    let lastAmount: number | null = null;
+
+    for (const month of eligibleMonths) {
+      const { data, error } = await supabase.rpc('assign_correct_fee_for_student', {
+        p_student_id: student.id,
+        p_billing_month: month,
+      });
+
+      if (error) {
+        console.warn('[SyncTuition] RPC error for month', month, error.code, error.message);
+        continue;
+      }
+
+      const result = data as { action?: string; amount?: number; error?: string } | null;
+
+      if (result?.error) {
+        console.warn('[SyncTuition] RPC returned error for', month, ':', result.error);
+        continue;
+      }
+
+      if (result?.action === 'updated' || result?.action === 'created') {
+        updatedCount++;
+        if (result.amount != null) lastAmount = Number(result.amount);
+      }
+    }
+
+    if (updatedCount === 0) return null;
+
+    return {
+      updated: updatedCount,
+      amount: lastAmount,
+      className,
+    };
+  } catch (err) {
+    console.warn('[SyncTuition] RPC path failed, falling back to client-side', err);
+    return null;
+  }
 }
 
 export async function prefillRegistrationFeeForClass(

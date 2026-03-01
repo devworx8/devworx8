@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS teacher_salaries (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (teacher_id)
 );
-
 -- 2. teacher_payments – individual payment records
 CREATE TABLE IF NOT EXISTS teacher_payments (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -42,7 +41,6 @@ CREATE TABLE IF NOT EXISTS teacher_payments (
     recorded_by         UUID,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- 3. teacher_performance_reviews – review records
 CREATE TABLE IF NOT EXISTS teacher_performance_reviews (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,35 +58,26 @@ CREATE TABLE IF NOT EXISTS teacher_performance_reviews (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- =============================================================================
 -- INDEXES
 -- =============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_teacher_salaries_preschool
     ON teacher_salaries(preschool_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_salaries_teacher
     ON teacher_salaries(teacher_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_preschool
     ON teacher_payments(preschool_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_teacher
     ON teacher_payments(teacher_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_date
     ON teacher_payments(payment_date DESC);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_performance_reviews_preschool
     ON teacher_performance_reviews(preschool_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_performance_reviews_teacher
     ON teacher_performance_reviews(teacher_id);
-
 CREATE INDEX IF NOT EXISTS idx_teacher_performance_reviews_date
     ON teacher_performance_reviews(review_date DESC);
-
 -- =============================================================================
 -- RLS POLICIES
 -- =============================================================================
@@ -96,7 +85,6 @@ CREATE INDEX IF NOT EXISTS idx_teacher_performance_reviews_date
 ALTER TABLE teacher_salaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_performance_reviews ENABLE ROW LEVEL SECURITY;
-
 -- teacher_salaries: principals can manage for their school
 CREATE POLICY teacher_salaries_select ON teacher_salaries
     FOR SELECT USING (
@@ -107,7 +95,6 @@ CREATE POLICY teacher_salaries_select ON teacher_salaries
               AND role IN ('principal', 'super_admin')
         )
     );
-
 CREATE POLICY teacher_salaries_insert ON teacher_salaries
     FOR INSERT WITH CHECK (
         preschool_id IN (
@@ -117,7 +104,6 @@ CREATE POLICY teacher_salaries_insert ON teacher_salaries
               AND role IN ('principal', 'super_admin')
         )
     );
-
 CREATE POLICY teacher_salaries_update ON teacher_salaries
     FOR UPDATE USING (
         preschool_id IN (
@@ -127,7 +113,6 @@ CREATE POLICY teacher_salaries_update ON teacher_salaries
               AND role IN ('principal', 'super_admin')
         )
     );
-
 -- teacher_payments: principals can manage for their school
 CREATE POLICY teacher_payments_select ON teacher_payments
     FOR SELECT USING (
@@ -138,7 +123,6 @@ CREATE POLICY teacher_payments_select ON teacher_payments
               AND role IN ('principal', 'super_admin')
         )
     );
-
 CREATE POLICY teacher_payments_insert ON teacher_payments
     FOR INSERT WITH CHECK (
         preschool_id IN (
@@ -148,7 +132,6 @@ CREATE POLICY teacher_payments_insert ON teacher_payments
               AND role IN ('principal', 'super_admin')
         )
     );
-
 -- teacher_performance_reviews: principals can manage for their school
 CREATE POLICY teacher_perf_reviews_select ON teacher_performance_reviews
     FOR SELECT USING (
@@ -159,7 +142,6 @@ CREATE POLICY teacher_perf_reviews_select ON teacher_performance_reviews
               AND role IN ('principal', 'super_admin')
         )
     );
-
 CREATE POLICY teacher_perf_reviews_insert ON teacher_performance_reviews
     FOR INSERT WITH CHECK (
         preschool_id IN (
@@ -169,7 +151,6 @@ CREATE POLICY teacher_perf_reviews_insert ON teacher_performance_reviews
               AND role IN ('principal', 'super_admin')
         )
     );
-
 CREATE POLICY teacher_perf_reviews_update ON teacher_performance_reviews
     FOR UPDATE USING (
         preschool_id IN (
@@ -179,7 +160,6 @@ CREATE POLICY teacher_perf_reviews_update ON teacher_performance_reviews
               AND role IN ('principal', 'super_admin')
         )
     );
-
 -- =============================================================================
 -- updated_at TRIGGER
 -- =============================================================================
@@ -191,11 +171,9 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER set_teacher_salaries_updated_at
     BEFORE UPDATE ON teacher_salaries
     FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at();
-
 CREATE TRIGGER set_teacher_perf_reviews_updated_at
     BEFORE UPDATE ON teacher_performance_reviews
     FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at();

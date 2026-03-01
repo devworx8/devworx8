@@ -7,7 +7,6 @@
 --   - parents/guardians with children enrolled at the school
 
 DROP POLICY IF EXISTS school_menu_uploads_select ON storage.objects;
-
 CREATE POLICY school_menu_uploads_select
 ON storage.objects
 FOR SELECT

@@ -4,7 +4,6 @@ ALTER TABLE public.schools
   ADD COLUMN IF NOT EXISTS subscription_status text DEFAULT 'active',
   ADD COLUMN IF NOT EXISTS subscription_start_date date,
   ADD COLUMN IF NOT EXISTS subscription_end_date date;
-
 -- Superadmin-only helper to update subscription fields across entities
 CREATE OR REPLACE FUNCTION public.superadmin_update_entity_subscription(
   p_entity_type text,

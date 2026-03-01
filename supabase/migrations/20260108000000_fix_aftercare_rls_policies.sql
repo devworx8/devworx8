@@ -1,27 +1,6 @@
 -- Fix RLS policies for aftercare_registrations table
 -- Allow authenticated users to insert their own registrations
 
--- Shadow DB safety: ensure base tables exist
-CREATE TABLE IF NOT EXISTS public.aftercare_registrations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  parent_user_id UUID,
-  parent_email TEXT,
-  preschool_id UUID,
-  status TEXT
-);
-
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  role TEXT,
-  organization_id UUID,
-  preschool_id UUID
-);
-
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS role TEXT,
-  ADD COLUMN IF NOT EXISTS organization_id UUID,
-  ADD COLUMN IF NOT EXISTS preschool_id UUID;
-
 -- Policy: Authenticated users can insert their own aftercare registrations
 -- They can insert if:
 -- 1. parent_user_id matches auth.uid() (if set), OR
@@ -43,7 +22,6 @@ WITH CHECK (
   -- Option 3: Allow if parent_user_id is NULL (will be set by trigger or later)
   (parent_user_id IS NULL)
 );
-
 -- Policy: Allow anonymous users to insert (for public web registrations)
 -- Keep the existing anon policy but ensure it's properly configured
 DROP POLICY IF EXISTS "anon_insert_aftercare" ON public.aftercare_registrations;
@@ -51,7 +29,8 @@ CREATE POLICY "anon_insert_aftercare"
 ON public.aftercare_registrations
 FOR INSERT
 TO anon
-WITH CHECK (true); -- Allow all anonymous inserts (public registration form)
+WITH CHECK (true);
+-- Allow all anonymous inserts (public registration form)
 
 -- Policy: Principals can view all registrations for their school
 -- Simplified: Each principal sees only their own school's registrations
@@ -77,7 +56,6 @@ USING (
     AND role IN ('principal', 'principal_admin', 'super_admin')
   )
 );
-
 -- Policy: Parents can view their own registrations
 DROP POLICY IF EXISTS "parents_select_own_aftercare" ON public.aftercare_registrations;
 CREATE POLICY "parents_select_own_aftercare"
@@ -92,7 +70,6 @@ USING (
     SELECT email FROM auth.users WHERE id = auth.uid()
   )
 );
-
 -- Policy: Principals can update registrations for their school
 DROP POLICY IF EXISTS "principals_update_aftercare" ON public.aftercare_registrations;
 CREATE POLICY "principals_update_aftercare"
@@ -117,7 +94,6 @@ WITH CHECK (
     AND role IN ('principal', 'principal_admin', 'super_admin')
   )
 );
-
 -- Policy: Parents can update their own pending registrations (e.g., upload POP)
 DROP POLICY IF EXISTS "parents_update_own_aftercare" ON public.aftercare_registrations;
 CREATE POLICY "parents_update_own_aftercare"
@@ -146,6 +122,5 @@ WITH CHECK (
   )
   AND status IN ('pending_payment', 'paid')
 );
-
 -- Ensure RLS is enabled
 ALTER TABLE public.aftercare_registrations ENABLE ROW LEVEL SECURITY;

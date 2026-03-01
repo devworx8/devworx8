@@ -25,16 +25,12 @@ CREATE TABLE IF NOT EXISTS weekly_programs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_programs_unique_scope
   ON weekly_programs (preschool_id, COALESCE(class_id, '00000000-0000-0000-0000-000000000000'::uuid), week_start_date);
-
 CREATE INDEX IF NOT EXISTS idx_weekly_programs_school_week
   ON weekly_programs (preschool_id, week_start_date DESC);
-
 CREATE INDEX IF NOT EXISTS idx_weekly_programs_status
   ON weekly_programs (preschool_id, status);
-
 CREATE TABLE IF NOT EXISTS daily_program_blocks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   weekly_program_id UUID NOT NULL REFERENCES weekly_programs(id) ON DELETE CASCADE,
@@ -73,16 +69,12 @@ CREATE TABLE IF NOT EXISTS daily_program_blocks (
 
   CONSTRAINT daily_program_blocks_unique_order UNIQUE (weekly_program_id, day_of_week, block_order)
 );
-
 CREATE INDEX IF NOT EXISTS idx_daily_program_blocks_program_day
   ON daily_program_blocks (weekly_program_id, day_of_week, block_order);
-
 CREATE INDEX IF NOT EXISTS idx_daily_program_blocks_school
   ON daily_program_blocks (preschool_id, day_of_week);
-
 ALTER TABLE weekly_programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_program_blocks ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS school_staff_view_weekly_programs ON weekly_programs;
 CREATE POLICY school_staff_view_weekly_programs
   ON weekly_programs
@@ -96,7 +88,6 @@ CREATE POLICY school_staff_view_weekly_programs
         AND COALESCE(p.organization_id, p.preschool_id) = weekly_programs.preschool_id
     )
   );
-
 DROP POLICY IF EXISTS school_staff_manage_weekly_programs ON weekly_programs;
 CREATE POLICY school_staff_manage_weekly_programs
   ON weekly_programs
@@ -119,7 +110,6 @@ CREATE POLICY school_staff_manage_weekly_programs
         AND COALESCE(p.organization_id, p.preschool_id) = weekly_programs.preschool_id
     )
   );
-
 DROP POLICY IF EXISTS school_staff_view_daily_program_blocks ON daily_program_blocks;
 CREATE POLICY school_staff_view_daily_program_blocks
   ON daily_program_blocks
@@ -133,7 +123,6 @@ CREATE POLICY school_staff_view_daily_program_blocks
         AND COALESCE(p.organization_id, p.preschool_id) = daily_program_blocks.preschool_id
     )
   );
-
 DROP POLICY IF EXISTS school_staff_manage_daily_program_blocks ON daily_program_blocks;
 CREATE POLICY school_staff_manage_daily_program_blocks
   ON daily_program_blocks
@@ -156,16 +145,13 @@ CREATE POLICY school_staff_manage_daily_program_blocks
         AND COALESCE(p.organization_id, p.preschool_id) = daily_program_blocks.preschool_id
     )
   );
-
 DROP TRIGGER IF EXISTS update_weekly_programs_updated_at ON weekly_programs;
 CREATE TRIGGER update_weekly_programs_updated_at
   BEFORE UPDATE ON weekly_programs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 DROP TRIGGER IF EXISTS update_daily_program_blocks_updated_at ON daily_program_blocks;
 CREATE TRIGGER update_daily_program_blocks_updated_at
   BEFORE UPDATE ON daily_program_blocks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 GRANT ALL ON weekly_programs TO authenticated;
 GRANT ALL ON daily_program_blocks TO authenticated;

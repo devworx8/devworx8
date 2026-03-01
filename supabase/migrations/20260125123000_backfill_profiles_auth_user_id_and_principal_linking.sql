@@ -9,7 +9,6 @@
 UPDATE public.profiles
 SET auth_user_id = id
 WHERE auth_user_id IS NULL;
-
 -- 2) Secure linkage function for principals/admins/superadmins.
 --    This bypasses RLS but enforces strong server-side checks.
 CREATE OR REPLACE FUNCTION public.link_profile_to_school(
@@ -83,6 +82,4 @@ BEGIN
   RETURN updated_profile;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.link_profile_to_school(uuid, uuid, text) TO authenticated;
-

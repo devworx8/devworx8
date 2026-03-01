@@ -8,7 +8,6 @@ UPDATE profiles
 SET role = 'parent'
 WHERE email = 'hlorisom@soilofafrica.org'
   AND role = 'admin';
-
 -- Activate Youth Secretary's seat status
 -- This allows access to Youth Secretary dashboard
 UPDATE organization_members
@@ -16,7 +15,6 @@ SET seat_status = 'active'
 WHERE user_id = (SELECT id FROM profiles WHERE email = 'ksaukazi@gmail.com')
   AND member_type = 'youth_secretary'
   AND seat_status = 'inactive';
-
 -- Add comment
 COMMENT ON TABLE organization_members IS 
 'Organization membership table. member_type takes priority over profile.role for routing decisions in SOA organizations.';

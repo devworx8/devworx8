@@ -7,7 +7,6 @@
 -- 4) Remove N+1 unread/last-message queries via a single summary RPC
 
 BEGIN;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Read receipt RPCs (hardened)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -58,9 +57,7 @@ BEGIN
     AND mp.user_id = v_caller;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.mark_message_as_read(uuid, uuid) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.mark_thread_messages_as_read(thread_id uuid, reader_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -99,9 +96,7 @@ BEGIN
     AND mp.user_id = v_caller;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.mark_thread_messages_as_read(uuid, uuid) TO authenticated;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Delivered receipt RPC (hardened + compatibility args)
 -- NOTE: Postgres cannot overload by argument *name*, only by *type*.
@@ -112,7 +107,6 @@ GRANT EXECUTE ON FUNCTION public.mark_thread_messages_as_read(uuid, uuid) TO aut
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DROP FUNCTION IF EXISTS public.mark_messages_delivered(uuid, uuid);
-
 CREATE OR REPLACE FUNCTION public.mark_messages_delivered(
   p_thread_id uuid DEFAULT NULL,
   p_user_id uuid DEFAULT NULL,
@@ -160,9 +154,7 @@ BEGIN
   RETURN updated_count;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.mark_messages_delivered(uuid, uuid, uuid, uuid) TO authenticated;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Aggregated per-thread summary (unread count + last message fields)
 -- Removes N+1 patterns in role dashboards.
@@ -228,8 +220,5 @@ AS $$
   LEFT JOIN unread u ON u.thread_id = t.thread_id
   LEFT JOIN last_messages lm ON lm.thread_id = t.thread_id;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_my_message_threads_summary() TO authenticated;
-
 COMMIT;
-
