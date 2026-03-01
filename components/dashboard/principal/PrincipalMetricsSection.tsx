@@ -30,6 +30,10 @@ interface PrincipalMetricsSectionProps {
     registrationFees?: { total: number };
     staff?: { total: number };
     attendanceRate?: { percentage: number };
+    expectedTuitionIncome?: { total: number };
+    collectedTuitionAmount?: { total: number };
+    pendingPaymentsAmount?: { total: number };
+    pendingPaymentsOverdueAmount?: { total: number };
   };
   studentsCount?: number;
   classesCount?: number;
@@ -48,7 +52,6 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  // Calculate derived values for clarity
   const totalStudents = stats?.students?.total ?? studentsCount ?? 0;
   const totalClasses = stats?.classes?.total ?? classesCount ?? 0;
   const pendingRegistrations = stats?.pendingRegistrations?.total ?? 0;
@@ -57,6 +60,11 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
   const feesCollected = stats?.registrationFees?.total ?? 0;
   const totalStaff = stats?.staff?.total ?? 0;
   const attendanceRate = stats?.attendanceRate?.percentage ?? 0;
+  const expectedTuition = stats?.expectedTuitionIncome?.total ?? 0;
+  const collectedTuition = stats?.collectedTuitionAmount?.total ?? 0;
+  const outstandingAmount = stats?.pendingPaymentsAmount?.total ?? 0;
+  const overdueAmount = stats?.pendingPaymentsOverdueAmount?.total ?? 0;
+  const collectionRate = expectedTuition > 0 ? Math.round((collectedTuition / expectedTuition) * 100) : 0;
 
   // ═══════════════════════════════════════════════════════════════
   // SCHOOL OVERVIEW - Your School at a Glance
@@ -138,31 +146,48 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
     },
   ];
 
-  // ═══════════════════════════════════════════════════════════════
-  // MONEY SUMMARY - Simple Financial Picture
-  // These numbers answer: "How's the money situation?"
-  // ═══════════════════════════════════════════════════════════════
+  const fmtR = (v: number) => `R${v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
   const financialMetrics = [
     {
+      id: 'expected_income',
+      title: t('dashboard.expected_income', { defaultValue: 'Expected Income' }),
+      subtitle: t('dashboard.expected_income_hint', { defaultValue: `${totalStudents} children × tuition this month` }),
+      value: expectedTuition > 0 ? fmtR(expectedTuition) : '—',
+      icon: 'calculator',
+      color: '#6366F1',
+      valueColor: '#6366F1',
+      trend: 'stable' as const,
+    },
+    {
       id: 'fees_collected',
-      title: t('dashboard.money_received', { defaultValue: 'Money Received' }),
-      subtitle: t('dashboard.money_received_hint', { defaultValue: 'Total registration fees paid' }),
-      value: `R${feesCollected.toLocaleString()}`,
+      title: t('dashboard.money_collected', { defaultValue: 'Collected' }),
+      subtitle: t('dashboard.money_collected_hint', { defaultValue: `${collectionRate}% of expected` }),
+      value: collectedTuition > 0 ? fmtR(collectedTuition) : fmtR(feesCollected),
       icon: 'checkmark-done-circle',
-      color: '#10B981', // Green - money in
+      color: '#10B981',
       valueColor: '#10B981',
-      trend: feesCollected > 0 ? 'up' as const : 'stable' as const,
+      trend: collectionRate >= 80 ? 'up' as const : collectionRate >= 50 ? 'stable' as const : 'attention' as const,
     },
     {
       id: 'outstanding',
-      title: t('dashboard.money_owed', { defaultValue: 'Money Owed' }),
-      subtitle: t('dashboard.money_owed_hint', { defaultValue: `${pendingPayments} ${pendingPayments === 1 ? 'family' : 'families'} haven't paid` }),
-      // Show actual outstanding if we have fee data, otherwise show count
-      value: pendingPayments > 0 ? `${pendingPayments} pending` : 'All paid ✓',
+      title: t('dashboard.outstanding', { defaultValue: 'Outstanding' }),
+      subtitle: t('dashboard.outstanding_hint', { defaultValue: `${pendingPayments} ${pendingPayments === 1 ? 'family' : 'families'} unpaid` }),
+      value: outstandingAmount > 0 ? fmtR(outstandingAmount) : pendingPayments > 0 ? `${pendingPayments} pending` : 'All paid',
       icon: 'time-outline',
-      color: pendingPayments > 0 ? '#F59E0B' : '#10B981', // Yellow if pending, green if all paid
-      valueColor: pendingPayments > 0 ? '#F59E0B' : '#10B981',
+      color: outstandingAmount > 0 ? '#F59E0B' : '#10B981',
+      valueColor: outstandingAmount > 0 ? '#F59E0B' : '#10B981',
       trend: pendingPayments > 3 ? 'attention' as const : 'stable' as const,
+    },
+    {
+      id: 'overdue',
+      title: t('dashboard.overdue_fees', { defaultValue: 'Overdue' }),
+      subtitle: t('dashboard.overdue_hint', { defaultValue: 'Past due date + grace period' }),
+      value: overdueAmount > 0 ? fmtR(overdueAmount) : 'None',
+      icon: 'alert-circle',
+      color: overdueAmount > 0 ? '#EF4444' : '#10B981',
+      valueColor: overdueAmount > 0 ? '#EF4444' : '#10B981',
+      trend: overdueAmount > 0 ? 'attention' as const : 'up' as const,
     },
   ];
 
@@ -185,6 +210,8 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         break;
       case 'pending_payments':
       case 'outstanding':
+      case 'overdue':
+      case 'expected_income':
         router.push('/screens/finance-control-center?tab=receivables');
         break;
       case 'pop_uploads':
@@ -273,12 +300,12 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         title={t('dashboard.money_summary', { defaultValue: 'Money Summary' })}
         sectionId="financial-summary" 
         icon="💰"
-        hint={t('dashboard.money_summary_hint', { defaultValue: 'Registration fee collection at a glance' })}
+        hint={t('dashboard.money_summary_hint', { defaultValue: 'Tuition fees at a glance' })}
         defaultCollapsed={collapsedSections.has('financial-summary')}
         onToggle={onToggleSection}
       >
         <Text style={styles.sectionHint}>
-          {t('dashboard.money_summary_hint', { defaultValue: 'Your registration fee collection at a glance' })}
+          {t('dashboard.money_summary_hint', { defaultValue: 'Tuition and fee collection this month' })}
         </Text>
         <View style={styles.financialRow}>
           {financialMetrics.map((metric) => (
@@ -295,15 +322,14 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
             />
           ))}
         </View>
-        {/* Simple explanation for non-financial users */}
         <View style={styles.financialExplainer}>
           <Text style={styles.explainerText}>
             💡 {t('dashboard.financial_tip', { 
-              defaultValue: feesCollected > 0 && pendingPayments === 0 
-                ? 'Great job! All families have paid their registration fees.'
-                : pendingPayments > 0
-                  ? `${pendingPayments} ${pendingPayments === 1 ? 'family still needs' : 'families still need'} to pay. Tap "Payment Proofs" above to verify any submitted payments.`
-                  : 'Registration fees will appear here once families start enrolling.'
+              defaultValue: pendingPayments === 0 && overdueAmount === 0
+                ? 'All families are up to date with their fees.'
+                : overdueAmount > 0
+                  ? `${pendingPayments} ${pendingPayments === 1 ? 'family has' : 'families have'} unpaid fees. Tap "Receivables" in Finance Control Center to see who owes.`
+                  : `${pendingPayments} ${pendingPayments === 1 ? 'family has' : 'families have'} pending fees. Tap any card above for details.`
             })}
           </Text>
         </View>

@@ -32,6 +32,8 @@ export interface StatsRawResult {
   registrationFeesCollected: number;
   pendingRegistrationPayments: number;
   combinedPendingPayments: number;
+  expectedTuitionIncome: number;
+  collectedTuitionAmount: number;
 }
 
 export async function fetchStatsAndCounts(
@@ -186,6 +188,8 @@ export async function fetchStatsAndCounts(
   let pendingPaymentsCount = legacyPendingPaymentsCount;
   let pendingPaymentsAmount = 0;
   let pendingPaymentsOverdueAmount = 0;
+  let expectedTuitionIncome = 0;
+  let collectedTuitionAmount = 0;
   try {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -198,6 +202,32 @@ export async function fetchStatsAndCounts(
       reason: receivablesError?.message || 'Unknown receivables error',
       legacyPendingPaymentsCount,
     });
+  }
+
+  try {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const { data: monthFees } = await supabase
+      .from('student_fees')
+      .select('final_amount, amount, amount_paid, status')
+      .eq('organization_id', preschoolId)
+      .eq('billing_month', currentMonth)
+      .neq('status', 'waived');
+
+    if (monthFees && monthFees.length > 0) {
+      expectedTuitionIncome = monthFees.reduce((sum: number, f: any) => {
+        const amt = Number(f.final_amount || f.amount || 0);
+        return sum + (Number.isFinite(amt) ? amt : 0);
+      }, 0);
+      collectedTuitionAmount = monthFees
+        .filter((f: any) => f.status === 'paid')
+        .reduce((sum: number, f: any) => {
+          const paid = Number(f.amount_paid || f.final_amount || f.amount || 0);
+          return sum + (Number.isFinite(paid) ? paid : 0);
+        }, 0);
+    }
+  } catch (tuitionError: any) {
+    logger.info('Tuition income calculation failed', { reason: tuitionError?.message });
   }
 
   // "Unpaid fees" widgets must stay fee-ledger scoped (not mixed with registrations/POP queue).
@@ -233,5 +263,7 @@ export async function fetchStatsAndCounts(
     registrationFeesCollected,
     pendingRegistrationPayments,
     combinedPendingPayments,
+    expectedTuitionIncome,
+    collectedTuitionAmount,
   };
 }
