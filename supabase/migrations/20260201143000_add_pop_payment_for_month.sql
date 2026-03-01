@@ -1,21 +1,17 @@
 -- Add payment_for_month to POP uploads to separate billing period from transaction date
 BEGIN;
-
 ALTER TABLE public.pop_uploads
   ADD COLUMN IF NOT EXISTS payment_for_month date;
-
 -- Backfill existing records (previously payment_date represented the period)
 UPDATE public.pop_uploads
 SET payment_for_month = payment_date
 WHERE payment_for_month IS NULL
   AND payment_date IS NOT NULL;
-
 -- Ensure helper columns align with billing period when available
 UPDATE public.pop_uploads
 SET payment_year = EXTRACT(YEAR FROM payment_for_month)::int,
     payment_month = EXTRACT(MONTH FROM payment_for_month)::int
 WHERE payment_for_month IS NOT NULL;
-
 -- Update duplicate check to use payment_for_month when present
 CREATE OR REPLACE FUNCTION public.check_duplicate_pop_upload()
 RETURNS TRIGGER AS $$
@@ -52,5 +48,4 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 COMMIT;

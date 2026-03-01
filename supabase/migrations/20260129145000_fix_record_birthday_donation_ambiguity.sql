@@ -1,5 +1,4 @@
 BEGIN;
-
 DROP FUNCTION IF EXISTS public.record_birthday_donation(
   uuid,
   date,
@@ -11,7 +10,6 @@ DROP FUNCTION IF EXISTS public.record_birthday_donation(
   uuid,
   uuid
 );
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -166,5 +164,4 @@ BEGIN
   RETURN day_row;
 END;
 $$;
-
 COMMIT;

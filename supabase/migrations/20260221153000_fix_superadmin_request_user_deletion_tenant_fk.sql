@@ -1,5 +1,4 @@
 BEGIN;
-
 -- Fix FK violation on superadmin_user_deletion_requests.tenant_id:
 -- the legacy function was writing preschool_id/organization_id into tenant_id,
 -- but tenant_id references public.tenants(id).
@@ -180,11 +179,7 @@ EXCEPTION
     );
 END;
 $function$;
-
 GRANT EXECUTE ON FUNCTION public.superadmin_request_user_deletion(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.superadmin_request_user_deletion(uuid, text) TO service_role;
-
 NOTIFY pgrst, 'reload schema';
-
 COMMIT;
-

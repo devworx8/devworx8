@@ -7,7 +7,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 
 import type { Student, AgeGroup, ShowAlert } from './types';
-import { calculateAgeInfo, findAgeGroup } from './studentHelpers';
+import { calculateAgeInfo, resolveStudentGroupName } from './studentHelpers';
 
 export interface FetchStudentDataResult {
   school: { id: string; name: string; school_type: string; grade_levels: string[] } | null;
@@ -30,9 +30,9 @@ export async function fetchStudentData(
 
   // Prefer per-school age groups (preschool_id); fall back to school_type for backwards compatibility
   const schoolType = school?.school_type || 'preschool';
-  let ageGroupsData: any[] | null = null;
+  let ageGroupsData: AgeGroup[] | null = null;
   const baseSelect =
-    'id, name, min_age_months, max_age_months, age_min, age_max, school_type, description';
+    'id, name, min_age_months, max_age_months, age_min, age_max, school_type, description, preschool_id';
   const { data: perSchool, error: perSchoolErr } = await assertSupabase()
     .from('age_groups')
     .select(baseSelect)
@@ -100,9 +100,10 @@ export async function fetchStudentData(
   const processedStudents: Student[] = (studentsData || []).map(
     (student: any) => {
       const ageInfo = calculateAgeInfo(student.date_of_birth);
-      const ageGroup = findAgeGroup(ageInfo.age_months, ageGroupsData || []);
       const parentId = student.parent_id || student.guardian_id;
-      const className = student.classes?.name || undefined;
+      const className = Array.isArray(student.classes)
+        ? String(student.classes[0]?.name || '').trim() || undefined
+        : String(student.classes?.name || '').trim() || undefined;
 
       return {
         ...student,
@@ -110,7 +111,11 @@ export async function fetchStudentData(
         avatar_url: student.avatar_url || null,
         age_months: ageInfo.age_months,
         age_years: ageInfo.age_years,
-        age_group_name: ageGroup?.name || className,
+        age_group_name: resolveStudentGroupName({
+          className,
+          ageMonths: ageInfo.age_months,
+          ageGroups: ageGroupsData || [],
+        }),
         class_name: className,
         parent_name: parentId ? parentMap[parentId] : undefined,
       };

@@ -1,5 +1,4 @@
 BEGIN;
-
 -- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
@@ -11,7 +10,6 @@ STABLE
 AS $$
   SELECT EXTRACT(YEAR FROM timezone('Africa/Johannesburg', now()))::integer;
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_is_school_staff(p_school_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -34,7 +32,6 @@ AS $$
       )
   );
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_is_school_member(p_school_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -58,7 +55,6 @@ AS $$
       )
   );
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_parent_has_school_access(p_school_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -73,7 +69,6 @@ AS $$
       AND COALESCE(s.preschool_id, s.organization_id) = p_school_id
   );
 $$;
-
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
@@ -103,13 +98,10 @@ CREATE TABLE IF NOT EXISTS public.stationery_lists (
   ),
   CONSTRAINT stationery_lists_year_check CHECK (academic_year BETWEEN 2000 AND 2200)
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS stationery_lists_school_year_label_key
   ON public.stationery_lists(school_id, academic_year, age_group_label);
-
 CREATE INDEX IF NOT EXISTS idx_stationery_lists_school_year
   ON public.stationery_lists(school_id, academic_year, sort_order);
-
 CREATE TABLE IF NOT EXISTS public.stationery_list_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   list_id uuid NOT NULL REFERENCES public.stationery_lists(id) ON DELETE CASCADE,
@@ -123,10 +115,8 @@ CREATE TABLE IF NOT EXISTS public.stationery_list_items (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT stationery_list_items_required_quantity_check CHECK (required_quantity >= 0)
 );
-
 CREATE INDEX IF NOT EXISTS idx_stationery_list_items_list
   ON public.stationery_list_items(list_id, sort_order);
-
 CREATE TABLE IF NOT EXISTS public.stationery_student_overrides (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL,
@@ -138,13 +128,10 @@ CREATE TABLE IF NOT EXISTS public.stationery_student_overrides (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT stationery_student_overrides_year_check CHECK (academic_year BETWEEN 2000 AND 2200)
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS stationery_student_overrides_student_year_key
   ON public.stationery_student_overrides(student_id, academic_year);
-
 CREATE INDEX IF NOT EXISTS idx_stationery_student_overrides_school
   ON public.stationery_student_overrides(school_id, academic_year);
-
 CREATE TABLE IF NOT EXISTS public.stationery_parent_checks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL,
@@ -161,16 +148,12 @@ CREATE TABLE IF NOT EXISTS public.stationery_parent_checks (
   CONSTRAINT stationery_parent_checks_year_check CHECK (academic_year BETWEEN 2000 AND 2200),
   CONSTRAINT stationery_parent_checks_quantity_check CHECK (quantity_bought >= 0)
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS stationery_parent_checks_student_item_year_key
   ON public.stationery_parent_checks(student_id, item_id, academic_year);
-
 CREATE INDEX IF NOT EXISTS idx_stationery_parent_checks_school
   ON public.stationery_parent_checks(school_id, academic_year);
-
 CREATE INDEX IF NOT EXISTS idx_stationery_parent_checks_student
   ON public.stationery_parent_checks(student_id, academic_year);
-
 CREATE TABLE IF NOT EXISTS public.stationery_parent_notes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL,
@@ -183,13 +166,10 @@ CREATE TABLE IF NOT EXISTS public.stationery_parent_notes (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT stationery_parent_notes_year_check CHECK (academic_year BETWEEN 2000 AND 2200)
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS stationery_parent_notes_student_year_key
   ON public.stationery_parent_notes(student_id, academic_year);
-
 CREATE INDEX IF NOT EXISTS idx_stationery_parent_notes_school
   ON public.stationery_parent_notes(school_id, academic_year);
-
 -- ---------------------------------------------------------------------------
 -- Trigger helpers
 -- ---------------------------------------------------------------------------
@@ -209,7 +189,6 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_set_override_context()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -249,7 +228,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_set_parent_check_context()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -292,7 +270,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.stationery_set_parent_note_context()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -318,47 +295,38 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_stationery_lists_updated_at ON public.stationery_lists;
 CREATE TRIGGER trg_stationery_lists_updated_at
 BEFORE UPDATE ON public.stationery_lists
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_stationery_list_items_updated_at ON public.stationery_list_items;
 CREATE TRIGGER trg_stationery_list_items_updated_at
 BEFORE UPDATE ON public.stationery_list_items
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_stationery_student_overrides_updated_at ON public.stationery_student_overrides;
 CREATE TRIGGER trg_stationery_student_overrides_updated_at
 BEFORE UPDATE ON public.stationery_student_overrides
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_stationery_student_overrides_context ON public.stationery_student_overrides;
 CREATE TRIGGER trg_stationery_student_overrides_context
 BEFORE INSERT OR UPDATE ON public.stationery_student_overrides
 FOR EACH ROW EXECUTE FUNCTION public.stationery_set_override_context();
-
 DROP TRIGGER IF EXISTS trg_stationery_parent_checks_updated_at ON public.stationery_parent_checks;
 CREATE TRIGGER trg_stationery_parent_checks_updated_at
 BEFORE UPDATE ON public.stationery_parent_checks
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_stationery_parent_checks_context ON public.stationery_parent_checks;
 CREATE TRIGGER trg_stationery_parent_checks_context
 BEFORE INSERT OR UPDATE ON public.stationery_parent_checks
 FOR EACH ROW EXECUTE FUNCTION public.stationery_set_parent_check_context();
-
 DROP TRIGGER IF EXISTS trg_stationery_parent_notes_updated_at ON public.stationery_parent_notes;
 CREATE TRIGGER trg_stationery_parent_notes_updated_at
 BEFORE UPDATE ON public.stationery_parent_notes
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 DROP TRIGGER IF EXISTS trg_stationery_parent_notes_context ON public.stationery_parent_notes;
 CREATE TRIGGER trg_stationery_parent_notes_context
 BEFORE INSERT OR UPDATE ON public.stationery_parent_notes
 FOR EACH ROW EXECUTE FUNCTION public.stationery_set_parent_note_context();
-
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -368,7 +336,6 @@ ALTER TABLE public.stationery_list_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stationery_student_overrides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stationery_parent_checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stationery_parent_notes ENABLE ROW LEVEL SECURITY;
-
 -- stationery_lists
 DROP POLICY IF EXISTS stationery_lists_parent_select ON public.stationery_lists;
 CREATE POLICY stationery_lists_parent_select
@@ -379,32 +346,27 @@ USING (
   AND is_published = true
   AND public.stationery_parent_has_school_access(school_id)
 );
-
 DROP POLICY IF EXISTS stationery_lists_staff_select ON public.stationery_lists;
 CREATE POLICY stationery_lists_staff_select
 ON public.stationery_lists
 FOR SELECT TO authenticated
 USING (public.stationery_is_school_member(school_id));
-
 DROP POLICY IF EXISTS stationery_lists_staff_insert ON public.stationery_lists;
 CREATE POLICY stationery_lists_staff_insert
 ON public.stationery_lists
 FOR INSERT TO authenticated
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 DROP POLICY IF EXISTS stationery_lists_staff_update ON public.stationery_lists;
 CREATE POLICY stationery_lists_staff_update
 ON public.stationery_lists
 FOR UPDATE TO authenticated
 USING (public.stationery_is_school_staff(school_id))
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 DROP POLICY IF EXISTS stationery_lists_staff_delete ON public.stationery_lists;
 CREATE POLICY stationery_lists_staff_delete
 ON public.stationery_lists
 FOR DELETE TO authenticated
 USING (public.stationery_is_school_staff(school_id));
-
 -- stationery_list_items
 DROP POLICY IF EXISTS stationery_list_items_parent_select ON public.stationery_list_items;
 CREATE POLICY stationery_list_items_parent_select
@@ -421,7 +383,6 @@ USING (
       AND public.stationery_parent_has_school_access(l.school_id)
   )
 );
-
 DROP POLICY IF EXISTS stationery_list_items_staff_select ON public.stationery_list_items;
 CREATE POLICY stationery_list_items_staff_select
 ON public.stationery_list_items
@@ -434,7 +395,6 @@ USING (
       AND public.stationery_is_school_member(l.school_id)
   )
 );
-
 DROP POLICY IF EXISTS stationery_list_items_staff_insert ON public.stationery_list_items;
 CREATE POLICY stationery_list_items_staff_insert
 ON public.stationery_list_items
@@ -447,7 +407,6 @@ WITH CHECK (
       AND public.stationery_is_school_staff(l.school_id)
   )
 );
-
 DROP POLICY IF EXISTS stationery_list_items_staff_update ON public.stationery_list_items;
 CREATE POLICY stationery_list_items_staff_update
 ON public.stationery_list_items
@@ -468,7 +427,6 @@ WITH CHECK (
       AND public.stationery_is_school_staff(l.school_id)
   )
 );
-
 DROP POLICY IF EXISTS stationery_list_items_staff_delete ON public.stationery_list_items;
 CREATE POLICY stationery_list_items_staff_delete
 ON public.stationery_list_items
@@ -481,97 +439,82 @@ USING (
       AND public.stationery_is_school_staff(l.school_id)
   )
 );
-
 -- stationery_student_overrides
 DROP POLICY IF EXISTS stationery_overrides_staff_select ON public.stationery_student_overrides;
 CREATE POLICY stationery_overrides_staff_select
 ON public.stationery_student_overrides
 FOR SELECT TO authenticated
 USING (public.stationery_is_school_member(school_id));
-
 DROP POLICY IF EXISTS stationery_overrides_staff_insert ON public.stationery_student_overrides;
 CREATE POLICY stationery_overrides_staff_insert
 ON public.stationery_student_overrides
 FOR INSERT TO authenticated
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 DROP POLICY IF EXISTS stationery_overrides_staff_update ON public.stationery_student_overrides;
 CREATE POLICY stationery_overrides_staff_update
 ON public.stationery_student_overrides
 FOR UPDATE TO authenticated
 USING (public.stationery_is_school_staff(school_id))
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 DROP POLICY IF EXISTS stationery_overrides_staff_delete ON public.stationery_student_overrides;
 CREATE POLICY stationery_overrides_staff_delete
 ON public.stationery_student_overrides
 FOR DELETE TO authenticated
 USING (public.stationery_is_school_staff(school_id));
-
 -- stationery_parent_checks
 DROP POLICY IF EXISTS stationery_checks_parent_select ON public.stationery_parent_checks;
 CREATE POLICY stationery_checks_parent_select
 ON public.stationery_parent_checks
 FOR SELECT TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_checks_parent_insert ON public.stationery_parent_checks;
 CREATE POLICY stationery_checks_parent_insert
 ON public.stationery_parent_checks
 FOR INSERT TO authenticated
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_checks_parent_update ON public.stationery_parent_checks;
 CREATE POLICY stationery_checks_parent_update
 ON public.stationery_parent_checks
 FOR UPDATE TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()))
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_checks_staff_select ON public.stationery_parent_checks;
 CREATE POLICY stationery_checks_staff_select
 ON public.stationery_parent_checks
 FOR SELECT TO authenticated
 USING (public.stationery_is_school_member(school_id));
-
 DROP POLICY IF EXISTS stationery_checks_staff_update ON public.stationery_parent_checks;
 CREATE POLICY stationery_checks_staff_update
 ON public.stationery_parent_checks
 FOR UPDATE TO authenticated
 USING (public.stationery_is_school_staff(school_id))
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 -- stationery_parent_notes
 DROP POLICY IF EXISTS stationery_notes_parent_select ON public.stationery_parent_notes;
 CREATE POLICY stationery_notes_parent_select
 ON public.stationery_parent_notes
 FOR SELECT TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_notes_parent_insert ON public.stationery_parent_notes;
 CREATE POLICY stationery_notes_parent_insert
 ON public.stationery_parent_notes
 FOR INSERT TO authenticated
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_notes_parent_update ON public.stationery_parent_notes;
 CREATE POLICY stationery_notes_parent_update
 ON public.stationery_parent_notes
 FOR UPDATE TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()))
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS stationery_notes_staff_select ON public.stationery_parent_notes;
 CREATE POLICY stationery_notes_staff_select
 ON public.stationery_parent_notes
 FOR SELECT TO authenticated
 USING (public.stationery_is_school_member(school_id));
-
 DROP POLICY IF EXISTS stationery_notes_staff_update ON public.stationery_parent_notes;
 CREATE POLICY stationery_notes_staff_update
 ON public.stationery_parent_notes
 FOR UPDATE TO authenticated
 USING (public.stationery_is_school_staff(school_id))
 WITH CHECK (public.stationery_is_school_staff(school_id));
-
 COMMIT;

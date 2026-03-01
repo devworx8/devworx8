@@ -89,6 +89,5 @@ BEGIN
   RETURN jsonb_build_object('success', true, 'guardian_id', v_guardian_id);
 END;
 $$;
-
 COMMENT ON FUNCTION public.principal_link_guardian_by_email(UUID, TEXT) IS
   'Principal/admin links a second parent/guardian to a student by their account email.';

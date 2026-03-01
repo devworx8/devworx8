@@ -26,18 +26,13 @@ CREATE TABLE IF NOT EXISTS public.year_plan_monthly_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_year_plan_monthly_entries_scope
   ON public.year_plan_monthly_entries (preschool_id, academic_year, month_index);
-
 CREATE INDEX IF NOT EXISTS idx_year_plan_monthly_entries_bucket
   ON public.year_plan_monthly_entries (preschool_id, academic_year, bucket);
-
 CREATE INDEX IF NOT EXISTS idx_year_plan_monthly_entries_published
   ON public.year_plan_monthly_entries (preschool_id, academic_year, is_published, published_to_calendar);
-
 ALTER TABLE public.year_plan_monthly_entries ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS year_plan_monthly_entries_staff_view ON public.year_plan_monthly_entries;
 CREATE POLICY year_plan_monthly_entries_staff_view
   ON public.year_plan_monthly_entries
@@ -51,7 +46,6 @@ CREATE POLICY year_plan_monthly_entries_staff_view
         AND COALESCE(p.organization_id, p.preschool_id) = year_plan_monthly_entries.preschool_id
     )
   );
-
 DROP POLICY IF EXISTS year_plan_monthly_entries_principal_manage ON public.year_plan_monthly_entries;
 CREATE POLICY year_plan_monthly_entries_principal_manage
   ON public.year_plan_monthly_entries
@@ -74,10 +68,8 @@ CREATE POLICY year_plan_monthly_entries_principal_manage
         AND COALESCE(p.organization_id, p.preschool_id) = year_plan_monthly_entries.preschool_id
     )
   );
-
 DROP TRIGGER IF EXISTS update_year_plan_monthly_entries_updated_at ON public.year_plan_monthly_entries;
 CREATE TRIGGER update_year_plan_monthly_entries_updated_at
   BEFORE UPDATE ON public.year_plan_monthly_entries
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 GRANT ALL ON public.year_plan_monthly_entries TO authenticated;

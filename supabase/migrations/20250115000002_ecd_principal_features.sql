@@ -2,34 +2,6 @@
 -- Year Planner, Term Management, Curriculum Planning, Lesson Templates
 -- Date: 2025-01-15
 
--- Ensure base tables exist for foreign keys (some environments create these outside migrations)
-CREATE TABLE IF NOT EXISTS preschools (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
-CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-);
-
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS role TEXT,
-  ADD COLUMN IF NOT EXISTS organization_id UUID,
-  ADD COLUMN IF NOT EXISTS preschool_id UUID;
-
-CREATE TABLE IF NOT EXISTS classes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  preschool_id UUID REFERENCES preschools(id) ON DELETE CASCADE
-);
-
--- Provide updated_at helper if it doesn't exist yet (shadow DB safety)
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 -- ================================================================
 -- PART 1: ACADEMIC TERMS TABLE
 -- ================================================================
@@ -62,14 +34,11 @@ CREATE TABLE IF NOT EXISTS academic_terms (
   -- Ensure unique term numbers per preschool per year
   UNIQUE (preschool_id, academic_year, term_number)
 );
-
 CREATE INDEX IF NOT EXISTS idx_academic_terms_preschool_year 
 ON academic_terms(preschool_id, academic_year DESC);
-
 CREATE INDEX IF NOT EXISTS idx_academic_terms_active 
 ON academic_terms(preschool_id, is_active) 
 WHERE is_active = true;
-
 -- ================================================================
 -- PART 2: CURRICULUM THEMES/UNITS TABLE
 -- ================================================================
@@ -109,14 +78,11 @@ CREATE TABLE IF NOT EXISTS curriculum_themes (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_curriculum_themes_preschool_term 
 ON curriculum_themes(preschool_id, term_id);
-
 CREATE INDEX IF NOT EXISTS idx_curriculum_themes_published 
 ON curriculum_themes(preschool_id, is_published) 
 WHERE is_published = true;
-
 -- ================================================================
 -- PART 3: LESSON PLANNING TEMPLATES TABLE
 -- ================================================================
@@ -158,14 +124,11 @@ CREATE TABLE IF NOT EXISTS lesson_templates (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_lesson_templates_preschool 
 ON lesson_templates(preschool_id, is_active);
-
 CREATE INDEX IF NOT EXISTS idx_lesson_templates_default 
 ON lesson_templates(preschool_id, is_default) 
 WHERE is_default = true;
-
 -- ================================================================
 -- PART 4: WEEKLY PLANNING TABLE
 -- ================================================================
@@ -211,23 +174,18 @@ CREATE TABLE IF NOT EXISTS weekly_plans (
   -- One plan per class per week
   UNIQUE (class_id, week_start_date)
 );
-
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_preschool_week 
 ON weekly_plans(preschool_id, week_start_date DESC);
-
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_class_week 
 ON weekly_plans(class_id, week_start_date DESC);
-
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_status 
 ON weekly_plans(preschool_id, status);
-
 -- ================================================================
 -- PART 5: RLS POLICIES
 -- ================================================================
 
 -- Academic Terms
 ALTER TABLE academic_terms ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "principals_manage_academic_terms" ON academic_terms
   FOR ALL USING (
     EXISTS (
@@ -237,7 +195,6 @@ CREATE POLICY "principals_manage_academic_terms" ON academic_terms
       AND COALESCE(p.organization_id, p.preschool_id) = academic_terms.preschool_id
     )
   );
-
 CREATE POLICY "teachers_view_academic_terms" ON academic_terms
   FOR SELECT USING (
     EXISTS (
@@ -247,10 +204,8 @@ CREATE POLICY "teachers_view_academic_terms" ON academic_terms
       AND COALESCE(p.organization_id, p.preschool_id) = academic_terms.preschool_id
     )
   );
-
 -- Curriculum Themes
 ALTER TABLE curriculum_themes ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "principals_manage_curriculum_themes" ON curriculum_themes
   FOR ALL USING (
     EXISTS (
@@ -260,7 +215,6 @@ CREATE POLICY "principals_manage_curriculum_themes" ON curriculum_themes
       AND COALESCE(p.organization_id, p.preschool_id) = curriculum_themes.preschool_id
     )
   );
-
 CREATE POLICY "teachers_view_curriculum_themes" ON curriculum_themes
   FOR SELECT USING (
     is_published = true OR
@@ -271,10 +225,8 @@ CREATE POLICY "teachers_view_curriculum_themes" ON curriculum_themes
       AND COALESCE(p.organization_id, p.preschool_id) = curriculum_themes.preschool_id
     )
   );
-
 -- Lesson Templates
 ALTER TABLE lesson_templates ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "principals_manage_lesson_templates" ON lesson_templates
   FOR ALL USING (
     EXISTS (
@@ -284,7 +236,6 @@ CREATE POLICY "principals_manage_lesson_templates" ON lesson_templates
       AND COALESCE(p.organization_id, p.preschool_id) = lesson_templates.preschool_id
     )
   );
-
 CREATE POLICY "teachers_use_lesson_templates" ON lesson_templates
   FOR SELECT USING (
     is_active = true AND
@@ -295,10 +246,8 @@ CREATE POLICY "teachers_use_lesson_templates" ON lesson_templates
       AND COALESCE(p.organization_id, p.preschool_id) = lesson_templates.preschool_id
     )
   );
-
 -- Weekly Plans
 ALTER TABLE weekly_plans ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "teachers_manage_weekly_plans" ON weekly_plans
   FOR ALL USING (
     EXISTS (
@@ -308,7 +257,6 @@ CREATE POLICY "teachers_manage_weekly_plans" ON weekly_plans
       AND COALESCE(p.organization_id, p.preschool_id) = weekly_plans.preschool_id
     )
   );
-
 CREATE POLICY "principals_approve_weekly_plans" ON weekly_plans
   FOR UPDATE USING (
     EXISTS (
@@ -318,7 +266,6 @@ CREATE POLICY "principals_approve_weekly_plans" ON weekly_plans
       AND COALESCE(p.organization_id, p.preschool_id) = weekly_plans.preschool_id
     )
   );
-
 -- ================================================================
 -- PART 6: TRIGGERS FOR UPDATED_AT
 -- ================================================================
@@ -326,19 +273,15 @@ CREATE POLICY "principals_approve_weekly_plans" ON weekly_plans
 CREATE TRIGGER update_academic_terms_updated_at
   BEFORE UPDATE ON academic_terms
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_curriculum_themes_updated_at
   BEFORE UPDATE ON curriculum_themes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_lesson_templates_updated_at
   BEFORE UPDATE ON lesson_templates
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_weekly_plans_updated_at
   BEFORE UPDATE ON weekly_plans
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- ================================================================
 -- PART 7: GRANTS
 -- ================================================================
@@ -347,7 +290,6 @@ GRANT ALL ON academic_terms TO authenticated;
 GRANT ALL ON curriculum_themes TO authenticated;
 GRANT ALL ON lesson_templates TO authenticated;
 GRANT ALL ON weekly_plans TO authenticated;
-
 -- ================================================================
 -- PART 8: FUNCTIONS
 -- ================================================================
@@ -377,7 +319,6 @@ BEGIN
   LIMIT 1;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Function to increment template usage
 CREATE OR REPLACE FUNCTION increment_template_usage(template_uuid UUID)
 RETURNS void AS $$

@@ -2,7 +2,6 @@
 -- Persists term + monthly matrix and optionally syncs published monthly entries to calendar/operations.
 
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.save_ai_year_plan_v2(
   p_preschool_id uuid,
   p_created_by uuid,
@@ -328,7 +327,5 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.save_ai_year_plan_v2(uuid, uuid, jsonb, boolean) TO authenticated;
-
 COMMIT;

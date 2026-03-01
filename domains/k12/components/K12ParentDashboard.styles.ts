@@ -492,6 +492,15 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 10,
   },
+  quickActionItem: {
+    marginBottom: 2,
+  },
+  quickActionItemRegular: {
+    width: '31.5%',
+  },
+  quickActionItemCompact: {
+    width: '48.5%',
+  },
   learningHubGrid: {
     gap: 14,
     marginBottom: 14,
@@ -514,12 +523,13 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   quickActionCard: {
-    width: '31%',
+    width: '100%',
     borderRadius: 16,
+    minHeight: 106,
     paddingVertical: 14,
     paddingHorizontal: 12,
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: GLASS_BORDER_SOFT,
     backgroundColor: GLASS_BG_SOFT,
@@ -528,6 +538,12 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 18,
     elevation: 7,
+  },
+  quickActionCardRegular: {
+    minHeight: 104,
+  },
+  quickActionCardCompact: {
+    minHeight: 98,
   },
   quickActionDisabled: {
     opacity: 0.55,
@@ -554,6 +570,7 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+    lineHeight: 15,
   },
   updateCard: {
     flexDirection: 'row',

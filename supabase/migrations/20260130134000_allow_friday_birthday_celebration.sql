@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -198,5 +197,4 @@ BEGIN
   RETURN day_row;
 END;
 $$;
-
 COMMIT;

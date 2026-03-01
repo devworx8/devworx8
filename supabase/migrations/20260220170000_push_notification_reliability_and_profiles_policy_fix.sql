@@ -102,14 +102,11 @@ BEGIN
   RETURN true;
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.upsert_push_device(text, text, text, text, text, text, text, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.upsert_push_device(text, text, text, text, text, text, text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_push_device(text, text, text, text, text, text, text, jsonb) TO service_role;
-
 COMMENT ON FUNCTION public.upsert_push_device(text, text, text, text, text, text, text, jsonb)
 IS 'Safely upserts current authenticated user push device without client-side user_id writes.';
-
 -- -----------------------------------------------------------------
 -- 2) Harden current_user_org_id lookup helper
 -- -----------------------------------------------------------------
@@ -127,12 +124,10 @@ AS $$
   ORDER BY CASE WHEN p.auth_user_id = auth.uid() THEN 0 ELSE 1 END
   LIMIT 1;
 $$;
-
 -- -----------------------------------------------------------------
 -- 3) Replace profiles policy without user_metadata references
 -- -----------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can view profiles in same org" ON public.profiles;
-
 CREATE POLICY "Users can view profiles in same org"
 ON public.profiles
 FOR SELECT
@@ -142,7 +137,6 @@ USING (
   OR COALESCE(organization_id, preschool_id) = public.current_user_org_id()
   OR public.is_superadmin_safe()
 );
-
 DO $$
 DECLARE
   v_remaining_count integer;

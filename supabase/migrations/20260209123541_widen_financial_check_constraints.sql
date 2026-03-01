@@ -16,7 +16,6 @@
 -- payment_method: add 'manual' and 'debit_order'
 ALTER TABLE public.financial_transactions
     DROP CONSTRAINT IF EXISTS financial_transactions_payment_method_check;
-
 ALTER TABLE public.financial_transactions
     ADD CONSTRAINT financial_transactions_payment_method_check
     CHECK (
@@ -26,11 +25,9 @@ ALTER TABLE public.financial_transactions
             'manual', 'debit_order'
         ])
     );
-
 -- status: add 'voided' and 'reversed'
 ALTER TABLE public.financial_transactions
     DROP CONSTRAINT IF EXISTS financial_transactions_status_check;
-
 ALTER TABLE public.financial_transactions
     ADD CONSTRAINT financial_transactions_status_check
     CHECK (
@@ -39,11 +36,9 @@ ALTER TABLE public.financial_transactions
             'voided', 'reversed'
         ])
     );
-
 -- type: add 'salary', 'operational_expense', 'purchase', 'income'
 ALTER TABLE public.financial_transactions
     DROP CONSTRAINT IF EXISTS financial_transactions_type_check;
-
 ALTER TABLE public.financial_transactions
     ADD CONSTRAINT financial_transactions_type_check
     CHECK (
@@ -52,13 +47,11 @@ ALTER TABLE public.financial_transactions
             'salary', 'operational_expense', 'purchase', 'income'
         ])
     );
-
 -- ── payments ────────────────────────────────────────────────────
 
 -- status: add 'reversed' and 'cancelled'
 ALTER TABLE public.payments
     DROP CONSTRAINT IF EXISTS payments_status_check;
-
 ALTER TABLE public.payments
     ADD CONSTRAINT payments_status_check
     CHECK (

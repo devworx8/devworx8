@@ -1,13 +1,11 @@
 -- Align superadmin RPC role checks with 'super_admin' role
 
 BEGIN;
-
 -- Drop existing functions to allow return type alignment
 DROP FUNCTION IF EXISTS public.get_all_users_for_superadmin();
 DROP FUNCTION IF EXISTS public.get_platform_stats_for_superadmin();
 DROP FUNCTION IF EXISTS public.get_superadmin_ai_quotas();
 DROP FUNCTION IF EXISTS public.get_subscription_analytics(DATE, DATE);
-
 -- FUNCTION 1: GET_ALL_USERS_FOR_SUPERADMIN
 CREATE OR REPLACE FUNCTION public.get_all_users_for_superadmin()
 RETURNS JSONB
@@ -51,7 +49,6 @@ BEGIN
   RETURN v_users;
 END;
 $$;
-
 -- FUNCTION 2: GET_PLATFORM_STATS_FOR_SUPERADMIN
 CREATE OR REPLACE FUNCTION public.get_platform_stats_for_superadmin()
 RETURNS JSONB
@@ -152,7 +149,6 @@ BEGIN
   RETURN v_stats;
 END;
 $$;
-
 -- FUNCTION 3: GET_SUPERADMIN_AI_QUOTAS
 CREATE OR REPLACE FUNCTION public.get_superadmin_ai_quotas()
 RETURNS JSONB
@@ -184,13 +180,7 @@ BEGIN
       'plan_type', COALESCE(sp.tier, 'free'),
       'monthly_limit', COALESCE(
         CASE sp.tier
-          WHEN 'school_starter' THEN 5000
-          WHEN 'school_premium' THEN 15000
-          WHEN 'school_pro' THEN 25000
-          WHEN 'school_enterprise' THEN 100000
-          -- Legacy names (for un-migrated rows)
           WHEN 'basic' THEN 5000
-          WHEN 'premium' THEN 15000
           WHEN 'pro' THEN 25000
           WHEN 'enterprise' THEN 100000
           ELSE 1000
@@ -287,7 +277,6 @@ BEGIN
   RETURN v_result;
 END;
 $$;
-
 -- FUNCTION 4: GET_SUBSCRIPTION_ANALYTICS
 CREATE OR REPLACE FUNCTION public.get_subscription_analytics(
   p_start_date DATE,
@@ -374,5 +363,4 @@ BEGIN
   RETURN v_analytics;
 END;
 $$;
-
 COMMIT;

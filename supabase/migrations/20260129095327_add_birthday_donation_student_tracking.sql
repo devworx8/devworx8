@@ -1,23 +1,17 @@
 BEGIN;
-
 ALTER TABLE public.birthday_donations
   ADD COLUMN IF NOT EXISTS payer_student_id uuid REFERENCES public.students(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS birthday_student_id uuid REFERENCES public.students(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS class_id uuid REFERENCES public.classes(id) ON DELETE SET NULL;
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donations_birthday_student
   ON public.birthday_donations(birthday_student_id);
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donations_payer_student
   ON public.birthday_donations(payer_student_id);
-
 CREATE INDEX IF NOT EXISTS idx_birthday_donations_class_id
   ON public.birthday_donations(class_id);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_birthday_donations_unique_payer
   ON public.birthday_donations(organization_id, donation_date, payer_student_id, birthday_student_id)
   WHERE payer_student_id IS NOT NULL AND birthday_student_id IS NOT NULL;
-
 DROP FUNCTION IF EXISTS public.record_birthday_donation(
   uuid,
   date,
@@ -29,7 +23,6 @@ DROP FUNCTION IF EXISTS public.record_birthday_donation(
   uuid,
   uuid
 );
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -188,5 +181,4 @@ BEGIN
   RETURN day_row;
 END;
 $$;
-
 COMMIT;

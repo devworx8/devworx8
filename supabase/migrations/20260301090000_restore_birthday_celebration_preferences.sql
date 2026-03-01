@@ -1,5 +1,4 @@
 BEGIN;
-
 -- Recreate birthday preferences table dropped in prior schema revisions.
 CREATE TABLE IF NOT EXISTS public.birthday_celebration_preferences (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -20,10 +19,8 @@ CREATE TABLE IF NOT EXISTS public.birthday_celebration_preferences (
     guest_count IS NULL OR guest_count >= 0
   )
 );
-
 CREATE INDEX IF NOT EXISTS idx_birthday_prefs_student_id
   ON public.birthday_celebration_preferences(student_id);
-
 DO $$
 BEGIN
   IF to_regprocedure('public.trg_set_updated_at()') IS NULL THEN
@@ -39,12 +36,10 @@ BEGIN
   END IF;
 END
 $$;
-
 DROP TRIGGER IF EXISTS trg_birthday_prefs_updated_at ON public.birthday_celebration_preferences;
 CREATE TRIGGER trg_birthday_prefs_updated_at
 BEFORE UPDATE ON public.birthday_celebration_preferences
 FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
-
 CREATE OR REPLACE FUNCTION public.birthday_is_school_member(p_school_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -68,34 +63,28 @@ AS $$
       )
   );
 $$;
-
 ALTER TABLE public.birthday_celebration_preferences ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS birthday_prefs_parent_select ON public.birthday_celebration_preferences;
 CREATE POLICY birthday_prefs_parent_select
 ON public.birthday_celebration_preferences
 FOR SELECT TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS birthday_prefs_parent_insert ON public.birthday_celebration_preferences;
 CREATE POLICY birthday_prefs_parent_insert
 ON public.birthday_celebration_preferences
 FOR INSERT TO authenticated
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS birthday_prefs_parent_update ON public.birthday_celebration_preferences;
 CREATE POLICY birthday_prefs_parent_update
 ON public.birthday_celebration_preferences
 FOR UPDATE TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()))
 WITH CHECK (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS birthday_prefs_parent_delete ON public.birthday_celebration_preferences;
 CREATE POLICY birthday_prefs_parent_delete
 ON public.birthday_celebration_preferences
 FOR DELETE TO authenticated
 USING (student_id IN (SELECT public.get_my_children_ids()));
-
 DROP POLICY IF EXISTS birthday_prefs_staff_select ON public.birthday_celebration_preferences;
 CREATE POLICY birthday_prefs_staff_select
 ON public.birthday_celebration_preferences
@@ -108,10 +97,7 @@ USING (
       AND public.birthday_is_school_member(COALESCE(s.organization_id, s.preschool_id))
   )
 );
-
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.birthday_celebration_preferences TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.birthday_celebration_preferences TO service_role;
-
 COMMENT ON TABLE public.birthday_celebration_preferences IS 'Parent-configurable birthday celebration preferences per student.';
-
 COMMIT;

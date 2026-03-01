@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dimensions, FlatList, Image, Linking, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Linking, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,18 +15,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useUpdatePOPStatus } from '@/hooks/usePOPUploads';
 import { SuccessModal } from '@/components/ui/SuccessModal';
-import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
+import { getPOPFileUrl } from '@/lib/popUpload';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
-import { logger } from '@/lib/logger';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 import { inferFeeCategoryCode, normalizeFeeCategoryCode } from '@/lib/utils/feeUtils';
 import { getMonthStartISO } from '@/lib/utils/dateUtils';
 import type { FeeCategoryCode } from '@/types/finance';
 import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
 import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
+import { ApprovalWorkflowService, type PettyCashRequest } from '@/services/ApprovalWorkflowService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Types
 interface POPUpload {
@@ -76,6 +75,7 @@ interface ReceiptDraft {
 }
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
+type ReviewQueue = 'payment_proofs' | 'petty_cash';
 
 const CATEGORY_META: Record<FeeCategoryCode, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
   tuition: { label: 'Tuition', color: '#3B82F6', icon: 'school-outline' },
@@ -123,8 +123,11 @@ export default function POPReviewScreen() {
   const params = useLocalSearchParams<{ monthIso?: string }>();
   
   // State
+  const [activeQueue, setActiveQueue] = useState<ReviewQueue>('payment_proofs');
   const [uploads, setUploads] = useState<POPUpload[]>([]);
   const [filteredUploads, setFilteredUploads] = useState<POPUpload[]>([]);
+  const [pettyCashRequests, setPettyCashRequests] = useState<PettyCashRequest[]>([]);
+  const [filteredPettyCashRequests, setFilteredPettyCashRequests] = useState<PettyCashRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -134,7 +137,6 @@ export default function POPReviewScreen() {
   
   // Modal state
   const [selectedUpload, setSelectedUpload] = useState<POPUpload | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -145,12 +147,29 @@ export default function POPReviewScreen() {
   const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, FeeCategoryCode>>({});
   const [queueMonthSelections, setQueueMonthSelections] = useState<Record<string, string>>({});
+  const [selectedPettyCash, setSelectedPettyCash] = useState<PettyCashRequest | null>(null);
+  const [showPettyCashModal, setShowPettyCashModal] = useState(false);
+  const [pettyCashReviewNotes, setPettyCashReviewNotes] = useState('');
+  const [pettyCashRejectReason, setPettyCashRejectReason] = useState('');
+  const [pettyCashApprovedAmount, setPettyCashApprovedAmount] = useState('');
 
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const selectedControlMonth = React.useMemo(
     () => getMonthStartISO(params.monthIso || new Date().toISOString()),
     [params.monthIso],
   );
+  const reviewerDisplayName =
+    (profile as any)?.full_name ||
+    `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() ||
+    'Principal';
+
+  const toFilterStatus = useCallback((status?: string): StatusFilter => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'pending') return 'pending';
+    if (normalized === 'rejected' || normalized === 'cancelled') return 'rejected';
+    if (normalized === 'approved' || normalized === 'completed' || normalized === 'disbursed') return 'approved';
+    return 'pending';
+  }, []);
 
   // Fetch POP uploads
   const fetchUploads = useCallback(async () => {
@@ -163,6 +182,9 @@ export default function POPReviewScreen() {
 
     try {
       const supabase = assertSupabase();
+      const pettyCashPromise = ApprovalWorkflowService.getAllPettyCashRequests(organizationId, {
+        limit: 200,
+      });
       
       // Fetch POP uploads with student data (avoid FK join for profiles)
       const { data, error: fetchError } = await supabase
@@ -178,6 +200,14 @@ export default function POPReviewScreen() {
         .eq('preschool_id', organizationId)
         .eq('upload_type', 'proof_of_payment')
         .order('created_at', { ascending: false });
+      let pettyCashData: PettyCashRequest[] = [];
+      try {
+        const loadedPettyCash = await pettyCashPromise;
+        pettyCashData = Array.isArray(loadedPettyCash) ? loadedPettyCash : [];
+      } catch (pettyCashError: any) {
+        console.error('Error fetching petty cash queue:', pettyCashError);
+      }
+      setPettyCashRequests(pettyCashData);
 
       if (fetchError) {
         console.error('Error fetching POP uploads:', fetchError);
@@ -207,8 +237,8 @@ export default function POPReviewScreen() {
         setError(null);
       }
     } catch (err: any) {
-      console.error('Failed to fetch POP uploads:', err);
-      setError(err.message || 'Failed to load payment uploads');
+      console.error('Failed to fetch review queues:', err);
+      setError(err.message || 'Failed to load approval queues');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -478,6 +508,26 @@ export default function POPReviewScreen() {
     setFilteredUploads(filtered);
   }, [uploads, statusFilter, searchTerm]);
 
+  useEffect(() => {
+    let filtered = pettyCashRequests;
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((request) => toFilterStatus(request.status) === statusFilter);
+    }
+
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter((request) =>
+        request.requestor_name?.toLowerCase().includes(search) ||
+        request.category?.toLowerCase().includes(search) ||
+        request.description?.toLowerCase().includes(search) ||
+        request.justification?.toLowerCase().includes(search)
+      );
+    }
+
+    setFilteredPettyCashRequests(filtered);
+  }, [pettyCashRequests, searchTerm, statusFilter, toFilterStatus]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchUploads();
@@ -718,6 +768,121 @@ export default function POPReviewScreen() {
       setSelectedUpload(null);
     }
   };
+
+  const openPettyCashModal = useCallback((request: PettyCashRequest) => {
+    setSelectedPettyCash(request);
+    setPettyCashReviewNotes('');
+    setPettyCashRejectReason('');
+    setPettyCashApprovedAmount(request.amount ? String(request.amount.toFixed(2)) : '');
+    setShowPettyCashModal(true);
+  }, []);
+
+  const closePettyCashModal = useCallback(() => {
+    setShowPettyCashModal(false);
+    setSelectedPettyCash(null);
+    setPettyCashReviewNotes('');
+    setPettyCashRejectReason('');
+    setPettyCashApprovedAmount('');
+  }, []);
+
+  const handleApprovePettyCash = useCallback(async () => {
+    if (!selectedPettyCash || !profile?.id) return;
+    setProcessing(selectedPettyCash.id);
+    try {
+      const parsedApprovedAmount = pettyCashApprovedAmount.trim().length
+        ? Number(pettyCashApprovedAmount)
+        : undefined;
+      if (parsedApprovedAmount !== undefined && (!Number.isFinite(parsedApprovedAmount) || parsedApprovedAmount <= 0)) {
+        showAlert({
+          title: 'Invalid Amount',
+          message: 'Enter a valid approved amount or leave it blank.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const ok = await ApprovalWorkflowService.approvePettyCashRequest(
+        selectedPettyCash.id,
+        profile.id,
+        reviewerDisplayName,
+        parsedApprovedAmount,
+        pettyCashReviewNotes.trim() || undefined,
+      );
+
+      if (!ok) {
+        showAlert({
+          title: 'Approval Failed',
+          message: 'Could not approve petty cash request.',
+          type: 'error',
+        });
+        return;
+      }
+
+      setSuccessMessage({
+        title: 'Petty Cash Approved',
+        message: 'The petty cash request has been approved and the requester was notified.',
+      });
+      setShowSuccessModal(true);
+      closePettyCashModal();
+      fetchUploads();
+    } catch (err: any) {
+      showAlert({
+        title: 'Approval Failed',
+        message: err?.message || 'Could not approve petty cash request.',
+        type: 'error',
+      });
+    } finally {
+      setProcessing(null);
+    }
+  }, [closePettyCashModal, fetchUploads, pettyCashApprovedAmount, pettyCashReviewNotes, profile?.id, reviewerDisplayName, selectedPettyCash, showAlert]);
+
+  const handleRejectPettyCash = useCallback(async () => {
+    if (!selectedPettyCash || !profile?.id) return;
+    if (!pettyCashRejectReason.trim()) {
+      showAlert({
+        title: 'Reason Required',
+        message: 'Please provide a rejection reason.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setProcessing(selectedPettyCash.id);
+    try {
+      const ok = await ApprovalWorkflowService.rejectPettyCashRequest(
+        selectedPettyCash.id,
+        profile.id,
+        reviewerDisplayName,
+        pettyCashRejectReason.trim(),
+        pettyCashReviewNotes.trim() || undefined,
+      );
+
+      if (!ok) {
+        showAlert({
+          title: 'Rejection Failed',
+          message: 'Could not reject petty cash request.',
+          type: 'error',
+        });
+        return;
+      }
+
+      setSuccessMessage({
+        title: 'Petty Cash Rejected',
+        message: 'The petty cash request has been rejected and the requester was notified.',
+      });
+      setShowSuccessModal(true);
+      closePettyCashModal();
+      fetchUploads();
+    } catch (err: any) {
+      showAlert({
+        title: 'Rejection Failed',
+        message: err?.message || 'Could not reject petty cash request.',
+        type: 'error',
+      });
+    } finally {
+      setProcessing(null);
+    }
+  }, [closePettyCashModal, fetchUploads, pettyCashRejectReason, pettyCashReviewNotes, profile?.id, reviewerDisplayName, selectedPettyCash, showAlert]);
 
   const viewDocument = async (upload: POPUpload) => {
     try {
@@ -963,16 +1128,136 @@ export default function POPReviewScreen() {
     );
   };
 
-  const styles = createStyles(theme, insets);
+  const renderPettyCashItem = ({ item }: { item: PettyCashRequest }) => {
+    const normalizedStatus = toFilterStatus(item.status);
+    const isPending = normalizedStatus === 'pending';
+    const isProcessing = processing === item.id;
+    const urgencyColor = item.urgency === 'urgent'
+      ? theme.error
+      : item.urgency === 'high'
+        ? (theme.warning || '#F59E0B')
+        : item.urgency === 'low'
+          ? theme.textSecondary
+          : theme.primary;
+    const statusLabel = item.status
+      .replace('_', ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
 
-  // Count pending
-  const pendingCount = uploads.filter(u => u.status === 'pending').length;
+    return (
+      <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(normalizedStatus) + '20' }]}>
+              <Ionicons name={getStatusIcon(normalizedStatus) as any} size={16} color={getStatusColor(normalizedStatus)} />
+              <Text style={[styles.statusText, { color: getStatusColor(normalizedStatus) }]}>
+                {statusLabel}
+              </Text>
+            </View>
+            <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+              {formatDate(item.requested_at || item.created_at)}
+            </Text>
+          </View>
+          <View style={[styles.categoryBadge, { backgroundColor: urgencyColor + '20', borderColor: urgencyColor + '55' }]}>
+            <Ionicons name="flash-outline" size={12} color={urgencyColor} />
+            <Text style={[styles.categoryBadgeText, { color: urgencyColor }]}>
+              {item.urgency || 'normal'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardContent}>
+          <View style={styles.infoRow}>
+            <Ionicons name="person-circle" size={16} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Requested by:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{item.requestor_name || 'Staff member'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="cash" size={16} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Amount:</Text>
+            <Text style={[styles.infoValue, { color: theme.success, fontWeight: '600' }]}>
+              {formatAmount(item.amount)}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="pricetag" size={16} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Category:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{item.category || 'General'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Needed by:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {item.needed_by ? formatDate(item.needed_by) : 'Not specified'}
+            </Text>
+          </View>
+
+          {(item.description || item.justification) && (
+            <View style={styles.infoRow}>
+              <Ionicons name="document-text-outline" size={16} color={theme.textSecondary} />
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Reason:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>
+                {item.description || item.justification}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {isPending && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.approveButton, { backgroundColor: theme.primary }]}
+              onPress={() => openPettyCashModal(item)}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <EduDashSpinner size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                  <Text style={[styles.actionButtonText, { color: '#fff' }]}>Review Request</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const styles = createStyles(theme, insets);
+  const popSummary = {
+    pending: uploads.filter((upload) => upload.status === 'pending').length,
+    approved: uploads.filter((upload) => upload.status === 'approved').length,
+    rejected: uploads.filter((upload) => upload.status === 'rejected').length,
+  };
+  const pettyCashSummary = {
+    pending: pettyCashRequests.filter((request) => toFilterStatus(request.status) === 'pending').length,
+    approved: pettyCashRequests.filter((request) => toFilterStatus(request.status) === 'approved').length,
+    rejected: pettyCashRequests.filter((request) => toFilterStatus(request.status) === 'rejected').length,
+  };
+  const activeSummary = activeQueue === 'payment_proofs' ? popSummary : pettyCashSummary;
+  const hasNoResults = activeQueue === 'payment_proofs'
+    ? filteredUploads.length === 0
+    : filteredPettyCashRequests.length === 0;
+  const emptyIcon = activeQueue === 'payment_proofs' ? 'receipt-outline' : 'wallet-outline';
+  const emptyPendingText = activeQueue === 'payment_proofs'
+    ? 'No pending payments to review'
+    : 'No pending petty cash requests to review';
+  const emptyAnyText = activeQueue === 'payment_proofs'
+    ? 'No payment uploads found'
+    : 'No petty cash requests found';
+  const searchPlaceholder = activeQueue === 'payment_proofs'
+    ? 'Search by student, parent, reference...'
+    : 'Search by requester, category...';
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Payment Reviews',
+          title: 'Finance Approvals',
           headerShown: true,
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text,
@@ -985,23 +1270,60 @@ export default function POPReviewScreen() {
       />
       
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Queue Switch */}
+        <View style={styles.queueTabs}>
+          {([
+            { key: 'payment_proofs', label: 'Payment Proofs', count: popSummary.pending },
+            { key: 'petty_cash', label: 'Petty Cash', count: pettyCashSummary.pending },
+          ] as Array<{ key: ReviewQueue; label: string; count: number }>).map((queue) => (
+            <TouchableOpacity
+              key={queue.key}
+              style={[
+                styles.queueTab,
+                {
+                  borderColor: activeQueue === queue.key ? theme.primary : theme.border,
+                  backgroundColor: activeQueue === queue.key ? theme.primary + '14' : theme.cardBackground,
+                },
+              ]}
+              onPress={() => setActiveQueue(queue.key)}
+            >
+              <Text
+                style={[
+                  styles.queueTabText,
+                  { color: activeQueue === queue.key ? theme.primary : theme.textSecondary },
+                ]}
+              >
+                {queue.label}
+              </Text>
+              <View
+                style={[
+                  styles.queueBadge,
+                  { backgroundColor: queue.count > 0 ? theme.primary : theme.border },
+                ]}
+              >
+                <Text style={styles.queueBadgeText}>{queue.count}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Header Stats */}
         <View style={[styles.statsBar, { backgroundColor: theme.cardBackground }]}>
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: theme.primary }]}>{pendingCount}</Text>
+            <Text style={[styles.statValue, { color: theme.primary }]}>{activeSummary.pending}</Text>
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Pending</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: theme.success }]}>
-              {uploads.filter(u => u.status === 'approved').length}
+              {activeSummary.approved}
             </Text>
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Approved</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: theme.error }]}>
-              {uploads.filter(u => u.status === 'rejected').length}
+              {activeSummary.rejected}
             </Text>
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Rejected</Text>
           </View>
@@ -1012,7 +1334,7 @@ export default function POPReviewScreen() {
           <Ionicons name="search" size={20} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search by name, reference..."
+            placeholder={searchPlaceholder}
             placeholderTextColor={theme.textSecondary}
             value={searchTerm}
             onChangeText={setSearchTerm}
@@ -1052,7 +1374,7 @@ export default function POPReviewScreen() {
           <View style={styles.loadingContainer}>
             <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-              Loading payment uploads...
+              Loading approval queues...
             </Text>
           </View>
         ) : error ? (
@@ -1063,19 +1385,29 @@ export default function POPReviewScreen() {
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
-        ) : filteredUploads.length === 0 ? (
+        ) : hasNoResults ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={theme.textSecondary} />
+            <Ionicons name={emptyIcon as any} size={64} color={theme.textSecondary} />
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
               {statusFilter === 'pending' 
-                ? 'No pending payments to review' 
-                : 'No payment uploads found'}
+                ? emptyPendingText
+                : emptyAnyText}
             </Text>
           </View>
-        ) : (
+        ) : activeQueue === 'payment_proofs' ? (
           <FlatList
             data={filteredUploads}
             renderItem={renderUploadItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
+            }
+          />
+        ) : (
+          <FlatList
+            data={filteredPettyCashRequests}
+            renderItem={renderPettyCashItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             refreshControl={
@@ -1118,6 +1450,82 @@ export default function POPReviewScreen() {
                 onPress={confirmReject}
               >
                 <Text style={[styles.modalButtonText, { color: '#fff' }]}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Petty Cash Review Modal */}
+      <Modal
+        visible={showPettyCashModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closePettyCashModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Review Petty Cash Request</Text>
+            <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Confirm approved amount, add notes, or provide a rejection reason.
+            </Text>
+
+            <TextInput
+              style={[styles.receiptInput, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+              placeholder="Approved amount (optional)"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="decimal-pad"
+              value={pettyCashApprovedAmount}
+              onChangeText={setPettyCashApprovedAmount}
+            />
+            <TextInput
+              style={[styles.reasonInput, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+              placeholder="Review notes (optional)"
+              placeholderTextColor={theme.textSecondary}
+              value={pettyCashReviewNotes}
+              onChangeText={setPettyCashReviewNotes}
+              multiline
+              numberOfLines={3}
+            />
+            <TextInput
+              style={[styles.reasonInput, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border, marginTop: 12 }]}
+              placeholder="Rejection reason (required only when rejecting)"
+              placeholderTextColor={theme.textSecondary}
+              value={pettyCashRejectReason}
+              onChangeText={setPettyCashRejectReason}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton, { borderColor: theme.border }]}
+                onPress={closePettyCashModal}
+                disabled={processing === selectedPettyCash?.id}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalRejectButton, { backgroundColor: theme.error }]}
+                onPress={handleRejectPettyCash}
+                disabled={processing === selectedPettyCash?.id}
+              >
+                {processing === selectedPettyCash?.id ? (
+                  <EduDashSpinner size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Reject</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.success }]}
+                onPress={handleApprovePettyCash}
+                disabled={processing === selectedPettyCash?.id}
+              >
+                {processing === selectedPettyCash?.id ? (
+                  <EduDashSpinner size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Approve</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1290,6 +1698,39 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
     statDivider: {
       width: 1,
       height: 32,
+    },
+    queueTabs: {
+      flexDirection: 'row',
+      gap: 8,
+      marginHorizontal: 16,
+      marginTop: 12,
+    },
+    queueTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingVertical: 10,
+      gap: 8,
+    },
+    queueTabText: {
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    queueBadge: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 6,
+    },
+    queueBadgeText: {
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: '700',
     },
     searchContainer: {
       flexDirection: 'row',

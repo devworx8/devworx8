@@ -256,6 +256,37 @@ export function useAIYearPlanner({
         syncedEvents = extraSaved.specialEventsSaved;
       }
 
+      const academicYear = normalizedPlan.academicYear;
+      const runPublishPlan = async () => {
+        try {
+          const { data, error } = await supabase.rpc('publish_year_plan', {
+            p_preschool_id: organizationId,
+            p_academic_year: academicYear,
+          });
+          if (error) throw error;
+          const d = data as {
+            terms_published?: number;
+            themes_published?: number;
+            monthly_entries_published?: number;
+          };
+          showPlannerAlert({
+            title: 'Plan published',
+            message: `${d?.themes_published ?? 0} theme(s) are now visible to teachers for lesson alignment.`,
+            type: 'success',
+            buttons: [
+              { text: 'View Terms', onPress: () => router.push('/screens/principal-year-planner') },
+              { text: 'OK' },
+            ],
+          });
+        } catch (err) {
+          showPlannerAlert({
+            title: 'Publish failed',
+            message: err instanceof Error ? err.message : 'Could not publish plan.',
+            type: 'error',
+          });
+        }
+      };
+
       showPlannerAlert({
         title: 'Success',
         message: [
@@ -266,10 +297,13 @@ export function useAIYearPlanner({
           `Calendar sync - events: ${syncedEvents}`,
           `Calendar sync - meetings: ${syncedMeetings}`,
           `Calendar sync - excursions: ${syncedExcursions}`,
+          '',
+          'Publish the plan so teachers can use these themes for lesson alignment.',
         ].join('\n'),
         type: 'success',
         buttons: [
           { text: 'View Terms', onPress: () => router.push('/screens/principal-year-planner') },
+          { text: 'Publish plan', onPress: () => void runPublishPlan() },
           { text: 'OK' },
         ],
       });

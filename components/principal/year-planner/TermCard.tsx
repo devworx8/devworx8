@@ -11,9 +11,11 @@ interface TermCardProps {
   onDelete: () => void;
   onTogglePublish: () => void;
   theme: any;
+  /** When true, hide edit/delete/publish actions (e.g. for teacher read-only view). */
+  readOnly?: boolean;
 }
 
-export function TermCard({ term, onEdit, onDelete, onTogglePublish, theme }: TermCardProps) {
+export function TermCard({ term, onEdit, onDelete, onTogglePublish, theme, readOnly }: TermCardProps) {
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   return (
@@ -34,6 +36,7 @@ export function TermCard({ term, onEdit, onDelete, onTogglePublish, theme }: Ter
             )}
           </View>
         </View>
+        {!readOnly && (
         <View style={styles.termActions}>
           <TouchableOpacity onPress={onTogglePublish} style={styles.iconButton}>
             <Ionicons
@@ -49,6 +52,7 @@ export function TermCard({ term, onEdit, onDelete, onTogglePublish, theme }: Ter
             <Ionicons name="trash-outline" size={24} color="#ef4444" />
           </TouchableOpacity>
         </View>
+        )}
       </View>
       <Text style={styles.termDates}>
         {new Date(term.start_date).toLocaleDateString()} - {new Date(term.end_date).toLocaleDateString()}

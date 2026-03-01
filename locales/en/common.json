@@ -134,7 +134,9 @@
     "sending": "Sending...",
     "skip": "Skip",
     "submitting": "Submitting…",
-    "view": "View"
+    "view": "View",
+    "contact": "Contact",
+    "group": "Group"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -628,7 +630,8 @@
       "teacher_students": "Quick access to student profiles and notes.",
       "tips": "Short tips to keep your school running smoothly.",
       "today_focus": "Academic highlights at a glance.",
-      "mission_control": "Shortcuts to homework, messages, fees, and Dash Intelligence."
+      "mission_control": "Shortcuts to homework, messages, fees, and Dash Intelligence.",
+      "upcoming_reminders": "7/3/1 reminder timeline for upcoming school events."
     },
     "parentDashboard": "Parent Dashboard",
     "accessDenied": "Access Denied",
@@ -1051,7 +1054,8 @@
         "early_learning_activities": "Early Learning Activities",
         "early_learning_tips": "Early Learning Tips for Parents",
         "overview": "Today's Overview",
-        "my_children_hint": "Profiles, attendance, and progress for each child."
+        "my_children_hint": "Profiles, attendance, and progress for each child.",
+        "upcoming_reminders": "Upcoming Reminders"
       },
       "daily_activity": {
         "title": "Today's Activities",
@@ -1256,7 +1260,8 @@
           "tshirt_qty": "Enter a valid number of T-shirts (1-20).",
           "shorts_qty": "Enter a valid number of shorts (0-20).",
           "tshirt_number": "Enter the returning T-shirt number.",
-          "tshirt_number_format": "T-shirt number must be 1-6 digits."
+          "tshirt_number_format": "T-shirt number must be 1-6 digits.",
+          "past_number_choice": "Select whether your child has a previous back number."
         },
         "errors": {
           "load_existing": "Unable to load existing uniform sizes.",
@@ -1458,6 +1463,10 @@
         "overview": {
           "title": "Overview preview",
           "description": "Link a child to a school to see attendance, homework, and messages."
+        },
+        "reminders": {
+          "description": "Scheduled school events will appear here with 7/3/1 reminder markers.",
+          "title": "No reminders queued yet"
         }
       },
       "dash_orb": {
@@ -1532,7 +1541,10 @@
         "notifications": "Notifications",
         "menu": "Menu",
         "weekly_menu": "Weekly Menu",
-        "documents": "Documents"
+        "documents": "Documents",
+        "timetable": "Timetable",
+        "my_exams": "My Exams & Scores",
+        "groups": "Groups"
       },
       "profile": {
         "menu": "Profile menu",
@@ -1616,7 +1628,9 @@
           "unavailable_title": "Exam Prep Unavailable",
           "unavailable_message": "Exam Prep is currently disabled in this build. Please try again later.",
           "locked_title": "Exam Prep Locked",
-          "locked_message": "Exam Prep requires {{tier}} plan or higher.\n\nUpgrade your subscription to unlock this feature."
+          "locked_message": "Exam Prep requires {{tier}} plan or higher.\n\nUpgrade your subscription to unlock this feature.",
+          "not_ready_message": "Exam Builder is available from Grade 4 and up.",
+          "not_ready_title": "Exam Builder Not Available Yet"
         },
         "dash_ai": {
           "subtitle": "Get instant homework help & study tips"
@@ -1636,9 +1650,22 @@
         "exam_badge": "Exam Builder",
         "exam_title": "Build Full Exam (Printable)",
         "exam_description": "Generate a CAPS-aligned formal test paper for review or print.",
-        "exam_cta": "Generate Formal Test Paper"
-      }
+        "exam_cta": "Generate Formal Test Paper",
+        "exam_history_badge": "My Exams",
+        "exam_history_title": "Past Exams & Scores",
+        "exam_history_desc": "Review past practice exams with corrected answers and scores.",
+        "exam_history_cta": "View My Exams"
+      },
+      "stationery": {
+        "hint": "Track bought items, quantities, proof photos, and expected delivery dates.",
+        "title": "Stationery Checklist"
+      },
+      "timetable": "Today's Timetable",
+      "timetable_hint": "View class schedule, subjects & teachers"
     },
+    "stationery": "Stationery",
+    "timetable": "Timetable",
+    "timetable_hint": "View class schedule, subjects & teachers",
     "todays_activities": "Today's Activities",
     "uniform_sizes": "Uniform Sizes",
     "upcoming_birthdays": "Upcoming Birthdays 🎂",
@@ -1824,7 +1851,6 @@
     "weekly_menu": "Weekly Menu",
     "daily_program_ai": "AI Daily Routine",
     "room_display_connect": "Room Display",
-    "timetable": "Timetable",
     "compliance": "Compliance",
     "uniform_collections_note_ye": "Young Eagles uniform payments are tracked separately from school revenue.",
     "uniform_no_order": "No Order Submitted",
@@ -1833,7 +1859,61 @@
     "uniform_status_unpaid": "Unpaid",
     "uniform_open_hub": "Open Uniform Hub",
     "uniform_message_unpaid": "Message Unpaid",
-    "uniform_message_no_order": "Message No Order"
+    "uniform_message_no_order": "Message No Order",
+    "admissions_snapshot": "Admissions Snapshot",
+    "expected_income": "Expected This Month",
+    "expected_income_hint": "Expected income hint",
+    "money_collected": "Collected",
+    "money_collected_hint": "Money collected hint",
+    "outstanding": "Outstanding",
+    "outstanding_hint": "Outstanding hint",
+    "overdue_fees": "Overdue",
+    "overdue_hint": "Past due date + grace period",
+    "student": {
+      "default_grade": "Grade 10",
+      "due": "Due",
+      "full_week": "Full Week",
+      "greeting": {
+        "afternoon": "Good afternoon",
+        "evening": "Good evening",
+        "morning": "Good morning"
+      },
+      "learning_hub": {
+        "exam_badge": "Exam Builder",
+        "exam_cta": "Generate Formal Test Paper",
+        "exam_description": "Generate a CAPS-aligned formal test paper.",
+        "exam_title": "Build Full Exam (Printable)",
+        "mode_hint": "Mode: Diagnose -> Teach -> Practice",
+        "title": "Dash Learning Hub",
+        "tutor_active": "Tutor Session Active",
+        "tutor_badge": "Tutor Mode",
+        "tutor_cta": "Start Tutor Session",
+        "tutor_description": "Live step-by-step help. Diagnose -> Teach -> Practice.",
+        "tutor_title": "Interactive Tutor Session"
+      },
+      "metrics": {
+        "attendance": "Attendance",
+        "average": "Average",
+        "pending": "Pending"
+      },
+      "nav": {
+        "ai_study_buddy": "AI Study Buddy",
+        "assignments": "Assignments",
+        "classes": "Classes",
+        "dashboard": "Dashboard",
+        "grades": "Grades",
+        "library": "Library",
+        "schedule": "Schedule"
+      },
+      "now": "NOW",
+      "open_navigation_menu": "Open navigation menu",
+      "quick_actions": {
+        "title": "Quick Actions"
+      },
+      "todays_schedule": "Today's Schedule",
+      "upcoming_tasks": "Upcoming Tasks",
+      "your_school": "Your School"
+    }
   },
   "announcement": {
     "create_announcement": "Create Announcement",
@@ -2228,7 +2308,20 @@
     "starredMessages": "Starred Messages",
     "teacher": "Teacher",
     "teacher_label": "Teacher",
-    "upload_progress": "Upload Activity Evidence"
+    "upload_progress": "Upload Activity Evidence",
+    "announcements_subtitle": "Daily routines, menus & school updates",
+    "daily_program": "Daily Program",
+    "daily_program_subtitle": "View today\\",
+    "generate_image": "Generate Image",
+    "generate_image_subtitle": "Create learning visuals with Dash.",
+    "no_classes_day": "No classes on this day",
+    "stationery": "Stationery Checklist",
+    "stationery_subtitle": "Track bought items and what is still needed.",
+    "timetable": "Class Timetable",
+    "timetable_contact": "Contact your school to set up the timetable.",
+    "timetable_not_set": "Timetable not set up yet",
+    "weekly_menu": "Weekly Menu",
+    "weekly_menu_subtitle": "See breakfast, lunch, and snack plans."
   },
   "pop": {
     "uploadProofOfPayment": "Upload Proof of Payment",
@@ -2443,7 +2536,10 @@
     "no_homework": "No Homework Yet",
     "no_homework_desc": "When teachers assign homework, it will appear here.",
     "no_homework_filter": "No homework in this category",
-    "submitted": "Submitted"
+    "submitted": "Submitted",
+    "no_due_date": "No due date",
+    "take_home": "Take-home",
+    "take_home_activities": "Take-home Activities"
   },
   "lessons": {
     "title": "Lessons",
@@ -2901,7 +2997,28 @@
     "submitted": "submitted",
     "overdue": "Overdue",
     "recent_activity_hint": "Latest assignment and event timeline.",
-    "pending": "Pending"
+    "pending": "Pending",
+    "subtitle_caught_up": "All caught up! {{count}} students are learning with you",
+    "subtitle_pending": "You have {{count}} assignments to grade",
+    "subtitle_pending_one": "You have 1 assignment to grade today",
+    "subtitle_upcoming": "{{count}} lessons planned for today",
+    "suggestion_activity_prompt": "Suggest a quick 10-minute classroom activity for today.",
+    "suggestion_check_prompt": "Create a quick comprehension check for the theme \"{{theme}}\".",
+    "suggestion_check_understanding": "Check understanding",
+    "suggestion_continue_prompt": "Help me continue teaching the theme \"{{theme}}\" to my class today.",
+    "suggestion_continue_theme": "Continue {{theme}}",
+    "suggestion_generate_plan": "Generate lesson plan",
+    "suggestion_generate_prompt": "Generate a lesson plan for my class today.",
+    "suggestion_goals_prompt": "Help me set clear learning goals for this week.",
+    "suggestion_learning_goals": "Set learning goals",
+    "suggestion_quick_activity": "Quick activity",
+    "suggestion_worksheet": "Create worksheet",
+    "suggestion_worksheet_prompt": "Create a worksheet for the theme \"{{theme}}\".",
+    "teach_today_classes": "For: {{classes}}",
+    "teach_today_empty": "No lesson plan for today. Dash AI can help you create one in seconds.",
+    "teach_today_next": "Up next: {{block}}",
+    "teach_today_theme": "Theme: {{name}}",
+    "teach_today_title": "📋 Today\\"
   },
   "students": {
     "title": "Students",
@@ -3052,7 +3169,8 @@
     "premium": "Premium",
     "managePlan": "Manage plan",
     "premium_required": "Premium Required",
-    "upgrade_for_feature": "Upgrade your plan to access this feature."
+    "upgrade_for_feature": "Upgrade your plan to access this feature.",
+    "tier_badge": "Tier: {{tier}}"
   },
   "calls": {
     "title": "Calls",
@@ -3508,7 +3626,10 @@
     "switch_account_desc_no_biometric": "Tap to try quick switch, or use password to sign in to an account.",
     "use_password_to_switch": "Use password",
     "switch_error": "Failed to switch account. Please try again.",
-    "switch_failed": "Switch Failed"
+    "switch_failed": "Switch Failed",
+    "no_accounts_hint": "Sign in with another account to enable quick switching",
+    "removed_local_only": "Removed on this device",
+    "removed_local_only_message": "This account was removed from your saved list here. To fully sign it out everywhere, sign in to that account with password and sign out globally."
   },
   "actions": {
     "continue": "Continue",
@@ -4080,7 +4201,9 @@
   },
   "org_admin": {
     "overview": "Overview",
-    "title": "Organization Admin"
+    "title": "Organization Admin",
+    "admin": "Admin",
+    "organization": "Organization"
   },
   "overdue": "Overdue",
   "payment": {
@@ -4269,7 +4392,8 @@
       "timezone": "Timezone",
       "two_factor_auth": "Two-Factor Authentication",
       "uniform_orders": "Uniform Orders",
-      "weather_widget": "Weather Widget"
+      "weather_widget": "Weather Widget",
+      "stationery_checklists": "Stationery Checklists"
     },
     "option": {
       "daily": "Daily",
@@ -4370,5 +4494,8 @@
       "notReceiving": "Not Receiving",
       "updatePhone": "Update Phone"
     }
+  },
+  "messaging": {
+    "whoReacted": "Who reacted"
   }
 }

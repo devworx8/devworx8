@@ -97,17 +97,12 @@ export class DashConversationService {
         .eq('user_id', this.userId)
         .eq('preschool_id', this.preschoolId) // REQUIRED for tenant isolation
         .eq('conversation_id', conversationId)
-        .single();
+        .order('updated_at', { ascending: false })
+        .limit(1);
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Not found
-          return null;
-        }
-        throw error;
-      }
-
-      return data ? rowToConversation(data) : null;
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : null;
+      return row ? rowToConversation(row as AIConversationRow) : null;
     } catch (error) {
       console.error('[DashConversationService] Failed to get conversation:', error);
       return null;
@@ -294,13 +289,10 @@ export class DashConversationService {
         .eq('user_id', this.userId)
         .eq('preschool_id', this.preschoolId) // REQUIRED for tenant isolation
         .eq('conversation_id', conversationId)
-        .single();
+        .limit(1);
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return !!data;
+      if (error) throw error;
+      return Array.isArray(data) && data.length > 0;
     } catch (error) {
       console.error('[DashConversationService] Failed to check conversation existence:', error);
       return false;

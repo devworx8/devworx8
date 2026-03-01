@@ -1,7 +1,5 @@
 BEGIN;
-
 DROP POLICY IF EXISTS uniform_requests_staff_select ON public.uniform_requests;
-
 CREATE POLICY uniform_requests_staff_select
 ON public.uniform_requests
 FOR SELECT
@@ -21,5 +19,4 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = uniform_requests.preschool_id
   )
 );
-
 COMMIT;

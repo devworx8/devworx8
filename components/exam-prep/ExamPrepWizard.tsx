@@ -7,9 +7,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ExamPrepReviewStep } from '@/components/exam-prep/ExamPrepWizardReviewStep';
 import {
@@ -30,6 +33,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { assertSupabase } from '@/lib/supabase';
+import { stashExamGenerationDraft } from '@/lib/exam-prep/generationDraftStore';
 import {
   buildExamGenerationHref,
   buildExamRouteParams,
@@ -39,6 +43,172 @@ import {
   type WizardStep,
 } from '@/components/exam-prep/examPrepWizard.helpers';
 import { examPrepWizardStyles as styles } from '@/components/exam-prep/examPrepWizard.styles';
+import { splitPdfIntoSinglePages } from '@/components/exam-prep/pdfSplit';
+import { QuotaRingWithStatus } from '@/components/ui/CircularQuotaRing';
+import { useAIUserLimits } from '@/hooks/useAI';
+
+const MAX_MATERIAL_SIZE_BYTES = 8 * 1024 * 1024;
+const MAX_MATERIAL_SIZE_MB = Math.round(MAX_MATERIAL_SIZE_BYTES / (1024 * 1024));
+const MATERIAL_OCR_RETRIES = 5;
+const MATERIAL_OCR_RETRY_BASE_MS = 4000;
+const MATERIAL_OCR_RETRY_MAX_MS = 60000;
+const MATERIAL_SPLIT_PART_COOLDOWN_MS = 900;
+
+function formatSizeMB(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0';
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type FunctionInvokeErrorInfo = {
+  status?: number;
+  code?: string;
+  message: string;
+  rateLimited: boolean;
+  quotaExceeded: boolean;
+  retryAfterSeconds?: number;
+};
+
+async function parseFunctionInvokeError(error: unknown, fallbackMessage: string): Promise<FunctionInvokeErrorInfo> {
+  const err = (error || {}) as Record<string, unknown>;
+  const context = (err.context || null) as
+    | {
+        status?: number;
+        headers?: { get?: (name: string) => string | null };
+        text?: () => Promise<string>;
+      }
+    | null;
+
+  const rawStatus = err.status || context?.status;
+  const status = Number.isFinite(Number(rawStatus)) ? Number(rawStatus) : undefined;
+
+  let payloadCode: string | undefined;
+  let payloadMessage: string | undefined;
+
+  if (context && typeof context.text === 'function') {
+    try {
+      const rawText = await context.text();
+      if (rawText) {
+        const parsed = JSON.parse(rawText) as Record<string, unknown>;
+        if (typeof parsed.error === 'string') payloadCode = parsed.error;
+        if (typeof parsed.message === 'string') payloadMessage = parsed.message;
+      }
+    } catch {
+      // Ignore JSON parse/body read failures and fall back to generic error text.
+    }
+  }
+
+  const errorMessage =
+    payloadMessage ||
+    (typeof err.message === 'string' ? err.message : '') ||
+    fallbackMessage;
+  const errorCode =
+    payloadCode ||
+    (typeof err.code === 'string' ? err.code : undefined);
+
+  const retryAfterHeader = context?.headers?.get?.('retry-after') || context?.headers?.get?.('Retry-After');
+  const retryAfterSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined;
+  const normalized = `${errorCode || ''} ${errorMessage}`.toLowerCase();
+  const quotaExceeded =
+    errorCode === 'quota_exceeded' ||
+    normalized.includes('quota exceeded') ||
+    normalized.includes('billing period');
+  const rateLimited =
+    status === 429 ||
+    errorCode === 'rate_limited' ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests');
+
+  return {
+    status,
+    code: errorCode,
+    message: errorMessage,
+    rateLimited,
+    quotaExceeded,
+    retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+  };
+}
+
+function getMaterialAIErrorMessage(info: FunctionInvokeErrorInfo): string {
+  if (info.quotaExceeded) {
+    return 'AI usage quota reached for this billing period. Please upgrade or wait for quota reset before analyzing more study material.';
+  }
+  if (info.rateLimited) {
+    if (info.retryAfterSeconds && info.retryAfterSeconds > 0) {
+      return `AI provider is busy right now (not your account quota). Retry in about ${info.retryAfterSeconds} seconds, then tap Retry.`;
+    }
+    return 'AI provider is temporarily rate-limited (not your account quota). Retry in about a minute, then tap Retry.';
+  }
+  if (info.message.includes('Edge Function returned a non-2xx')) {
+    return 'Study material analysis failed. Please retry in a moment.';
+  }
+  return info.message || 'Could not analyze study material.';
+}
+
+function isMaterialRateLimitedMessage(message: string): boolean {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('rate-limited') ||
+    normalized.includes('busy right now') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('retry in about')
+  );
+}
+
+function toQuotaMap(input: unknown): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const map: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    map[key] = Math.max(0, numeric);
+  }
+  return map;
+}
+
+function getFirstQuotaValue(
+  map: Record<string, number>,
+  keys: string[],
+): number {
+  for (const key of keys) {
+    const value = map[key];
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+type StudyMaterial = {
+  id: string;
+  name: string;
+  mimeType: string;
+  summary?: string;
+  status: 'processing' | 'ready' | 'error';
+  error?: string;
+  sourceUri?: string;
+  sourceSize?: number;
+};
+
+type StudyMaterialInputFile = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size?: number;
+};
+
+type PdfSplitProgress = {
+  fileName: string;
+  totalParts: number;
+  completedParts: number;
+};
+
+type MaterialProcessResult = {
+  ok: boolean;
+  rateLimited: boolean;
+  message?: string;
+};
 
 export function ExamPrepWizard(): React.ReactElement {
   const { theme, isDark } = useTheme();
@@ -72,6 +242,9 @@ export function ExamPrepWizard(): React.ReactElement {
   const [contextPreview, setContextPreview] = useState<ExamContextSummary | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [customPromptText, setCustomPromptText] = useState('');
+  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>([]);
+  const [pdfSplitProgress, setPdfSplitProgress] = useState<PdfSplitProgress | null>(null);
   const contextRequestSeqRef = useRef(0);
 
   const phase = getPhaseFromGrade(selectedGrade);
@@ -80,6 +253,31 @@ export function ExamPrepWizard(): React.ReactElement {
   const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
   const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice');
   const requiredExamTier = getRequiredTier('exam.practice');
+  const { data: aiLimits } = useAIUserLimits();
+  const quotaMap = useMemo(() => toQuotaMap((aiLimits as any)?.quotas), [aiLimits]);
+  const usedMap = useMemo(
+    () => toQuotaMap((aiLimits as any)?.used ?? (aiLimits as any)?.current_usage),
+    [aiLimits],
+  );
+  const examQuotaKeys = useMemo(
+    () => ['exam_generation', 'grading_assistance', 'lesson_generation'],
+    [],
+  );
+  const examQuotaLimit = useMemo(
+    () => getFirstQuotaValue(quotaMap, examQuotaKeys),
+    [quotaMap, examQuotaKeys],
+  );
+  const examQuotaUsed = useMemo(
+    () => getFirstQuotaValue(usedMap, examQuotaKeys),
+    [usedMap, examQuotaKeys],
+  );
+  const examQuotaRemaining = Math.max(0, examQuotaLimit - examQuotaUsed);
+  const examQuotaPercent = examQuotaLimit > 0 ? (examQuotaUsed / examQuotaLimit) * 100 : 0;
+  const examQuotaWarning = examQuotaLimit > 0 && examQuotaRemaining <= 0
+    ? 'Monthly exam quota appears exhausted. Generation may fail until reset or upgrade.'
+    : examQuotaLimit > 0 && examQuotaPercent >= 85
+      ? `Exam quota is low: ${examQuotaRemaining} left this month.`
+      : null;
 
   const selectedExamTypeLabel = useMemo(() => {
     const examType = selectedExamType === 'practice_test'
@@ -106,6 +304,343 @@ export function ExamPrepWizard(): React.ReactElement {
       return categoryMatches && searchMatches;
     });
   }, [subjects, subjectSearch, subjectCategory]);
+
+  const hasMaterialProcessing = useMemo(
+    () => studyMaterials.some((material) => material.status === 'processing'),
+    [studyMaterials],
+  );
+  const splitProgressPercent = useMemo(() => {
+    if (!pdfSplitProgress || pdfSplitProgress.totalParts <= 0) return 0;
+    const raw = (pdfSplitProgress.completedParts / pdfSplitProgress.totalParts) * 100;
+    if (pdfSplitProgress.completedParts <= 0) return 8;
+    return Math.max(8, Math.min(100, raw));
+  }, [pdfSplitProgress]);
+
+  const readyMaterialSummaries = useMemo(
+    () =>
+      studyMaterials
+        .filter((material) => material.status === 'ready' && material.summary)
+        .map((material) => `Source: ${material.name}\n${material.summary}`),
+    [studyMaterials],
+  );
+
+  const buildCustomPrompt = useCallback((): string | undefined => {
+    const blocks: string[] = [];
+    const trimmedPrompt = customPromptText.trim();
+    if (trimmedPrompt) {
+      blocks.push(`Additional learner requirements:\n${trimmedPrompt}`);
+    }
+    if (readyMaterialSummaries.length > 0) {
+      blocks.push(
+        `Study material extracted from uploaded images/PDFs:\n${readyMaterialSummaries.join('\n\n---\n\n')}`
+      );
+      blocks.push(
+        'When generated content includes non-English terminology, include plain English support cues for the learner.'
+      );
+    }
+
+    if (blocks.length === 0) return undefined;
+    return blocks.join('\n\n');
+  }, [customPromptText, readyMaterialSummaries]);
+
+  const updateStudyMaterial = useCallback((id: string, patch: Partial<StudyMaterial>) => {
+    setStudyMaterials((prev) =>
+      prev.map((material) => (material.id === id ? { ...material, ...patch } : material))
+    );
+  }, []);
+
+  const summarizeStudyMaterial = useCallback(
+    async (payload: { base64: string; mimeType: string; fileName: string }): Promise<string> => {
+      const supabase = assertSupabase();
+      for (let attempt = 0; attempt <= MATERIAL_OCR_RETRIES; attempt += 1) {
+        const { data, error } = await supabase.functions.invoke('ai-proxy', {
+          body: {
+            scope: 'student',
+            prefer_openai: true,
+            // Keep OCR stable on projects where older quota mapping does not recognize image_analysis.
+            service_type: 'chat_message',
+            payload: {
+              prompt: `Extract exam-prep context from ${payload.fileName}. Provide concise bullet points under: (1) Topics to revise, (2) Key facts/formulas, (3) Common mistakes, (4) Suggested question angles. If the source language is not English, include short English translations for critical terms.`,
+              context:
+                'You process learner study material for CAPS exam prep. Return plain text bullet points only. Keep it concise and practical.',
+              images: [{ data: payload.base64, media_type: payload.mimeType }],
+              ocr_mode: true,
+              ocr_task: 'document',
+              ocr_response_format: 'text',
+            },
+            stream: false,
+            enable_tools: false,
+            metadata: {
+              source: 'exam_prep.wizard.material_ocr',
+              file_name: payload.fileName,
+            },
+          },
+        });
+
+        if (error) {
+          const parsedError = await parseFunctionInvokeError(
+            error,
+            'Failed to analyze study material.',
+          );
+          const canRetry =
+            parsedError.rateLimited &&
+            !parsedError.quotaExceeded &&
+            attempt < MATERIAL_OCR_RETRIES;
+          if (canRetry) {
+            const retryDelayMsUncapped = parsedError.retryAfterSeconds
+              ? parsedError.retryAfterSeconds * 1000
+              : MATERIAL_OCR_RETRY_BASE_MS * Math.pow(2, attempt);
+            const retryDelayMs = Math.min(MATERIAL_OCR_RETRY_MAX_MS, retryDelayMsUncapped);
+            const jitterMs = Math.floor(Math.random() * 600);
+            await sleep(retryDelayMs + jitterMs);
+            continue;
+          }
+          throw new Error(getMaterialAIErrorMessage(parsedError));
+        }
+
+        const summary =
+          typeof data === 'string'
+            ? data.trim()
+            : String(data?.content || data?.ocr?.analysis || '').trim();
+
+        if (!summary) {
+          throw new Error('No readable content detected in the selected file.');
+        }
+
+        return summary;
+      }
+      throw new Error('Could not analyze study material.');
+    },
+    [],
+  );
+
+  const analyzeStudyMaterialFile = useCallback(
+    async (materialId: string, file: StudyMaterialInputFile): Promise<MaterialProcessResult> => {
+      const safeName = file.name || `material-${Date.now()}`;
+      updateStudyMaterial(materialId, {
+        name: safeName,
+        mimeType: file.mimeType,
+        status: 'processing',
+        error: undefined,
+        sourceUri: file.uri,
+        sourceSize: file.size,
+      });
+
+      try {
+        const base64 = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const summary = await summarizeStudyMaterial({
+          base64,
+          mimeType: file.mimeType,
+          fileName: safeName,
+        });
+        updateStudyMaterial(materialId, {
+          status: 'ready',
+          summary,
+          error: undefined,
+        });
+        return { ok: true, rateLimited: false };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Could not process this study file.';
+        const rateLimited = isMaterialRateLimitedMessage(message);
+        updateStudyMaterial(materialId, {
+          status: 'error',
+          error: message,
+        });
+        if (message.toLowerCase().includes('quota') || rateLimited) {
+          Alert.alert('Study material analysis unavailable', message);
+        }
+        return { ok: false, rateLimited, message };
+      }
+    },
+    [summarizeStudyMaterial, updateStudyMaterial],
+  );
+
+  const processSingleStudyMaterial = useCallback(
+    async (file: StudyMaterialInputFile): Promise<MaterialProcessResult> => {
+      const safeName = file.name || `material-${Date.now()}`;
+      const materialId = `material_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      setStudyMaterials((prev) => [
+        ...prev,
+        {
+          id: materialId,
+          name: safeName,
+          mimeType: file.mimeType,
+          status: 'processing',
+          sourceUri: file.uri,
+          sourceSize: file.size,
+        },
+      ]);
+
+      return await analyzeStudyMaterialFile(materialId, {
+        ...file,
+        name: safeName,
+      });
+    },
+    [analyzeStudyMaterialFile],
+  );
+
+  const processStudyMaterial = useCallback(
+    async (file: StudyMaterialInputFile): Promise<MaterialProcessResult> => {
+      const info = await FileSystem.getInfoAsync(file.uri);
+      const sizeBytes =
+        typeof file.size === 'number' && file.size > 0
+          ? file.size
+          : info.exists && typeof info.size === 'number'
+          ? info.size
+          : 0;
+
+      if (file.mimeType === 'application/pdf') {
+        try {
+          Alert.alert(
+            'Preparing PDF pages',
+            `This PDF is ${formatSizeMB(sizeBytes)}MB. Dash will upload each page separately for more reliable extraction.`,
+          );
+          const parts = await splitPdfIntoSinglePages({
+            uri: file.uri,
+            name: file.name,
+            sizeBytes,
+          });
+
+          if (parts.length === 0) {
+            throw new Error('No PDF pages were created.');
+          }
+
+          setPdfSplitProgress({
+            fileName: file.name,
+            totalParts: parts.length,
+            completedParts: 0,
+          });
+
+          for (let index = 0; index < parts.length; index += 1) {
+            const part = parts[index];
+            if (part.size > MAX_MATERIAL_SIZE_BYTES) {
+              throw new Error(
+                `Page ${index + 1} is still too large (${formatSizeMB(part.size)}MB). Please compress this PDF and retry.`,
+              );
+            }
+            const result = await processSingleStudyMaterial(part);
+            setPdfSplitProgress((prev) => (
+              prev
+                ? { ...prev, completedParts: Math.min(prev.totalParts, index + 1) }
+                : prev
+            ));
+            if (result.rateLimited) {
+              setPdfSplitProgress(null);
+              Alert.alert(
+                'Upload paused',
+                `Processing paused at page ${index + 1} due to provider rate limits. Retry that page after about a minute to continue.`,
+              );
+              return result;
+            }
+            if (index < parts.length - 1) {
+              await sleep(MATERIAL_SPLIT_PART_COOLDOWN_MS);
+            }
+          }
+
+          setPdfSplitProgress(null);
+          return { ok: true, rateLimited: false };
+        } catch (error) {
+          setPdfSplitProgress(null);
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Could not split this PDF automatically.';
+          Alert.alert('PDF split failed', message);
+          return { ok: false, rateLimited: false, message };
+        }
+      }
+
+      if (sizeBytes > MAX_MATERIAL_SIZE_BYTES) {
+        Alert.alert(
+          'File too large',
+          `This file is ${formatSizeMB(sizeBytes)}MB. Please use files up to ${MAX_MATERIAL_SIZE_MB}MB for exam material analysis.`,
+        );
+        return { ok: false, rateLimited: false };
+      }
+
+      return await processSingleStudyMaterial(file);
+    },
+    [processSingleStudyMaterial],
+  );
+
+  const handlePickMaterialImage = useCallback(async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo library access to upload study material.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        selectionLimit: 15,
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      for (let index = 0; index < result.assets.length; index += 1) {
+        const asset = result.assets[index];
+        const outcome = await processStudyMaterial({
+          uri: asset.uri,
+          name: asset.fileName || `image-${Date.now()}-${index + 1}.jpg`,
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize,
+        });
+        if (outcome.rateLimited) {
+          break;
+        }
+      }
+    } catch {
+      Alert.alert('Upload failed', 'Could not add image study material. Please try again.');
+    }
+  }, [processStudyMaterial]);
+
+  const handlePickMaterialPdf = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      await processStudyMaterial({
+        uri: asset.uri,
+        name: asset.name || `document-${Date.now()}.pdf`,
+        mimeType: asset.mimeType || 'application/pdf',
+        size: asset.size,
+      });
+    } catch {
+      Alert.alert('Upload failed', 'Could not add PDF study material. Please try again.');
+    }
+  }, [processStudyMaterial]);
+
+  const handleRemoveMaterial = useCallback((materialId: string) => {
+    setStudyMaterials((prev) => prev.filter((material) => material.id !== materialId));
+  }, []);
+
+  const handleRetryMaterial = useCallback(
+    async (materialId: string) => {
+      const target = studyMaterials.find((material) => material.id === materialId);
+      if (!target || target.status === 'processing') return;
+      if (!target.sourceUri) {
+        Alert.alert('Retry unavailable', 'The source file is no longer available. Please upload it again.');
+        return;
+      }
+      await analyzeStudyMaterialFile(materialId, {
+        uri: target.sourceUri,
+        name: target.name,
+        mimeType: target.mimeType,
+        size: target.sourceSize,
+      });
+    },
+    [analyzeStudyMaterialFile, studyMaterials],
+  );
 
   const fetchContextPreview = useCallback(async () => {
     if (!selectedGrade || !selectedSubject || !selectedExamType || !useTeacherContext) {
@@ -210,6 +745,26 @@ export function ExamPrepWizard(): React.ReactElement {
   const handleStartGeneration = useCallback(
     (withTeacherContext: boolean) => {
       if (!selectedGrade || !selectedSubject || !selectedExamType) return;
+      if (hasMaterialProcessing) {
+        Alert.alert(
+          'Please wait',
+          'We are still extracting content from your uploaded study material.',
+        );
+        return;
+      }
+      if (examQuotaLimit > 0 && examQuotaRemaining <= 0) {
+        Alert.alert(
+          'AI quota warning',
+          'Your monthly exam quota appears exhausted. Generation may fail until usage is reset or your plan is upgraded.',
+        );
+      }
+
+      const customPrompt = buildCustomPrompt();
+      const draftId = customPrompt
+        ? stashExamGenerationDraft({
+            customPrompt,
+          })
+        : undefined;
 
       const generationParams = buildExamRouteParams({
         grade: selectedGrade,
@@ -217,6 +772,7 @@ export function ExamPrepWizard(): React.ReactElement {
         examType: selectedExamType,
         language: selectedLanguage,
         useTeacherContext: withTeacherContext,
+        draftId,
         contextIds: {
           childName,
           studentId,
@@ -227,7 +783,20 @@ export function ExamPrepWizard(): React.ReactElement {
 
       router.push(buildExamGenerationHref(generationParams));
     },
-    [selectedGrade, selectedSubject, selectedExamType, selectedLanguage, childName, studentId, classId, schoolId]
+    [
+      selectedGrade,
+      selectedSubject,
+      selectedExamType,
+      selectedLanguage,
+      hasMaterialProcessing,
+      examQuotaLimit,
+      examQuotaRemaining,
+      buildCustomPrompt,
+      childName,
+      studentId,
+      classId,
+      schoolId,
+    ]
   );
 
   const handleQuickStartAfrikaansLive = useCallback(() => {
@@ -358,24 +927,215 @@ export function ExamPrepWizard(): React.ReactElement {
         ) : null}
 
         {step === 'review' ? (
-          <ExamPrepReviewStep
-            theme={theme}
-            childName={childName}
-            gradeLabel={gradeInfo?.label || selectedGrade}
-            selectedGrade={selectedGrade}
-            selectedSubject={selectedSubject}
-            selectedExamTypeLabel={selectedExamTypeLabel}
-            selectedExamType={selectedExamType}
-            selectedLanguage={selectedLanguage}
-            useTeacherContext={useTeacherContext}
-            contextPreview={contextPreview}
-            contextLoading={contextLoading}
-            contextError={contextError}
-            onBack={() => moveToStep('type')}
-            onSetUseTeacherContext={setUseTeacherContext}
-            onGenerateWithCurrentContext={() => handleStartGeneration(useTeacherContext)}
-            onGenerateCapsOnly={() => handleStartGeneration(false)}
-          />
+          <>
+            {examQuotaLimit > 0 ? (
+              <View style={[styles.usageCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.usageCardHeader}>
+                  <Ionicons name="sparkles-outline" size={16} color={theme.primary} />
+                  <Text style={[styles.usageCardTitle, { color: theme.text }]}>AI Usage This Month</Text>
+                </View>
+                <View style={styles.usageRingWrap}>
+                  <QuotaRingWithStatus
+                    featureName="Exam prep"
+                    used={examQuotaUsed}
+                    limit={examQuotaLimit}
+                    size={66}
+                  />
+                </View>
+                <Text style={[styles.usageCardHint, { color: theme.muted }]}>
+                  {examQuotaUsed}/{examQuotaLimit} exam-related AI actions used this month.
+                </Text>
+              </View>
+            ) : null}
+
+            {examQuotaWarning ? (
+              <View style={[styles.usageWarning, { borderColor: `${theme.warning}55`, backgroundColor: `${theme.warning}12` }]}>
+                <Ionicons name="warning-outline" size={15} color={theme.warning} />
+                <Text style={[styles.usageWarningText, { color: theme.warning }]}>
+                  {examQuotaWarning}
+                </Text>
+              </View>
+            ) : null}
+
+            <ExamPrepReviewStep
+              theme={theme}
+              childName={childName}
+              gradeLabel={gradeInfo?.label || selectedGrade}
+              selectedGrade={selectedGrade}
+              selectedSubject={selectedSubject}
+              selectedExamTypeLabel={selectedExamTypeLabel}
+              selectedExamType={selectedExamType}
+              selectedLanguage={selectedLanguage}
+              useTeacherContext={useTeacherContext}
+              contextPreview={contextPreview}
+              contextLoading={contextLoading}
+              contextError={contextError}
+              onBack={() => moveToStep('type')}
+              onSetUseTeacherContext={setUseTeacherContext}
+              hideGenerateButtons
+            />
+
+            <View style={[styles.materialCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={styles.materialHeader}>
+                <Ionicons name="attach-outline" size={16} color={theme.primary} />
+                <Text style={[styles.materialTitle, { color: theme.text }]}>Study Material (Optional)</Text>
+              </View>
+              {readyMaterialSummaries.length > 0 ? (
+                <View
+                  style={[
+                    styles.uploadedMaterialBanner,
+                    { borderColor: `${theme.primary}55`, backgroundColor: `${theme.primary}18` },
+                  ]}
+                >
+                  <Ionicons name="document-attach-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.uploadedMaterialBannerText, { color: theme.primary }]}>
+                    Using uploaded material / Images / PDFs / Study Notes
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={[styles.materialSubtitle, { color: theme.muted }]}>
+                Upload an image or PDF of homework/classwork so exam questions align with the learner&apos;s material. PDF uploads are processed page-by-page.
+              </Text>
+              {pdfSplitProgress ? (
+                <View
+                  style={[
+                    styles.materialSplitCard,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: isDark ? 'rgba(99, 102, 241, 0.12)' : 'rgba(99, 102, 241, 0.08)',
+                    },
+                  ]}
+                >
+                  <View style={styles.materialSplitHeader}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={[styles.materialSplitTitle, { color: theme.text }]}>Uploading PDF pages</Text>
+                  </View>
+                  <Text style={[styles.materialSplitMeta, { color: theme.muted }]} numberOfLines={1}>
+                    {pdfSplitProgress.fileName}
+                  </Text>
+                  <Text style={[styles.materialSplitMeta, { color: theme.muted }]}>
+                    {`${pdfSplitProgress.completedParts}/${pdfSplitProgress.totalParts} parts processed`}
+                  </Text>
+                  <View style={[styles.materialSplitTrack, { backgroundColor: theme.border }]}>
+                    <View
+                      style={[
+                        styles.materialSplitFill,
+                        { width: `${splitProgressPercent}%`, backgroundColor: theme.primary },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.materialActions}>
+                <TouchableOpacity
+                  style={[styles.materialActionBtn, { borderColor: theme.border, backgroundColor: theme.background }]}
+                  onPress={handlePickMaterialImage}
+                >
+                  <Ionicons name="image-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.materialActionText, { color: theme.text }]}>Add Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.materialActionBtn, { borderColor: theme.border, backgroundColor: theme.background }]}
+                  onPress={handlePickMaterialPdf}
+                >
+                  <Ionicons name="document-text-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.materialActionText, { color: theme.text }]}>Add PDF</Text>
+                </TouchableOpacity>
+              </View>
+
+              {studyMaterials.map((material) => (
+                <View
+                  key={material.id}
+                  style={[styles.materialItem, { borderColor: theme.border, backgroundColor: theme.background }]}
+                >
+                  <View style={styles.materialMeta}>
+                    <Text style={[styles.materialName, { color: theme.text }]} numberOfLines={1}>
+                      {material.name}
+                    </Text>
+                    <Text style={[styles.materialStatus, { color: theme.muted }]}>
+                      {material.status === 'processing'
+                        ? 'Extracting study notes...'
+                        : material.status === 'ready'
+                        ? 'Ready for generation'
+                        : material.error || 'Could not read file'}
+                    </Text>
+                  </View>
+                  <View style={styles.materialRight}>
+                    {material.status === 'processing' ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : null}
+                    {material.status === 'error' ? (
+                      <TouchableOpacity
+                        onPress={() => handleRetryMaterial(material.id)}
+                        style={[styles.materialRetryBtn, { borderColor: theme.primary }]}
+                      >
+                        <Ionicons name="refresh-outline" size={12} color={theme.primary} />
+                        <Text style={[styles.materialRetryText, { color: theme.primary }]}>Retry</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity onPress={() => handleRemoveMaterial(material.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="close-circle" size={18} color={theme.muted} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              <TextInput
+                style={[
+                  styles.customPromptInput,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
+                placeholder="Add extra instructions (for example: focus on fractions and word problems)."
+                placeholderTextColor={theme.muted}
+                value={customPromptText}
+                onChangeText={setCustomPromptText}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.generateButtonBlock}>
+              {hasMaterialProcessing ? (
+                <View style={[styles.generateButtonDisabled, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={[styles.generateButtonDisabledText, { color: theme.muted }]}>
+                    Waiting for uploads to complete...
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.generateButton,
+                  hasMaterialProcessing ? styles.generateButtonInactive : {},
+                  hasMaterialProcessing ? { backgroundColor: theme.border, opacity: 0.7 } : { backgroundColor: '#22c55e' },
+                ]}
+                onPress={hasMaterialProcessing ? undefined : () => handleStartGeneration(useTeacherContext)}
+                disabled={hasMaterialProcessing}
+              >
+                <Ionicons name="sparkles" size={22} color="#ffffff" />
+                <Text style={styles.generateButtonText}>Generate {selectedExamTypeLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryGenerateButton,
+                  { borderColor: theme.border, backgroundColor: theme.surface },
+                  hasMaterialProcessing ? { opacity: 0.6 } : {},
+                ]}
+                onPress={hasMaterialProcessing ? undefined : () => handleStartGeneration(false)}
+                disabled={hasMaterialProcessing}
+              >
+                <Text style={[styles.secondaryGenerateText, { color: theme.text }]}>
+                  Generate without teacher context
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>

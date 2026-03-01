@@ -31,7 +31,6 @@ begin
   raise exception 'Unsupported media feature: %', p_feature;
 end;
 $$;
-
 create or replace function public.get_daily_media_budget(
   p_feature text,
   p_tier text default 'free'
@@ -98,7 +97,6 @@ begin
       end;
 end;
 $$;
-
 create or replace function public.consume_daily_media_budget(
   p_feature text,
   p_amount bigint default 1,
@@ -201,9 +199,7 @@ begin
       end;
 end;
 $$;
-
 revoke all on function public.get_daily_media_budget(text, text) from public;
 grant execute on function public.get_daily_media_budget(text, text) to authenticated, service_role;
-
 revoke all on function public.consume_daily_media_budget(text, bigint, text) from public;
 grant execute on function public.consume_daily_media_budget(text, bigint, text) to authenticated, service_role;

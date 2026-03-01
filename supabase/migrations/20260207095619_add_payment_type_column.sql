@@ -17,7 +17,6 @@ ALTER TABLE teacher_payments
     ADD COLUMN IF NOT EXISTS recipient_role TEXT NOT NULL DEFAULT 'teacher'
         CHECK (recipient_role IN ('teacher', 'principal', 'staff')),
     ADD COLUMN IF NOT EXISTS recipient_name TEXT;
-
 -- Index for filtering by type
 CREATE INDEX IF NOT EXISTS idx_teacher_payments_type
     ON teacher_payments(payment_type);

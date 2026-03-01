@@ -6,7 +6,6 @@
 -- Avoids partial saves and fixes schema mismatches (created_by, title).
 
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.save_ai_year_plan(
   p_preschool_id uuid,
   p_created_by uuid,
@@ -200,8 +199,5 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.save_ai_year_plan(uuid, uuid, jsonb) TO authenticated;
-
 COMMIT;
-

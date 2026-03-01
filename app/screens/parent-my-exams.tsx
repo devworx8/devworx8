@@ -5,7 +5,7 @@
  * Navigates to exam detail/interactive view for taking/retaking exams.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,13 +18,14 @@ import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { formatDistanceToNow } from 'date-fns';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface SavedExam {
   id: string;
   display_title: string;
   grade: string;
   subject: string;
-  generated_content: string;
+  generated_content: unknown;
   created_at: string;
   exam_type: string;
   progress?: {
@@ -40,6 +41,7 @@ export default function ParentMyExamsScreen() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = createStyles(theme, insets.bottom);
 
   const { data: exams = [], isLoading, refetch, isFetching } = useQuery({
@@ -68,9 +70,10 @@ export default function ParentMyExamsScreen() {
 
   const stats = useMemo(() => {
     const completed = exams.filter((e) => e.progress && e.progress.length > 0);
-    const scores = completed.map((e) => e.progress![0].percentage);
+    const scores = completed.flatMap((e) => (e.progress ?? []).map((p) => p.percentage));
     return {
       total: completed.length,
+      attempts: scores.length,
       avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
       best: scores.length > 0 ? Math.round(Math.max(...scores)) : 0,
     };
@@ -82,15 +85,33 @@ export default function ParentMyExamsScreen() {
     return '#ef4444';
   };
 
-  const handleOpenExam = (exam: SavedExam) => {
-    // Navigate to exam prep with the exam ID
+  const handleOpenExam = useCallback((exam: SavedExam, retake = false) => {
     router.push({
-      pathname: '/screens/dash-assistant',
+      pathname: '/screens/exam-generation',
       params: {
-        initialMessage: `Show me my practice exam "${exam.display_title}" for ${exam.subject} ${exam.grade.replace('grade_', 'Grade ')}`,
+        examId: exam.id,
+        grade: exam.grade,
+        subject: exam.subject,
+        examType: exam.exam_type || 'practice_test',
+        loadSaved: '1',
+        ...(retake ? { retake: '1' } : {}),
       },
     });
-  };
+  }, []);
+
+  const handleRetake = useCallback((exam: SavedExam) => {
+    showAlert({
+      title: t('exam.retake_confirm_title', { defaultValue: 'Start fresh attempt?' }),
+      message: t('exam.retake_confirm_message', {
+        defaultValue: 'Your previous score will be saved. This will start a new attempt with blank answers.',
+      }),
+      type: 'info',
+      buttons: [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        { text: t('exam.retake_confirm_cta', { defaultValue: 'Retake exam' }), onPress: () => handleOpenExam(exam, true) },
+      ],
+    });
+  }, [showAlert, t, handleOpenExam]);
 
   return (
     <View style={styles.container}>
@@ -145,8 +166,11 @@ export default function ParentMyExamsScreen() {
             </View>
           ) : (
             exams.map((exam) => {
-              const hasProgress = exam.progress && exam.progress.length > 0;
-              const latest = hasProgress ? exam.progress![0] : null;
+              const sortedProgress = (exam.progress ?? []).sort(
+                (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime(),
+              );
+              const hasProgress = sortedProgress.length > 0;
+              const latest = hasProgress ? sortedProgress[0] : null;
 
               return (
                 <View key={exam.id} style={styles.examCard}>
@@ -174,28 +198,43 @@ export default function ParentMyExamsScreen() {
                         📊 Score: {latest.score_obtained}/{latest.score_total} marks
                         {' · '}
                         🕐 {formatDistanceToNow(new Date(latest.completed_at), { addSuffix: true })}
+                        {sortedProgress.length > 1 && (
+                          <> · {sortedProgress.length} {t('exam.attempts', { defaultValue: 'attempts' })}</>
+                        )}
                       </Text>
+                      {sortedProgress.length > 1 && (
+                        <View style={styles.attemptHistory}>
+                          <Text style={styles.attemptHistoryLabel}>
+                            {t('exam.attempt_history', { defaultValue: 'Attempt history' })}:
+                          </Text>
+                          {sortedProgress.map((p, idx) => (
+                              <Text key={idx} style={styles.attemptItem}>
+                                {t('exam.attempt_n', { defaultValue: 'Attempt {{n}}', n: idx + 1 })}: {p.percentage.toFixed(0)}%
+                              </Text>
+                            ))}
+                        </View>
+                      )}
                     </View>
                   )}
 
                   <View style={styles.examActions}>
                     <TouchableOpacity
                       style={styles.primaryButton}
-                      onPress={() => handleOpenExam(exam)}
+                      onPress={() => handleOpenExam(exam, false)}
                     >
                       <Ionicons name={hasProgress ? 'bar-chart' : 'create'} size={16} color="#fff" />
                       <Text style={styles.primaryButtonText}>
-                        {hasProgress ? 'Review Exam' : 'Take Exam'}
+                        {hasProgress ? t('exam.review', { defaultValue: 'Review Exam' }) : t('exam.take', { defaultValue: 'Take Exam' })}
                       </Text>
                     </TouchableOpacity>
 
                     {hasProgress && (
                       <TouchableOpacity
                         style={styles.secondaryButton}
-                        onPress={() => handleOpenExam(exam)}
+                        onPress={() => handleRetake(exam)}
                       >
                         <Ionicons name="refresh" size={16} color={theme.primary} />
-                        <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>Retake</Text>
+                        <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>{t('exam.retake', { defaultValue: 'Retake' })}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -205,6 +244,7 @@ export default function ParentMyExamsScreen() {
           )}
         </ScrollView>
       )}
+      <AlertModal {...alertProps} />
     </View>
   );
 }
@@ -249,6 +289,9 @@ const createStyles = (theme: any, bottomInset: number) =>
     },
     scorePct: { fontSize: 22, fontWeight: '700', marginBottom: 4 },
     scoreMeta: { fontSize: 12, color: theme.textSecondary },
+    attemptHistory: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border },
+    attemptHistoryLabel: { fontSize: 11, fontWeight: '600', color: theme.textSecondary, marginBottom: 4 },
+    attemptItem: { fontSize: 12, color: theme.text, marginTop: 2 },
     examActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
     primaryButton: {
       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,

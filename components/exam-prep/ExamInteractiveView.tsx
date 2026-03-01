@@ -18,6 +18,8 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,9 +36,11 @@ import { ExamFooter } from './ExamFooter';
 interface ExamInteractiveViewProps {
   exam: ParsedExam;
   examId: string;
+  examLanguage?: string;
   studentId?: string;
   classId?: string;
   schoolId?: string;
+  retakeMode?: boolean;
   onComplete?: (results: ExamResults) => void;
   onExit?: () => void;
 }
@@ -57,9 +61,11 @@ const AUTO_SUBMIT_TYPES: ExamQuestion['type'][] = ['multiple_choice', 'true_fals
 export function ExamInteractiveView({
   exam,
   examId,
+  examLanguage,
   studentId,
   classId,
   schoolId,
+  retakeMode = false,
   onComplete,
   onExit,
 }: ExamInteractiveViewProps) {
@@ -71,6 +77,7 @@ export function ExamInteractiveView({
     submitAnswer,
     goToQuestion,
     completeExam,
+    resetExam,
     getProgress,
   } = useExamSession({
     examId,
@@ -96,6 +103,13 @@ export function ExamInteractiveView({
       return acc;
     }, []);
   }, [exam]);
+
+  // When retake mode, reset session on mount so user starts fresh
+  useEffect(() => {
+    if (retakeMode && resetExam) {
+      resetExam();
+    }
+  }, [retakeMode, resetExam]);
 
   const currentQuestionData = allQuestions[session?.currentQuestionIndex || 0];
   const currentQuestion = currentQuestionData?.question;
@@ -303,11 +317,23 @@ export function ExamInteractiveView({
         />
       </View>
 
-      {/* Content */}
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <ExamQuestionCard
+      {/* Content — keyboard-aware so Show Work composer stays visible */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
+          <ExamQuestionCard
           section={currentSection}
           question={currentQuestion}
+          examLanguage={examLanguage}
           currentIndex={currentIndex}
           currentAnswer={currentAnswer}
           studentAnswer={currentStudentAnswer}
@@ -316,9 +342,9 @@ export function ExamInteractiveView({
           onSelectOption={handleSelectOption}
           theme={theme as unknown as Record<string, string>}
         />
-      </ScrollView>
+        </ScrollView>
 
-      <ExamFooter
+        <ExamFooter
         currentIndex={currentIndex}
         totalQuestions={totalQuestions}
         questionType={currentQuestion.type}
@@ -332,12 +358,16 @@ export function ExamInteractiveView({
         onCompleteExam={handleCompleteExam}
         theme={theme as unknown as Record<string, string>}
       />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   loadingText: {

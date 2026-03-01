@@ -1,7 +1,7 @@
 /**
  * Voice-to-Text Transcription Hook (M14)
  *
- * Transcribes voice messages using the tts-proxy (STT mode) edge function.
+ * Transcribes voice messages using the stt-proxy edge function.
  * Caches transcriptions in memory so each message is only transcribed once.
  */
 
@@ -34,11 +34,11 @@ export function useVoiceTranscription(): UseVoiceTranscriptionReturn {
         try {
           const client = assertSupabase();
 
-          const { data, error } = await client.functions.invoke('tts-proxy', {
+          const { data, error } = await client.functions.invoke('stt-proxy', {
             body: {
-              action: 'transcribe',
               audio_url: audioUrl,
               language: 'auto',
+              auto_detect: true,
             },
           });
 

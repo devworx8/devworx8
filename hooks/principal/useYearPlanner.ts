@@ -159,6 +159,46 @@ export function useYearPlanner({ orgId, userId }: UseYearPlannerProps): UseYearP
     }
   };
 
+  const handlePublishPlan = useCallback(
+    async (academicYear?: number) => {
+      if (!orgId) {
+        Alert.alert('Error', 'Organization not found');
+        return;
+      }
+      const year =
+        academicYear ??
+        (terms.length > 0
+          ? Math.max(...terms.map((t) => t.academic_year))
+          : new Date().getFullYear());
+      try {
+        const supabase = assertSupabase();
+        const { data, error } = await supabase.rpc('publish_year_plan', {
+          p_preschool_id: orgId,
+          p_academic_year: year,
+        });
+        if (error) throw error;
+        const d = data as { terms_published?: number; themes_published?: number };
+        const termsCount = d?.terms_published ?? 0;
+        const themesCount = d?.themes_published ?? 0;
+        if (termsCount === 0 && themesCount === 0) {
+          Alert.alert(
+            'No plan to publish',
+            `No terms or themes found for ${year}. Save a plan from AI Year Planner first.`,
+          );
+          return;
+        }
+        Alert.alert(
+          'Plan published',
+          `${themesCount} theme(s) are now visible to teachers for lesson alignment.`,
+        );
+        fetchTerms();
+      } catch (err: unknown) {
+        Alert.alert('Publish failed', err instanceof Error ? err.message : 'Could not publish plan.');
+      }
+    },
+    [orgId, terms, fetchTerms],
+  );
+
   return {
     terms,
     monthlyEntries,
@@ -169,5 +209,6 @@ export function useYearPlanner({ orgId, userId }: UseYearPlannerProps): UseYearP
     handleSubmit,
     handleDelete,
     handleTogglePublish,
+    handlePublishPlan,
   };
 }

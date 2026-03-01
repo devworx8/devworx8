@@ -5,7 +5,6 @@
 -- Revoke execute from all roles
 REVOKE EXECUTE ON FUNCTION public.get_service_role_key()
     FROM PUBLIC, authenticated, anon;
-
 -- Add internal guard to the function body
 CREATE OR REPLACE FUNCTION public.get_service_role_key()
 RETURNS text
@@ -27,6 +26,5 @@ BEGIN
     );
 END;
 $$;
-
 -- Re-grant only to service_role (postgres role used by service key)
 GRANT EXECUTE ON FUNCTION public.get_service_role_key() TO service_role;

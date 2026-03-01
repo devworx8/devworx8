@@ -247,6 +247,28 @@ export default function ParentPaymentsScreen() {
           theme={theme} 
         />
 
+        {/* Always-visible Upload POP button */}
+        {selectedChild && (
+          <TouchableOpacity
+            style={[styles.uploadPopButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setSelectedFeeAmount('');
+              setSelectedFeeReference('');
+              setSelectedPaymentPurpose('School Fees');
+              setSelectedFeeId(undefined);
+              setSelectedFeeDueDate(undefined);
+              setShowUploadModal(true);
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 16 }}>📸</Text>
+              </View>
+              <Text style={styles.uploadPopButtonText}>Upload Proof of Payment</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Next Payment */}
         <NextPaymentCard upcomingFees={upcomingFees} theme={theme} />
 
@@ -365,6 +387,17 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginTop: 12,
     color: theme.textSecondary,
     fontSize: 14,
+  },
+  uploadPopButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
+  uploadPopButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,

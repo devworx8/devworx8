@@ -13,16 +13,29 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { consumeExamGenerationDraft } from '@/lib/exam-prep/generationDraftStore';
 import { parseExamMarkdown, type ParsedExam } from '@/lib/examParser';
 import { ExamInteractiveView, type ExamResults } from '@/components/exam-prep/ExamInteractiveView';
+import { ExamFlashcardsView } from '@/components/exam-prep/ExamFlashcardsView';
+import { ExamRevisionNotesView } from '@/components/exam-prep/ExamRevisionNotesView';
+import { ExamStudyGuideView } from '@/components/exam-prep/ExamStudyGuideView';
+import {
+  coerceExamArtifactType,
+  parseExamGenerationPayload,
+} from '@/components/exam-prep/examArtifactHelpers';
 import type {
+  ExamArtifact,
+  ExamArtifactType,
   ExamBlueprintAudit,
   ExamContextSummary,
   ExamGenerationResponse,
+  ExamScopeDiagnostics,
   ExamStudyCoachPack,
   ExamTeacherAlignmentSummary,
 } from '@/components/exam-prep/types';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { QuotaRingWithStatus } from '@/components/ui/CircularQuotaRing';
+import { useAIUserLimits } from '@/hooks/useAI';
 
 type GenerationState = 'loading' | 'error' | 'ready';
 
@@ -34,6 +47,25 @@ function toSafeParam(value: string | string[] | undefined): string | undefined {
 function toBool(value: string | undefined, fallback: boolean): boolean {
   if (!value) return fallback;
   return value === '1' || value.toLowerCase() === 'true';
+}
+
+function toNumberMap(input: unknown): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const map: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    map[key] = Math.max(0, numeric);
+  }
+  return map;
+}
+
+function pickQuotaValue(map: Record<string, number>, keys: string[]): number {
+  for (const key of keys) {
+    const value = map[key];
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
 }
 
 export default function ExamGenerationScreen() {
@@ -49,6 +81,10 @@ export default function ExamGenerationScreen() {
     schoolId?: string;
     childName?: string;
     useTeacherContext?: string;
+    draftId?: string;
+    examId?: string;
+    loadSaved?: string;
+    retake?: string;
   }>();
 
   const grade = toSafeParam(params.grade);
@@ -60,12 +96,56 @@ export default function ExamGenerationScreen() {
   const schoolId = toSafeParam(params.schoolId);
   const childName = toSafeParam(params.childName);
   const useTeacherContext = toBool(toSafeParam(params.useTeacherContext), true);
+  const draftId = toSafeParam(params.draftId);
+  const savedExamId = toSafeParam(params.examId);
+  const loadSaved = toBool(toSafeParam(params.loadSaved), false);
+  const retakeMode = toBool(toSafeParam(params.retake), false);
+  const [generationDraft] = useState(() => consumeExamGenerationDraft(draftId));
+  const customPrompt = generationDraft?.customPrompt?.trim() || '';
+  const usesUploadedMaterial = useMemo(
+    () =>
+      Boolean(
+        customPrompt &&
+          (customPrompt.includes('Study material extracted') ||
+            customPrompt.includes('uploaded images') ||
+            customPrompt.includes('uploaded material') ||
+            customPrompt.includes('Study Notes')),
+      ),
+    [customPrompt],
+  );
 
+  const { data: aiLimits } = useAIUserLimits();
+  const quotaMap = useMemo(() => toNumberMap((aiLimits as any)?.quotas), [aiLimits]);
+  const usedMap = useMemo(
+    () => toNumberMap((aiLimits as any)?.used ?? (aiLimits as any)?.current_usage),
+    [aiLimits],
+  );
+  const examQuotaKeys = useMemo(
+    () => ['exam_generation', 'grading_assistance', 'lesson_generation'],
+    [],
+  );
+  const examQuotaLimit = useMemo(
+    () => pickQuotaValue(quotaMap, examQuotaKeys),
+    [quotaMap, examQuotaKeys],
+  );
+  const examQuotaUsed = useMemo(
+    () => pickQuotaValue(usedMap, examQuotaKeys),
+    [usedMap, examQuotaKeys],
+  );
+  const examQuotaRemaining = Math.max(0, examQuotaLimit - examQuotaUsed);
+  const examQuotaWarning = examQuotaLimit > 0 && examQuotaRemaining <= 0
+    ? 'Monthly exam quota appears exhausted.'
+    : examQuotaLimit > 0 && examQuotaRemaining <= 2
+      ? `Low exam quota: ${examQuotaRemaining} left this month.`
+      : null;
   const [state, setState] = useState<GenerationState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [exam, setExam] = useState<ParsedExam | null>(null);
+  const [artifactType, setArtifactType] = useState<ExamArtifactType>('practice_test');
+  const [artifact, setArtifact] = useState<ExamArtifact | null>(null);
   const [examId, setExamId] = useState<string>('');
   const [contextSummary, setContextSummary] = useState<ExamContextSummary | null>(null);
+  const [scopeDiagnostics, setScopeDiagnostics] = useState<ExamScopeDiagnostics | null>(null);
   const [teacherAlignment, setTeacherAlignment] = useState<ExamTeacherAlignmentSummary | null>(null);
   const [blueprintAudit, setBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
   const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
@@ -75,6 +155,7 @@ export default function ExamGenerationScreen() {
   // audit + study coach collapsed by default on small screens.
   const [showAudit, setShowAudit] = useState(false);
   const hasGenerationWarning = useMemo(() => Boolean(persistenceWarning && persistenceWarning.trim().length > 0), [persistenceWarning]);
+  const isPracticeArtifact = artifactType === 'practice_test';
 
   const generationLabel = useMemo(() => {
     if (!grade || !subject) return 'Preparing generation request...';
@@ -120,6 +201,7 @@ export default function ExamGenerationScreen() {
           subject,
           examType,
           language,
+          customPrompt: customPrompt || undefined,
           studentId,
           classId,
           schoolId,
@@ -150,22 +232,42 @@ export default function ExamGenerationScreen() {
       }
 
       const response = data as ExamGenerationResponse;
-      if (!response?.success || !response?.exam) {
+      if (!response?.success) {
         throw new Error(response?.error || 'Generation failed. Please try again.');
       }
 
-      const parsed = parseExamPayload(response.exam);
-      if (!parsed || !parsed.sections?.length) {
-        throw new Error('Generated exam format was invalid. Please retry.');
+      const parsedPayload = parseExamGenerationPayload(
+        {
+          artifactType: response.artifactType,
+          artifact: response.artifact,
+          exam: response.exam,
+        },
+        parseExamPayload,
+        coerceExamArtifactType(response.artifactType, coerceExamArtifactType(examType, 'practice_test')),
+      );
+
+      if (parsedPayload.artifactType === 'practice_test') {
+        if (!parsedPayload.exam || !parsedPayload.exam.sections?.length) {
+          throw new Error('Generated exam format was invalid. Please retry.');
+        }
+        setExam({
+          ...parsedPayload.exam,
+          grade: parsedPayload.exam.grade || grade,
+          subject: parsedPayload.exam.subject || subject,
+        });
+        setArtifact(null);
+      } else {
+        if (!parsedPayload.artifact) {
+          throw new Error('Generated study artifact format was invalid. Please retry.');
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(parsedPayload.artifact);
       }
 
-      setExam({
-        ...parsed,
-        grade: parsed.grade || grade,
-        subject: parsed.subject || subject,
-      });
+      setArtifactType(parsedPayload.artifactType);
       setExamId(response.examId || `temp-${Date.now()}`);
       setContextSummary(response.contextSummary || null);
+      setScopeDiagnostics(response.scopeDiagnostics || null);
       setTeacherAlignment(response.teacherAlignment || null);
       setBlueprintAudit(response.examBlueprintAudit || null);
       setStudyCoachPack(response.studyCoachPack || null);
@@ -176,11 +278,77 @@ export default function ExamGenerationScreen() {
       setError(message);
       setState('error');
     }
-  }, [grade, subject, examType, language, studentId, classId, schoolId, useTeacherContext, parseExamPayload]);
+  }, [
+    grade,
+    subject,
+    examType,
+    language,
+    customPrompt,
+    studentId,
+    classId,
+    schoolId,
+    useTeacherContext,
+    parseExamPayload,
+  ]);
+
+  const loadSavedExam = useCallback(async () => {
+    if (!savedExamId) return;
+    setState('loading');
+    setError(null);
+    try {
+      const supabase = assertSupabase();
+      const { data, error: fetchError } = await supabase
+        .from('exam_generations')
+        .select('id, generated_content, display_title, grade, subject, exam_type')
+        .eq('id', savedExamId)
+        .single();
+
+      if (fetchError || !data) {
+        setError('Could not load saved exam. It may have been deleted.');
+        setState('error');
+        return;
+      }
+
+      const parsedPayload = parseExamGenerationPayload(
+        data.generated_content,
+        parseExamPayload,
+        coerceExamArtifactType(data.exam_type, 'practice_test'),
+      );
+
+      if (parsedPayload.artifactType === 'practice_test') {
+        if (!parsedPayload.exam || parsedPayload.exam.sections.length === 0) {
+          setError('Exam content could not be parsed.');
+          setState('error');
+          return;
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(null);
+      } else {
+        if (!parsedPayload.artifact) {
+          setError('Study artifact content could not be parsed.');
+          setState('error');
+          return;
+        }
+        setExam(parsedPayload.exam);
+        setArtifact(parsedPayload.artifact);
+      }
+
+      setArtifactType(parsedPayload.artifactType);
+      setExamId(data.id);
+      setState('ready');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load exam');
+      setState('error');
+    }
+  }, [savedExamId, parseExamPayload]);
 
   useEffect(() => {
-    generateExam();
-  }, [generateExam]);
+    if (loadSaved && savedExamId) {
+      loadSavedExam();
+    } else {
+      generateExam();
+    }
+  }, [loadSaved, savedExamId, loadSavedExam, generateExam]);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -193,7 +361,15 @@ export default function ExamGenerationScreen() {
     []
   );
 
-  if (state === 'ready' && exam) {
+  const readyWithPayload =
+    state === 'ready' &&
+    ((isPracticeArtifact && !!exam) || (!isPracticeArtifact && !!artifact));
+
+  if (readyWithPayload) {
+    const canShowAuditToggle =
+      Boolean(contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) &&
+      (isPracticeArtifact ? Boolean(completionSummary) : true);
+
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -204,7 +380,15 @@ export default function ExamGenerationScreen() {
               <Text style={[styles.warningText, { color: theme.warning }]}>{persistenceWarning}</Text>
             </View>
           ) : null}
-          {completionSummary ? (
+          {usesUploadedMaterial ? (
+            <View style={[styles.warningBanner, { borderColor: `${theme.primary}55`, backgroundColor: `${theme.primary}18` }]}>
+              <Ionicons name="document-attach-outline" size={16} color={theme.primary} />
+              <Text style={[styles.warningText, { color: theme.primary }]}>
+                Using uploaded material / Images / PDFs / Study Notes
+              </Text>
+            </View>
+          ) : null}
+          {isPracticeArtifact && completionSummary ? (
             <View style={[styles.completionBanner, { borderColor: `${theme.success}55`, backgroundColor: `${theme.success}18` }]}>
               <View style={styles.completionBannerLeft}>
                 <Ionicons name="checkmark-circle" size={18} color={theme.success} />
@@ -216,7 +400,7 @@ export default function ExamGenerationScreen() {
             </View>
           ) : null}
           {/* Compact toggle — only shown after exam is completed so it doesn't distract during the test */}
-          {completionSummary && (contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) && (
+          {canShowAuditToggle && (
             <View style={[styles.auditToggleRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
               <TouchableOpacity
                 style={styles.auditToggleButton}
@@ -257,6 +441,11 @@ export default function ExamGenerationScreen() {
                   Blueprint: {blueprintAudit.actualQuestions} questions ({blueprintAudit.minQuestions}-{blueprintAudit.maxQuestions}) • {blueprintAudit.totalMarks} marks
                 </Text>
               ) : null}
+              {scopeDiagnostics ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Scope: student {scopeDiagnostics.effectiveStudentId || 'none'} • class {scopeDiagnostics.effectiveClassId || 'none'} • school {scopeDiagnostics.effectiveSchoolId || 'none'}
+                </Text>
+              ) : null}
             </View>
           ) : null}
           {showAudit && studyCoachPack ? (
@@ -287,15 +476,29 @@ export default function ExamGenerationScreen() {
             </View>
           ) : null}
           <View style={styles.examViewWrap}>
-            <ExamInteractiveView
-              exam={exam}
-              examId={examId}
-              studentId={studentId}
-              classId={classId}
-              schoolId={schoolId}
-              onComplete={handleComplete}
-              onExit={handleBack}
-            />
+            {isPracticeArtifact && exam ? (
+              <ExamInteractiveView
+                exam={exam}
+                examId={examId}
+                examLanguage={language}
+                studentId={studentId}
+                classId={classId}
+                schoolId={schoolId}
+                retakeMode={retakeMode}
+                onComplete={handleComplete}
+                onExit={handleBack}
+              />
+            ) : artifact?.type === 'flashcards' ? (
+              <ExamFlashcardsView artifact={artifact.flashcards} theme={theme} />
+            ) : artifact?.type === 'revision_notes' ? (
+              <ExamRevisionNotesView artifact={artifact.revisionNotes} theme={theme} />
+            ) : artifact?.type === 'study_guide' ? (
+              <ExamStudyGuideView artifact={artifact.studyGuide} theme={theme} />
+            ) : (
+              <View style={styles.centerBlock}>
+                <Text style={[styles.errorText, { color: theme.muted }]}>No study artifact to display.</Text>
+              </View>
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -328,6 +531,22 @@ export default function ExamGenerationScreen() {
             <Text style={[styles.loadingTitle, { color: theme.text }]}>Please wait...</Text>
             <Text style={[styles.loadingText, { color: theme.muted }]}>{generationLabel}</Text>
             <Text style={[styles.loadingSubtext, { color: theme.muted }]}>Using {useTeacherContext ? 'teacher artifacts + CAPS' : 'CAPS baseline'} to build this paper.</Text>
+            {examQuotaLimit > 0 ? (
+              <View style={{ marginTop: 24 }}>
+                <QuotaRingWithStatus
+                  featureName="Exam prep"
+                  used={examQuotaUsed}
+                  limit={examQuotaLimit}
+                  isGenerating
+                  size={70}
+                />
+              </View>
+            ) : null}
+            {examQuotaWarning ? (
+              <Text style={[styles.quotaWarningText, { color: theme.warning }]}>
+                {examQuotaWarning}
+              </Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.centerBlock}>
@@ -336,6 +555,11 @@ export default function ExamGenerationScreen() {
             </View>
             <Text style={[styles.errorTitle, { color: theme.text }]}>Generation failed</Text>
             <Text style={[styles.errorText, { color: theme.muted }]}>{error || 'Please try again.'}</Text>
+            {examQuotaWarning ? (
+              <Text style={[styles.quotaWarningText, { color: theme.warning }]}>
+                {examQuotaWarning}
+              </Text>
+            ) : null}
 
             {contextSummary ? (
               <Text style={[styles.contextNote, { color: theme.muted }]}>
@@ -549,6 +773,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     fontSize: 12,
+  },
+  quotaWarningText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
   },
   errorIconWrap: {
     width: 56,

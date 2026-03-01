@@ -32,7 +32,7 @@ const DEFAULT_ROUTES: Record<DoNowItemId, string> = {
   registrations: '/screens/principal-registrations',
   payment_proofs: '/screens/pop-review',
   unpaid_fees: '/screens/finance-control-center?tab=receivables',
-  approvals: '/screens/principal-approval-dashboard',
+  approvals: '/screens/pop-review',
 };
 
 export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts, routes, hideFinanceItems = false }) => {

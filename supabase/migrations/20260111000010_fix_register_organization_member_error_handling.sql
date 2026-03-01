@@ -277,7 +277,6 @@ EXCEPTION
     );
 END;
 $function$;
-
 COMMENT ON FUNCTION public.register_organization_member IS 
 'Registers a new organization member with automatic wing assignment based on member_type. 
 Wing is set to: youth (for youth_* types), women (for women_* types), veterans (for veterans_* types), or main (for others).

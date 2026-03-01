@@ -118,9 +118,6 @@ export async function fetchParentChildren(
     if (!includeInactive) {
       directQuery = directQuery.eq('is_active', true);
     }
-    if (schoolId) {
-      directQuery = directQuery.eq('preschool_id', schoolId);
-    }
 
     const { data: directChildren, error: directError } = await directQuery;
     
@@ -156,9 +153,6 @@ export async function fetchParentChildren(
       if (!includeInactive) {
         junctionQuery = junctionQuery.eq('is_active', true);
       }
-      if (schoolId) {
-        junctionQuery = junctionQuery.eq('preschool_id', schoolId);
-      }
 
       const { data: junctionData, error: junctionError } = await junctionQuery;
       
@@ -189,7 +183,16 @@ export async function fetchParentChildren(
     const allChildren = [...(directChildren || []), ...junctionChildren];
     const uniqueChildren = deduplicateById(allChildren);
 
-    return uniqueChildren as ChildBasicInfo[];
+    if (!schoolId) {
+      return uniqueChildren as ChildBasicInfo[];
+    }
+
+    // K-12 deployments can store school linkage in either preschool_id or organization_id.
+    const filteredChildren = uniqueChildren.filter((child) =>
+      child.preschool_id === schoolId || child.organization_id === schoolId
+    );
+
+    return filteredChildren as ChildBasicInfo[];
   } catch (error) {
     console.error('[fetchParentChildren] Error:', error);
     return [];

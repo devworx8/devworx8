@@ -31,6 +31,7 @@ type ProbeResult = {
 const MONITORED_ENDPOINTS: MonitoredEndpoint[] = [
   { serviceName: 'service-health-monitor', category: 'monitoring', functionPath: 'service-health-monitor' },
   { serviceName: 'ai-proxy', category: 'ai', functionPath: 'ai-proxy' },
+  { serviceName: 'cost-aggregator', category: 'monitoring', functionPath: 'cost-aggregator' },
   { serviceName: 'notifications-dispatcher', category: 'communication', functionPath: 'notifications-dispatcher' },
   { serviceName: 'daily-token', category: 'voice', functionPath: 'daily-token' },
   { serviceName: 'payfast-webhook', category: 'payment', functionPath: 'payfast-webhook' },

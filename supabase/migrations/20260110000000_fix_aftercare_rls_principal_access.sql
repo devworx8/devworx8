@@ -4,7 +4,6 @@
 
 -- Drop the existing policy
 DROP POLICY IF EXISTS "principals_select_aftercare_own_school" ON public.aftercare_registrations;
-
 -- Create a simpler, more robust policy
 CREATE POLICY "principals_select_aftercare_own_school"
 ON public.aftercare_registrations
@@ -20,10 +19,8 @@ USING (
     AND aftercare_registrations.preschool_id = COALESCE(p.organization_id, p.preschool_id)
   )
 );
-
 -- Also update the UPDATE policy to use the same pattern
 DROP POLICY IF EXISTS "principals_update_aftercare" ON public.aftercare_registrations;
-
 CREATE POLICY "principals_update_aftercare"
 ON public.aftercare_registrations
 FOR UPDATE
@@ -48,6 +45,5 @@ WITH CHECK (
     AND aftercare_registrations.preschool_id = COALESCE(p.organization_id, p.preschool_id)
   )
 );
-
 -- Ensure RLS is enabled
 ALTER TABLE public.aftercare_registrations ENABLE ROW LEVEL SECURITY;

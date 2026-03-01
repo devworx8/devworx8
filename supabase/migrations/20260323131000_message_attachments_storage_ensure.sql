@@ -2,7 +2,6 @@
 -- Version 20260323130000 may already be in schema_migrations; this migration uses a new version.
 
 BEGIN;
-
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'message-attachments',
@@ -25,7 +24,6 @@ DO UPDATE SET
     public = EXCLUDED.public,
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
-
 DROP POLICY IF EXISTS "message_attachments_insert" ON storage.objects;
 CREATE POLICY "message_attachments_insert" ON storage.objects
     FOR INSERT TO authenticated
@@ -33,10 +31,8 @@ CREATE POLICY "message_attachments_insert" ON storage.objects
         bucket_id = 'message-attachments'
         AND (storage.foldername(name))[1] = auth.uid()::text
     );
-
 DROP POLICY IF EXISTS "message_attachments_select" ON storage.objects;
 CREATE POLICY "message_attachments_select" ON storage.objects
     FOR SELECT TO authenticated
     USING (bucket_id = 'message-attachments');
-
 COMMIT;

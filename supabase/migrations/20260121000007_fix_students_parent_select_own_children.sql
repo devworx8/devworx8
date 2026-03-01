@@ -5,7 +5,6 @@
 
 -- Drop the existing parent search policy (it was only for searching students in school)
 DROP POLICY IF EXISTS students_parent_search_in_school ON students;
-
 -- Create a comprehensive policy that allows parents to:
 -- 1. SELECT their own children (by parent_id or guardian_id)
 -- 2. Search for other students in their school (for "claim child" feature)
@@ -28,7 +27,6 @@ USING (
     )
   )
 );
-
 -- Add comment explaining the policy
 COMMENT ON POLICY students_parent_access ON students IS 
 'Allows parents to: 1) View their own children (parent_id/guardian_id match), 2) Search students in their school for claiming';

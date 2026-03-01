@@ -2,7 +2,6 @@
 -- Idempotent: can run repeatedly across environments.
 
 BEGIN;
-
 DO $$
 BEGIN
   IF to_regclass('storage.buckets') IS NULL THEN
@@ -25,7 +24,6 @@ BEGIN
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 END
 $$;
-
 DO $$
 BEGIN
   IF to_regclass('storage.objects') IS NULL THEN
@@ -113,5 +111,4 @@ BEGIN
     );
 END
 $$;
-
 COMMIT;

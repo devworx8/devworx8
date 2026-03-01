@@ -14,20 +14,15 @@
 ALTER TABLE fee_structures
   ADD COLUMN IF NOT EXISTS age_min_months integer,
   ADD COLUMN IF NOT EXISTS age_max_months integer;
-
 COMMENT ON COLUMN fee_structures.age_min_months IS 'Minimum age in months (inclusive) for this fee tier';
 COMMENT ON COLUMN fee_structures.age_max_months IS 'Maximum age in months (inclusive) for this fee tier';
-
 -- Backfill the existing Young Eagles fee tiers
 UPDATE fee_structures SET age_min_months = 6, age_max_months = 11
 WHERE name ILIKE '%Infant%' AND fee_type = 'tuition' AND is_active = true;
-
 UPDATE fee_structures SET age_min_months = 12, age_max_months = 47
 WHERE name ILIKE '%1-3%' AND fee_type = 'tuition' AND is_active = true;
-
 UPDATE fee_structures SET age_min_months = 48, age_max_months = 83
 WHERE name ILIKE '%4-6%' AND fee_type = 'tuition' AND is_active = true;
-
 -- ---------------------------------------------------------------------------
 -- 2. get_tuition_fee_for_age() — deterministic fee lookup
 -- ---------------------------------------------------------------------------
@@ -71,11 +66,9 @@ BEGIN
   LIMIT 1;
 END;
 $$;
-
 COMMENT ON FUNCTION get_tuition_fee_for_age IS
   'Returns the correct tuition fee structure for a child based on their age. '
   'Uses age_min_months / age_max_months on fee_structures for deterministic matching.';
-
 -- ---------------------------------------------------------------------------
 -- 3. Fix wrong fee assignments — update PENDING/OVERDUE fees only
 --    (paid fees are historical records and stay as-is)
@@ -98,7 +91,6 @@ WHERE sf.student_id = s.id
   )
   AND sf.amount != correct.fee_amount
   AND correct.fee_structure_id IS NOT NULL;
-
 -- ---------------------------------------------------------------------------
 -- 4. Trigger: auto-correct fee on INSERT into student_fees
 -- ---------------------------------------------------------------------------
@@ -150,23 +142,19 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_validate_student_fee_insert ON student_fees;
 CREATE TRIGGER trg_validate_student_fee_insert
   BEFORE INSERT ON student_fees
   FOR EACH ROW
   EXECUTE FUNCTION trg_validate_student_fee();
-
 -- ---------------------------------------------------------------------------
 -- 5. Advance payment support on pop_uploads
 -- ---------------------------------------------------------------------------
 ALTER TABLE pop_uploads
   ADD COLUMN IF NOT EXISTS advance_months integer DEFAULT 0,
   ADD COLUMN IF NOT EXISTS covers_months date[] DEFAULT '{}';
-
 COMMENT ON COLUMN pop_uploads.advance_months IS 'Number of months this POP covers beyond the current month';
 COMMENT ON COLUMN pop_uploads.covers_months IS 'Array of billing_month dates this POP payment covers';
-
 -- ---------------------------------------------------------------------------
 -- 6. RPC: assign_correct_fee_for_student — callable from client
 -- ---------------------------------------------------------------------------
@@ -249,11 +237,9 @@ BEGIN
   END IF;
 END;
 $$;
-
 COMMENT ON FUNCTION assign_correct_fee_for_student IS
   'Assigns or corrects the tuition fee for a student for a given billing month. '
   'Uses age-based fee lookup. Can be called by principals/admins.';
-
 -- Grant execute to authenticated users (RLS on underlying tables still applies)
 GRANT EXECUTE ON FUNCTION assign_correct_fee_for_student TO authenticated;
 GRANT EXECUTE ON FUNCTION get_tuition_fee_for_age TO authenticated;

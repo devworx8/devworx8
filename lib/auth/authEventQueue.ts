@@ -30,7 +30,12 @@ interface QueueItem {
 }
 
 /** Maximum time (ms) a single handler is allowed to run. */
-const HANDLER_TIMEOUT_MS = 15_000;
+const HANDLER_TIMEOUT_MS = 30_000;
+const MAX_PENDING_EVENTS = 40;
+
+function sessionUserId(session: Session | null): string | null {
+  return session?.user?.id ?? null;
+}
 
 class AuthEventQueue {
   private queue: QueueItem[] = [];
@@ -44,9 +49,44 @@ class AuthEventQueue {
     session: Session | null,
     handler: EventHandler
   ): void {
+    const nextUserId = sessionUserId(session);
+
     // Collapse redundant SIGNED_OUT — keep only the latest
     if (event === 'SIGNED_OUT') {
-      this.queue = this.queue.filter((q) => q.event !== 'SIGNED_OUT');
+      this.queue = this.queue.filter((q) => q.event !== 'SIGNED_OUT' && q.event !== 'TOKEN_REFRESHED');
+    }
+
+    // Collapse TOKEN_REFRESHED bursts for the same user. Only latest matters.
+    if (event === 'TOKEN_REFRESHED') {
+      this.queue = this.queue.filter((q) => {
+        if (q.event !== 'TOKEN_REFRESHED') return true;
+        const queuedUser = sessionUserId(q.session);
+        if (!nextUserId || !queuedUser) return false;
+        return queuedUser !== nextUserId;
+      });
+    }
+
+    // SIGNED_IN supersedes pending TOKEN_REFRESHED/SIGNED_IN for the same user.
+    if (event === 'SIGNED_IN') {
+      this.queue = this.queue.filter((q) => {
+        const queuedUser = sessionUserId(q.session);
+        const sameUser = !!nextUserId && !!queuedUser && queuedUser === nextUserId;
+        if (!sameUser) return true;
+        return q.event !== 'SIGNED_IN' && q.event !== 'TOKEN_REFRESHED';
+      });
+    }
+
+    // Guardrail: avoid unbounded queue growth under noisy auth emitters.
+    if (this.queue.length >= MAX_PENDING_EVENTS) {
+      const dropIndex = this.queue.findIndex((item) => item.event === 'TOKEN_REFRESHED');
+      if (dropIndex >= 0) {
+        this.queue.splice(dropIndex, 1);
+      } else {
+        this.queue.shift();
+      }
+      logger.warn('AuthEventQueue', 'Dropped one pending auth event due to queue pressure', {
+        pending_after_drop: this.queue.length,
+      });
     }
 
     this.queue.push({ event, session, handler, enqueuedAt: Date.now() });

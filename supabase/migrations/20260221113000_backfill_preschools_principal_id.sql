@@ -2,13 +2,10 @@
 -- Non-destructive: updates only rows where principal_id is currently NULL.
 
 BEGIN;
-
 ALTER TABLE public.preschools
   ADD COLUMN IF NOT EXISTS principal_id uuid;
-
 CREATE INDEX IF NOT EXISTS idx_preschools_principal_id
   ON public.preschools(principal_id);
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -24,7 +21,6 @@ BEGIN
   END IF;
 END;
 $$;
-
 WITH principal_candidates AS (
   SELECT
     COALESCE(p.organization_id, p.preschool_id) AS school_id,
@@ -48,5 +44,4 @@ SET principal_id = rp.principal_profile_id
 FROM resolved_principals rp
 WHERE s.id = rp.school_id
   AND s.principal_id IS NULL;
-
 COMMIT;

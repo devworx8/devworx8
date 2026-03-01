@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS dash_learning_progress (
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id, subject, topic)
 );
-
 -- AI-generated quiz questions
 CREATE TABLE IF NOT EXISTS dash_quiz_questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,7 +49,6 @@ CREATE TABLE IF NOT EXISTS dash_quiz_questions (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- Quiz sessions (a user taking a quiz)
 CREATE TABLE IF NOT EXISTS dash_quiz_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,7 +72,6 @@ CREATE TABLE IF NOT EXISTS dash_quiz_sessions (
   completed_at TIMESTAMPTZ,
   metadata JSONB DEFAULT '{}'::jsonb
 );
-
 -- Individual answers within a session
 CREATE TABLE IF NOT EXISTS dash_quiz_answers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,7 +83,6 @@ CREATE TABLE IF NOT EXISTS dash_quiz_answers (
   time_taken_seconds INT DEFAULT 0,
   answered_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- Achievement/badge definitions
 CREATE TABLE IF NOT EXISTS dash_achievements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -104,7 +100,6 @@ CREATE TABLE IF NOT EXISTS dash_achievements (
   xp_reward INT DEFAULT 10,
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- User earned achievements
 CREATE TABLE IF NOT EXISTS dash_user_achievements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -114,7 +109,6 @@ CREATE TABLE IF NOT EXISTS dash_user_achievements (
   metadata JSONB DEFAULT '{}'::jsonb,
   UNIQUE(user_id, achievement_id)
 );
-
 -- Spaced repetition schedule (SM-2 algorithm)
 CREATE TABLE IF NOT EXISTS dash_review_schedule (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -130,7 +124,6 @@ CREATE TABLE IF NOT EXISTS dash_review_schedule (
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id, question_id)
 );
-
 -- ============================================
 -- Indexes
 -- ============================================
@@ -150,7 +143,6 @@ CREATE INDEX IF NOT EXISTS idx_review_schedule_due
   ON dash_review_schedule(user_id, next_review_date);
 CREATE INDEX IF NOT EXISTS idx_user_achievements_user
   ON dash_user_achievements(user_id);
-
 -- ============================================
 -- RLS Policies
 -- ============================================
@@ -161,16 +153,13 @@ ALTER TABLE dash_quiz_answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dash_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dash_user_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dash_review_schedule ENABLE ROW LEVEL SECURITY;
-
 -- Learning progress: users see their own, teachers see org members
 CREATE POLICY "Users view own learning progress"
   ON dash_learning_progress FOR SELECT
   USING (auth.uid() = user_id);
-
 CREATE POLICY "Users update own learning progress"
   ON dash_learning_progress FOR ALL
   USING (auth.uid() = user_id);
-
 CREATE POLICY "Teachers view org learning progress"
   ON dash_learning_progress FOR SELECT
   USING (
@@ -179,7 +168,6 @@ CREATE POLICY "Teachers view org learning progress"
       WHERE user_id = auth.uid() AND role IN ('teacher', 'principal_admin')
     )
   );
-
 -- Quiz questions: read by anyone in org, write by teachers/admins
 CREATE POLICY "Read quiz questions in org"
   ON dash_quiz_questions FOR SELECT
@@ -189,18 +177,15 @@ CREATE POLICY "Read quiz questions in org"
       SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
     )
   );
-
 CREATE POLICY "Teachers create quiz questions"
   ON dash_quiz_questions FOR INSERT
   WITH CHECK (
     auth.uid() = created_by
   );
-
 -- Quiz sessions: users see their own
 CREATE POLICY "Users manage own quiz sessions"
   ON dash_quiz_sessions FOR ALL
   USING (auth.uid() = user_id);
-
 CREATE POLICY "Teachers view org quiz sessions"
   ON dash_quiz_sessions FOR SELECT
   USING (
@@ -209,7 +194,6 @@ CREATE POLICY "Teachers view org quiz sessions"
       WHERE user_id = auth.uid() AND role IN ('teacher', 'principal_admin')
     )
   );
-
 -- Quiz answers: accessible through session ownership
 CREATE POLICY "Users manage own quiz answers"
   ON dash_quiz_answers FOR ALL
@@ -218,26 +202,21 @@ CREATE POLICY "Users manage own quiz answers"
       SELECT id FROM dash_quiz_sessions WHERE user_id = auth.uid()
     )
   );
-
 -- Achievements: readable by all, admin-managed
 CREATE POLICY "Anyone can read achievements"
   ON dash_achievements FOR SELECT
   USING (true);
-
 -- User achievements: users see their own
 CREATE POLICY "Users view own achievements"
   ON dash_user_achievements FOR SELECT
   USING (auth.uid() = user_id);
-
 CREATE POLICY "System inserts user achievements"
   ON dash_user_achievements FOR INSERT
   WITH CHECK (auth.uid() = user_id);
-
 -- Review schedule: users manage their own
 CREATE POLICY "Users manage own review schedule"
   ON dash_review_schedule FOR ALL
   USING (auth.uid() = user_id);
-
 -- ============================================
 -- Seed: Default Achievements
 -- ============================================

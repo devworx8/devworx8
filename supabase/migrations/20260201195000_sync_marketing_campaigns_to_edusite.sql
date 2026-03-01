@@ -9,7 +9,6 @@ BEGIN
       RAISE NOTICE 'Skipping pg_net extension creation: insufficient privilege';
   END;
 END $$;
-
 CREATE OR REPLACE FUNCTION public.sync_campaign_to_edusite()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -44,7 +43,6 @@ EXCEPTION WHEN OTHERS THEN
   RETURN COALESCE(NEW, OLD);
 END;
 $function$;
-
 DROP TRIGGER IF EXISTS trigger_sync_campaign_to_edusite ON public.marketing_campaigns;
 CREATE TRIGGER trigger_sync_campaign_to_edusite
 AFTER INSERT OR UPDATE OR DELETE ON public.marketing_campaigns

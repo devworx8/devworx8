@@ -456,6 +456,7 @@ export default function FinanceControlCenterScreen() {
               bundle={bundle}
               receivables={receivables}
               monthIso={monthIso}
+              organizationId={ctrl.orgId || ''}
               theme={theme}
               styles={styles}
               renderSectionError={renderSectionError}

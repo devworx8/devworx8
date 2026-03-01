@@ -161,6 +161,42 @@ type StudyCoachPack = {
   testDayChecklist: string[];
 };
 
+type ExamArtifactType = 'practice_test' | 'flashcards' | 'revision_notes' | 'study_guide';
+
+type FlashcardItem = {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string;
+};
+
+type FlashcardsArtifact = {
+  title: string;
+  cards: FlashcardItem[];
+};
+
+type RevisionNotesSection = {
+  title: string;
+  bullets: string[];
+};
+
+type RevisionNotesArtifact = {
+  title: string;
+  keyPoints: string[];
+  sections: RevisionNotesSection[];
+};
+
+type StudyGuideArtifact = {
+  title: string;
+  days: Array<{ day: string; focus: string; tasks: string[] }>;
+  checklist: string[];
+};
+
+type ExamArtifact =
+  | { type: 'flashcards'; flashcards: FlashcardsArtifact }
+  | { type: 'revision_notes'; revisionNotes: RevisionNotesArtifact }
+  | { type: 'study_guide'; studyGuide: StudyGuideArtifact };
+
 type AuthorizedRequestScope = {
   profile: ProfileRow;
   role: string;
@@ -168,6 +204,16 @@ type AuthorizedRequestScope = {
   effectiveClassId: string | null;
   effectiveSchoolId: string | null;
   effectiveStudentId: string | null;
+};
+
+type ScopeDiagnostics = {
+  requestedStudentId: string | null;
+  requestedClassId: string | null;
+  requestedSchoolId: string | null;
+  effectiveStudentId: string | null;
+  effectiveClassId: string | null;
+  effectiveSchoolId: string | null;
+  useTeacherContext: boolean;
 };
 
 const STAFF_ROLES = new Set([
@@ -522,6 +568,148 @@ function getMinimumQuestionCount(grade: string, examType: string): number {
   return getQuestionCountPolicy(grade, examType).min;
 }
 
+function resolveArtifactType(examType: string): ExamArtifactType {
+  const normalized = String(examType || 'practice_test').toLowerCase();
+  if (normalized === 'flashcards') return 'flashcards';
+  if (normalized === 'revision_notes') return 'revision_notes';
+  if (normalized === 'study_guide') return 'study_guide';
+  return 'practice_test';
+}
+
+function flattenExamQuestionsForArtifact(exam: any): Array<{
+  id: string;
+  question: string;
+  answer: string;
+  explanation: string;
+}> {
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  const out: Array<{ id: string; question: string; answer: string; explanation: string }> = [];
+
+  sections.forEach((section: any, sectionIndex: number) => {
+    const questions = Array.isArray(section?.questions) ? section.questions : [];
+    questions.forEach((question: any, questionIndex: number) => {
+      const id = String(question?.id || `q_${sectionIndex + 1}_${questionIndex + 1}`);
+      const questionText = String(question?.question || question?.text || '').trim();
+      const answer = String(question?.correctAnswer || question?.answer || '').trim();
+      const explanation = String(question?.explanation || '').trim();
+      out.push({
+        id,
+        question: questionText || `Concept ${questionIndex + 1}`,
+        answer,
+        explanation,
+      });
+    });
+  });
+
+  return out;
+}
+
+function buildArtifactFromExam(params: {
+  artifactType: ExamArtifactType;
+  exam: any;
+  grade: string;
+  subject: string;
+  contextSummary: ExamContextSummary;
+  studyCoachPack: StudyCoachPack;
+}): ExamArtifact | null {
+  if (params.artifactType === 'practice_test') return null;
+
+  const questions = flattenExamQuestionsForArtifact(params.exam);
+
+  if (params.artifactType === 'flashcards') {
+    const cards: FlashcardItem[] = questions.slice(0, 40).map((item, index) => ({
+      id: item.id || `card_${index + 1}`,
+      front: item.question,
+      back: item.answer || item.explanation || 'Review this concept with class notes.',
+      hint: item.explanation || undefined,
+    }));
+
+    return {
+      type: 'flashcards',
+      flashcards: {
+        title: `${params.subject} Flashcards`,
+        cards,
+      },
+    };
+  }
+
+  if (params.artifactType === 'revision_notes') {
+    const sections = (Array.isArray(params.exam?.sections) ? params.exam.sections : []).map((section: any, sectionIndex: number) => {
+      const sectionQuestions = Array.isArray(section?.questions) ? section.questions : [];
+      const bullets = sectionQuestions
+        .slice(0, 6)
+        .map((question: any) => String(question?.explanation || question?.correctAnswer || question?.question || '').trim())
+        .filter(Boolean);
+
+      return {
+        title: String(section?.title || section?.name || `Topic ${sectionIndex + 1}`),
+        bullets: bullets.length > 0 ? bullets : ['Review this topic using classwork and homework examples.'],
+      };
+    });
+
+    const keyPoints = questions
+      .slice(0, 10)
+      .map((item) => item.answer || item.explanation || item.question)
+      .filter(Boolean);
+
+    return {
+      type: 'revision_notes',
+      revisionNotes: {
+        title: `${params.subject} Revision Notes`,
+        keyPoints,
+        sections,
+      },
+    };
+  }
+
+  const fallbackChecklist = [
+    'Revise key formulas/definitions',
+    'Practice at least one timed section daily',
+    'Review mistakes from homework and classwork',
+    'Sleep early before exam day',
+  ];
+
+  const daysFromCoach = Array.isArray(params.studyCoachPack?.days)
+    ? params.studyCoachPack.days.map((day) => ({
+        day: String(day.day || ''),
+        focus: String(day.focus || ''),
+        tasks: [
+          `Reading: ${day.readingPiece || 'Read topic summary notes.'}`,
+          `Paper drill: ${day.paperWritingDrill || 'Write one timed practice section.'}`,
+          `Memory: ${day.memoryActivity || 'Summarize core terms from memory.'}`,
+          `Parent tip: ${day.parentTip || 'Review progress and ask confidence questions.'}`,
+        ],
+      }))
+    : [];
+
+  const derivedDays = daysFromCoach.length > 0
+    ? daysFromCoach
+    : ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5'].map((dayLabel, index) => {
+        const question = questions[index] || questions[0];
+        const weakTopic = params.contextSummary.weakTopics[index] || params.contextSummary.focusTopics[index];
+        return {
+          day: dayLabel,
+          focus: weakTopic || `Reinforce ${params.subject} core concepts`,
+          tasks: [
+            `Practice: ${question?.question || `Complete one ${params.subject} mixed practice set.`}`,
+            `Memo check: ${question?.answer || question?.explanation || 'Mark and correct one section.'}`,
+            'Review your notes and write a short summary from memory.',
+          ],
+        };
+      });
+
+  return {
+    type: 'study_guide',
+    studyGuide: {
+      title: `${params.subject} Study Guide`,
+      days: derivedDays,
+      checklist: params.studyCoachPack?.testDayChecklist?.length
+        ? params.studyCoachPack.testDayChecklist
+        : fallbackChecklist,
+    },
+  };
+}
+
 function buildSupplementQuestion(
   index: number,
   subject: string,
@@ -866,6 +1054,17 @@ function isLanguageSubject(subject: string): boolean {
   );
 }
 
+function isMathSubject(subject: string): boolean {
+  const normalized = normalizeText(subject);
+  return (
+    normalized.includes('mathematic') ||
+    normalized.includes('algebra') ||
+    normalized.includes('geometry') ||
+    normalized.includes('trigonometry') ||
+    normalized.includes('calculus')
+  );
+}
+
 const LANGUAGE_ALIASES_TO_BCP47: Record<string, string> = {
   en: 'en-ZA',
   'en-za': 'en-ZA',
@@ -920,6 +1119,10 @@ const LANGUAGE_MARKERS: Record<string, string[]> = {
   'nso-ZA': ['bala', 'kanegelo', 'dipotso', 'gomme', 'bona', 'ka', 'go', 'le'],
   'tn-ZA': ['bala', 'potso', 'mme', 'bona', 'go', 'le', 'leina', 'palo'],
   'st-ZA': ['bala', 'dipotso', 'mme', 'bona', 'ho', 'le', 'pale', 'kahoo'],
+  'nr-ZA': ['funda', 'ibali', 'imibuzo', 'kanye', 'ngaphambi', 'ekhaya', 'bahleka', 'ndawonye'],
+  'ss-ZA': ['fundza', 'indzaba', 'imibuto', 'kanye', 'babuya', 'ekhaya', 'bahleka', 'ndzawonye'],
+  've-ZA': ['vhala', 'bugu', 'mbudziso', 'na', 'hayani', 'murahu', 'vho', 'fhedza'],
+  'ts-ZA': ['hlaya', 'xitori', 'swivutiso', 'naswona', 'ekhaya', 'va', 'endzhaku', 'hlekile'],
 };
 const STRICT_LANGUAGE_VALIDATION_LOCALES = new Set(Object.keys(LANGUAGE_MARKERS));
 
@@ -1009,6 +1212,42 @@ Mia le mogolowe Tumi ba ne ba ya ka moso ka Matlhatso go thusa kwa polasing ya r
 
 Mia le ngwanabo Tumi ba ile hoseng ka Moqebelo ho ya thusa polasing ya ntatemoholo. Ba ile ba qala ka ho fepa dikgoho, ba nto jala meroho, mme hamorao ba hloekisa lesaka le Ntatemoholo. Ha pula e qala motshehare, ba dula tlasa veranda ba mametse dipale. Pele ba kgutlela hae, Nkgono o ba file sopho e chesang mme bohle ba tsheha mmoho.`,
       instruction: 'Bala temana ka hloko ebe o araba ka Sesotho.',
+    };
+  }
+
+  if (locale === 'nr-ZA') {
+    return {
+      passage: `Funda indatjana engezansi bese uphendula imibuzo elandelako.
+
+UMia nomfowabo uTumi baphume ekuseni ngoMgqibelo bayokusiza epulazini likabamkhulu. Bathome ngokondla iinkukhu, ngemva kwalokho batjala imifino, begodu kamuva bahlanza isibaya noBamkhulu. Emini kwaqala ukuna, ngakho bahlala ngaphasi kweveranda balalela iindatjana. Ngaphambi kokubuyela ekhaya, uGogo wabanikela isobho esifuthumeleko, boke bahleka ndawonye.`,
+      instruction: 'Funda umbhalo kuhle bese uphendula ngesiNdebele.',
+    };
+  }
+
+  if (locale === 'ss-ZA') {
+    return {
+      passage: `Fundza indzaba lengentasi bese uphendvula imibuto lelandzelako.
+
+UMia nemfowabo Tumi bavuke ekuseni ngaMgcibelo bayewusita epulazini lakabomkhulu. Bacale ngokondla tinkhukhu, base batjala imifino, bese kamuva bahlanza sibaya naMkhulu. Emini kwacala lina, ngako bahlala ngaphansi kweveranda balalela tindzaba. Ngaphambi kwekubuyela ekhaya, Gogo wabanika sobho lesishisako, bonkhe bahleka ndzawonye.`,
+      instruction: 'Fundza umbhalo kahle bese uphendvula ngesiSwati.',
+    };
+  }
+
+  if (locale === 've-ZA') {
+    return {
+      passage: `Vhalani tshiṱori tshi re fhasi ni dovhe ni fhindule mbudziso dzi tevhelaho.
+
+Mia na murathu wawe Tumi vho vuwa nga matsheloni nga Mugivhela vha ya u thusa polasini ya makhulu wavho. Vho thoma nga u ṋea huku zwiliwa, nga murahu vha ṱavha miroho, vha dovha vha kunakisa tshisima na Makhulu. Nga masiari mvula ya thoma, ngauralo vha dzula fhasi ha veranda vha tshi thetshelesa zwiṱori. Musi vha sa athu u humela hayani, Gogo o vha ṋea suphu i dudaho, vhoṱhe vha sea vho takala.`,
+      instruction: 'Vhalani zwavhuḓi ni fhindule nga Tshivenda.',
+    };
+  }
+
+  if (locale === 'ts-ZA') {
+    return {
+      passage: `Hlaya xitori lexi nga laha hansi kutani u hlamula swivutiso leswi landzelaka.
+
+Mia na makwavo Tumi va pfuke nimixo hi Mugqivela va ya pfuna epurasini ra kokwana wa vona. Va sungule hi ku phamela tihuku, endzhaku va byala miroho, kutani va tlhela va basisa xibaya na Kokwana. Hi nkarhi wa nhlikanhi mpfula yi sungule ku na, hikwalaho va tshamile ehansi ka veranda va yingisela switori. Va nga si tlhela ekaya, Gogo u va nyike supu yo hisa, kutani hinkwavo va hleka swin'we.`,
+      instruction: 'Hlaya rungula hi vukheta kutani u hlamula hi Xitsonga.',
     };
   }
 
@@ -1295,15 +1534,38 @@ function augmentQuestionVisuals(exam: any, visualMode: 'off' | 'hybrid') {
 
 function extractJsonBlock(text: string): string {
   const trimmed = text.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed.trim();
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced?.[1]) return fenced[1];
+  if (fenced?.[1]) return fenced[1].trim();
 
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
-  if (jsonMatch?.[0]) return jsonMatch[0];
+  if (jsonMatch?.[0]) return jsonMatch[0].trim();
 
   throw new Error('No JSON payload found in AI response');
+}
+
+/** Attempt to repair common LLM JSON issues (trailing commas, control chars) */
+function repairJsonForParse(raw: string): string {
+  let s = raw;
+  // Remove trailing commas before } or ] (common LLM mistake)
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  // Remove control characters except newline and tab
+  s = s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  return s;
+}
+
+/** Parse exam JSON with repair attempts to avoid malformed fallback */
+function parseExamJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    try {
+      return JSON.parse(repairJsonForParse(raw));
+    } catch {
+      throw new Error('Parse failed after repair attempt');
+    }
+  }
 }
 
 async function fetchProfileByAuthUser(supabase: ReturnType<typeof createClient>, authUserId: string): Promise<ProfileRow | null> {
@@ -1916,6 +2178,7 @@ function buildUserPrompt(payload: {
     `Generate a ${payload.examType} exam for ${payload.grade}.`,
     `Subject: ${payload.subject}.`,
     `Language: ${languageName} (${locale}).`,
+    `Write ALL learner-facing content in ${languageName} only (questions, options, section headings, instructions, and memorandum text).`,
     `Minimum total questions required: ${countPolicy.min}.`,
     `Maximum total questions allowed: ${countPolicy.max}.`,
     'Align strictly to CAPS/DBE outcomes and cognitive level for this grade.',
@@ -1929,6 +2192,14 @@ function buildUserPrompt(payload: {
     'Do not duplicate option letters inside option strings.',
     'Always include explanation for each answer key item.',
   ];
+
+  if (isMathSubject(payload.subject)) {
+    base.push(
+      'For mathematical notation, wrap inline maths in $...$ and display maths in $$...$$.',
+      'Use KaTeX-compatible LaTeX (e.g., \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \\div).',
+      'Do not place plain-language words inside math delimiters.',
+    );
+  }
 
   const subjectStructure = getSubjectSectionStructure(payload.subject, payload.grade, payload.examType);
   if (subjectStructure) {
@@ -1960,10 +2231,20 @@ function buildUserPrompt(payload: {
   );
 
   if (payload.customPrompt) {
+    const hasUploadedMaterial =
+      payload.customPrompt.includes('Study material extracted') ||
+      payload.customPrompt.includes('uploaded images') ||
+      payload.customPrompt.includes('uploaded material') ||
+      payload.customPrompt.includes('Study Notes');
+    if (hasUploadedMaterial) {
+      base.push(
+        'CRITICAL: You MUST base all questions STRICTLY on the provided study material, images, and PDFs. Do NOT introduce content from generic CAPS curriculum that is not present in the provided material. All questions must be answerable from the uploaded context alone. Prioritize the provided teacher context and uploaded material over general knowledge.',
+      );
+    }
     base.push(`Additional instructions: ${payload.customPrompt}`);
   }
 
-  base.push('Return only strict JSON matching the required schema.');
+  base.push('Return only strict JSON matching the required schema. Do not use trailing commas. Output valid JSON with no markdown wrapping or extra text.');
 
   return base.join('\n');
 }
@@ -2005,9 +2286,9 @@ serve(async (req: Request) => {
     const rawModelOverride = body?.model ? String(body.model).trim() : undefined;
     const modelOverride = rawModelOverride ? normalizeAnthropicModel(rawModelOverride) : undefined;
     const language = normalizeLanguageLocale(body?.language ? String(body.language) : 'en-ZA');
-    const studentId = body?.studentId ? String(body.studentId) : undefined;
-    const classId = body?.classId ? String(body.classId) : undefined;
-    const schoolId = body?.schoolId ? String(body.schoolId) : undefined;
+    const studentId = body?.studentId ? String(body.studentId).trim() : undefined;
+    const classId = body?.classId ? String(body.classId).trim() : undefined;
+    const schoolId = body?.schoolId ? String(body.schoolId).trim() : undefined;
     const useTeacherContext = body?.useTeacherContext !== false;
     const previewContext = body?.previewContext === true;
     const lookbackDays = Number.isFinite(Number(body?.lookbackDays))
@@ -2037,6 +2318,16 @@ serve(async (req: Request) => {
       useTeacherContext,
     });
 
+    const scopeDiagnostics: ScopeDiagnostics = {
+      requestedStudentId: studentId || null,
+      requestedClassId: classId || null,
+      requestedSchoolId: schoolId || null,
+      effectiveStudentId: scope.effectiveStudentId || null,
+      effectiveClassId: scope.effectiveClassId || null,
+      effectiveSchoolId: scope.effectiveSchoolId || null,
+      useTeacherContext,
+    };
+
     const contextSummary = await resolveTeacherContext(supabase, scope, {
       subject,
       useTeacherContext,
@@ -2049,7 +2340,9 @@ serve(async (req: Request) => {
         {
           success: true,
           examId: 'preview-only',
+          artifactType: resolveArtifactType(examType),
           contextSummary,
+          scopeDiagnostics,
         },
         200,
         corsHeaders,
@@ -2262,7 +2555,8 @@ serve(async (req: Request) => {
     } else {
       let parsedRawExam: any;
       try {
-        parsedRawExam = JSON.parse(extractJsonBlock(aiContent));
+        const jsonBlock = extractJsonBlock(aiContent);
+        parsedRawExam = parseExamJson(jsonBlock);
         normalizedExam = normalizeExamShape(parsedRawExam, grade, subject, examType);
       } catch (parseError) {
         console.error('[generate-exam] parse error', parseError);
@@ -2318,6 +2612,15 @@ serve(async (req: Request) => {
     const teacherAlignment = computeTeacherAlignmentSummary(contextSummary);
     const examBlueprintAudit = computeBlueprintAudit(normalizedExam, grade, examType);
     const studyCoachPack = buildStudyCoachPack(grade, subject, language, contextSummary);
+    const artifactType = resolveArtifactType(examType);
+    const artifact = buildArtifactFromExam({
+      artifactType,
+      exam: normalizedExam,
+      grade,
+      subject,
+      contextSummary,
+      studyCoachPack,
+    });
 
     const metadata = {
       source: localFallbackReason
@@ -2325,7 +2628,9 @@ serve(async (req: Request) => {
         : useTeacherContext
         ? 'teacher_artifact_context'
         : 'caps_baseline',
+      artifactType,
       contextSummary,
+      scopeDiagnostics,
       teacherAlignment,
       examBlueprintAudit,
       studyCoachPack,
@@ -2341,6 +2646,21 @@ serve(async (req: Request) => {
     let persistedExamId = `temp-${Date.now()}`;
     const warningParts: string[] = [];
     if (localFallbackReason) warningParts.push(localFallbackReason);
+    if (useTeacherContext && !scopeDiagnostics.effectiveSchoolId) {
+      warningParts.push('Teacher context ran without a resolved school scope. Results may be generic.');
+    }
+    if (useTeacherContext && contextSummary.assignmentCount + contextSummary.lessonCount === 0) {
+      warningParts.push('No recent teacher artifacts were found. Generated content leans on CAPS baseline.');
+    }
+
+    const persistedGeneratedContent =
+      artifactType === 'practice_test'
+        ? normalizedExam
+        : {
+            artifactType,
+            artifact,
+            exam: normalizedExam,
+          };
 
     const { data: savedExam, error: saveError } = await supabase
       .from('exam_generations')
@@ -2350,7 +2670,7 @@ serve(async (req: Request) => {
         subject,
         exam_type: examType,
         display_title: normalizedExam.title,
-        generated_content: JSON.stringify(normalizedExam),
+        generated_content: JSON.stringify(persistedGeneratedContent),
         status: 'completed',
         model_used: modelUsed,
         metadata,
@@ -2384,8 +2704,11 @@ serve(async (req: Request) => {
     return jsonResponse(
       {
         success: true,
-        exam: normalizedExam,
+        exam: artifactType === 'practice_test' ? normalizedExam : undefined,
+        artifactType,
+        artifact,
         examId: persistedExamId,
+        scopeDiagnostics,
         contextSummary,
         teacherAlignment,
         examBlueprintAudit,

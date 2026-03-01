@@ -46,7 +46,6 @@ BEGIN
   END IF;
 END
 $$;
-
 UPDATE public.pop_uploads
 SET
   payment_date = coalesce(payment_date, created_at::date, current_date),
@@ -57,7 +56,6 @@ WHERE upload_type = 'proof_of_payment'
     OR payment_for_month IS NULL
     OR payment_for_month <> date_trunc('month', payment_for_month::timestamp)::date
   );
-
 CREATE OR REPLACE FUNCTION public.sync_pop_upload_finance_fields()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -84,7 +82,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (

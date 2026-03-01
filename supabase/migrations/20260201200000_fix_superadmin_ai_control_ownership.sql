@@ -7,7 +7,6 @@
 UPDATE public.profiles
 SET auth_user_id = id
 WHERE auth_user_id IS NULL;
-
 CREATE OR REPLACE FUNCTION public.is_superadmin_safe()
 RETURNS boolean
 LANGUAGE plpgsql
@@ -25,7 +24,6 @@ BEGIN
   RETURN user_role IN ('superadmin', 'super_admin');
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS boolean
 LANGUAGE sql
@@ -39,7 +37,6 @@ AS $$
       AND role IN ('superadmin', 'super_admin')
   );
 $$;
-
 CREATE OR REPLACE FUNCTION public.app_is_super_admin()
 RETURNS boolean
 LANGUAGE sql
@@ -53,11 +50,9 @@ AS $$
       AND p.role IN ('superadmin','super_admin')
   );
 $$;
-
 INSERT INTO public.superadmin_ai_control (id)
 SELECT 1
 WHERE NOT EXISTS (SELECT 1 FROM public.superadmin_ai_control WHERE id = 1);
-
 DROP POLICY IF EXISTS superadmin_ai_control_insert ON public.superadmin_ai_control;
 CREATE POLICY superadmin_ai_control_insert
   ON public.superadmin_ai_control

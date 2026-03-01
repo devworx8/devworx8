@@ -5,7 +5,7 @@
  * Accepts `showAlert` from the screen so alerts are rendered in the component tree.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { router, useFocusEffect } from 'expo-router';
@@ -39,6 +39,7 @@ export function useStudentManagement({ showAlert }: UseStudentManagementParams) 
   const isStillLoading = authLoading || profileLoading;
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([]);
   const [schoolInfo, setSchoolInfo] = useState<{
     id: string; name: string; school_type: string; grade_levels: string[];
   } | null>(null);
@@ -79,6 +80,7 @@ export function useStudentManagement({ showAlert }: UseStudentManagementParams) 
       setLoading(true);
       const result = await fetchStudentData(orgId, showAlert);
       setSchoolInfo(result.school);
+      setAgeGroups(result.ageGroups);
       setClasses(result.classes);
       setStudents(result.students);
     } catch (error) {
@@ -104,9 +106,16 @@ export function useStudentManagement({ showAlert }: UseStudentManagementParams) 
 
   // Derived
   const filteredStudents = filterStudents(students, filters);
+  const ageGroupOrder = useMemo(
+    () => ageGroups
+      .map((group) => String(group.name || '').trim())
+      .filter(Boolean),
+    [ageGroups],
+  );
   const ageGroupStats = getAgeGroupStats(
     filteredStudents,
     schoolInfo?.school_type || 'preschool',
+    ageGroupOrder,
   );
 
   // Print ID cards
@@ -167,7 +176,7 @@ export function useStudentManagement({ showAlert }: UseStudentManagementParams) 
 
   return {
     user, orgId, isStillLoading,
-    students, filteredStudents, schoolInfo, classes, ageGroupStats,
+    students, filteredStudents, schoolInfo, classes, ageGroups, ageGroupStats,
     loading, refreshing, showFilters, setShowFilters,
     autoAssigning, filters, setFilters,
     onRefresh, handlePrintIdCards, handleAutoAssignByDob,

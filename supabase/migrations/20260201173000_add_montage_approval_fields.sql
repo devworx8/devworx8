@@ -5,7 +5,6 @@ ALTER TABLE public.birthday_memory_montage_jobs
   ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS sent_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
-
 -- Allow teachers to approve/send (update) montage jobs
 DROP POLICY IF EXISTS birthday_memory_montage_update ON public.birthday_memory_montage_jobs;
 CREATE POLICY birthday_memory_montage_update

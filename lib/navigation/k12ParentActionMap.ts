@@ -13,6 +13,7 @@ export type K12ParentActionId =
   | 'profile'
   | 'tutor_session'
   | 'exam_builder'
+  | 'exam_history'
   | 'subscription_setup'
   | 'messages'
   | 'grades'
@@ -27,6 +28,8 @@ export type K12ParentActionId =
   | 'homework'
   | 'weekly_report'
   | 'daily_program'
+  | 'timetable'
+  | 'groups'
   | 'settings'
   | 'see_all_activity'
   | 'see_all_events'
@@ -70,6 +73,10 @@ export const K12_PARENT_ACTIONS: Record<K12ParentActionId, K12ParentActionConfig
   exam_builder: {
     route: '/screens/exam-prep',
     label: 'Exam Builder',
+  },
+  exam_history: {
+    route: '/screens/parent-my-exams',
+    label: 'My Exams & Scores',
   },
   subscription_setup: {
     route: '/screens/subscription-setup',
@@ -126,6 +133,14 @@ export const K12_PARENT_ACTIONS: Record<K12ParentActionId, K12ParentActionConfig
   daily_program: {
     route: '/screens/parent-daily-program',
     label: 'Daily Routine',
+  },
+  timetable: {
+    route: '/screens/parent-timetable',
+    label: 'Timetable',
+  },
+  groups: {
+    route: '/screens/group-management',
+    label: 'Study & Teacher Groups',
   },
   settings: {
     route: '/screens/settings',

@@ -21,6 +21,7 @@ interface K12ParentLearningHubProps {
   leadChildName: string | null;
   onOpenTutor: () => void;
   onExamBuilder: () => void;
+  onExamHistory?: () => void;
   onHomework: () => void;
   canShowExamPrep: boolean;
   quickWinsEnabled: boolean;
@@ -31,6 +32,7 @@ export function K12ParentLearningHub({
   leadChildName,
   onOpenTutor,
   onExamBuilder,
+  onExamHistory,
   onHomework,
   canShowExamPrep,
   quickWinsEnabled,
@@ -96,7 +98,7 @@ export function K12ParentLearningHub({
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Exam Builder Card */}
+      {/* Exam Builder + My Exams Cards */}
       <View style={styles.learningHubGrid}>
         <GradientActionCard
           tone="purple"
@@ -108,8 +110,20 @@ export function K12ParentLearningHub({
           description={t('dashboard.parent.k12.exam_description', { defaultValue: 'Generate a CAPS-aligned formal test paper for review or print.' })}
           cta={t('dashboard.parent.k12.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
           onPress={onExamBuilder}
-          disabled={!canShowExamPrep}
         />
+        {onExamHistory && (
+          <GradientActionCard
+            tone="purple"
+            gradientColors={quickWinsEnabled ? ['#1B314D', '#305E88'] : undefined}
+            ctaBackgroundColor={quickWinsEnabled ? '#305E88' : undefined}
+            icon="bar-chart-outline"
+            badgeLabel={t('dashboard.parent.k12.exam_history_badge', { defaultValue: 'My Exams' })}
+            title={t('dashboard.parent.k12.exam_history_title', { defaultValue: 'Past Exams & Scores' })}
+            description={t('dashboard.parent.k12.exam_history_desc', { defaultValue: 'Review past practice exams with corrected answers and scores.' })}
+            cta={t('dashboard.parent.k12.exam_history_cta', { defaultValue: 'View My Exams' })}
+            onPress={onExamHistory}
+          />
+        )}
       </View>
     </View>
   );

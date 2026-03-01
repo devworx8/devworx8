@@ -4,7 +4,6 @@
 -- Replaces chatty client-side loops with a single SECURITY DEFINER RPC.
 
 BEGIN;
-
 -- If multiple defaults exist, keep the most recently updated one and clear the rest.
 WITH ranked AS (
   SELECT
@@ -22,12 +21,10 @@ SET is_default = false
 FROM ranked r
 WHERE lt.id = r.id
   AND r.rn > 1;
-
 -- One default per preschool.
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_lesson_templates_default_per_preschool
   ON public.lesson_templates (preschool_id)
   WHERE is_default = true;
-
 CREATE OR REPLACE FUNCTION public.set_default_lesson_template(p_template_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -76,8 +73,5 @@ BEGIN
   WHERE id = p_template_id;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.set_default_lesson_template(uuid) TO authenticated;
-
 COMMIT;
-

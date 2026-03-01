@@ -29,12 +29,9 @@ BEGIN
       ON DELETE SET NULL;
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_pct_financial_txn_id
   ON public.petty_cash_transactions(financial_transaction_id)
   WHERE financial_transaction_id IS NOT NULL;
-
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. RE-CREATE get_finance_month_snapshot WITH DEDUP
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -446,10 +443,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_finance_month_snapshot(uuid, date) TO authenticated;
-
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. apply_family_credit RPC
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -639,10 +633,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.apply_family_credit(uuid, uuid, numeric, text) TO authenticated;
-
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 4. RE-CREATE approve_pop_payment WITH AUTO-APPLY CREDITS + NOTIFICATION
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -1385,10 +1376,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.approve_pop_payment(uuid, date, text, jsonb, text) TO authenticated;
-
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 5. pg_cron SCHEDULE FOR MONTHLY FEE GENERATION
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -1406,7 +1394,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL; -- pg_cron not available or job doesn't exist
 END $$;
-
 DO $$
 DECLARE
   v_url text;

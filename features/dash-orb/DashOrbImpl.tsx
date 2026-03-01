@@ -1439,11 +1439,12 @@ export default function DashOrb({
         }
 
         if (voiceEnabled && Platform.OS !== 'web') {
-          const ttsLanguage = resolveResponseLocale({
+          const resolvedTTSLocale = resolveResponseLocale({
             explicitOverride: requestLanguage.locale,
             responseText: result.text,
             fallbackPreference: selectedLanguage,
-          }).locale || selectedLanguage;
+          }).locale;
+          const ttsLanguage = normalizeSupportedLanguage(resolvedTTSLocale) || selectedLanguage;
           if (ttsLanguage !== selectedLanguage) {
             setSelectedLanguage(ttsLanguage);
           }
@@ -1538,11 +1539,12 @@ export default function DashOrb({
           }
           isSpeakingSentenceRef.current = true;
           try {
-            const ttsLang = resolveResponseLocale({
+            const resolvedTTSLocale = resolveResponseLocale({
               explicitOverride: requestLanguage.locale,
               responseText: textToSpeak,
               fallbackPreference: selectedLanguage,
-            }).locale || selectedLanguage;
+            }).locale;
+            const ttsLang = normalizeSupportedLanguage(resolvedTTSLocale) || selectedLanguage;
             const pm = shouldUsePhonicsMode(textToSpeak, {
               ageYears: learnerAgeYears,
               gradeLevel: learnerGrade || null,
@@ -1589,8 +1591,9 @@ export default function DashOrb({
                     responseText: sentence,
                     fallbackPreference: selectedLanguage,
                   }).locale;
-                  if (sentenceLocale && sentenceLocale !== selectedLanguage) {
-                    setSelectedLanguage(sentenceLocale);
+                  const normalizedSentenceLocale = normalizeSupportedLanguage(sentenceLocale);
+                  if (normalizedSentenceLocale && normalizedSentenceLocale !== selectedLanguage) {
+                    setSelectedLanguage(normalizedSentenceLocale);
                   }
                   processTTSQueue();
                 }

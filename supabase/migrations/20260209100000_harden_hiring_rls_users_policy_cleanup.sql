@@ -13,7 +13,6 @@
 -- Keep schema compatible for ownership checks.
 ALTER TABLE public.candidate_profiles
   ADD COLUMN IF NOT EXISTS user_id uuid;
-
 -- Remove any policy on these tables that directly references users tables.
 DO $$
 DECLARE
@@ -39,7 +38,6 @@ BEGIN
   END LOOP;
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.is_candidate_profile_owner(
   p_user_id uuid,
   p_email text
@@ -56,9 +54,7 @@ AS $$
       AND lower(p_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
     );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.is_candidate_profile_owner(uuid, text) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.is_candidate_owner(
   p_candidate_profile_id uuid
 )
@@ -75,9 +71,7 @@ AS $$
       AND public.is_candidate_profile_owner(cp.user_id, cp.email)
   );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.is_candidate_owner(uuid) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.can_principal_view_candidate_profile(
   p_candidate_profile_id uuid
 )
@@ -108,9 +102,7 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.can_principal_view_candidate_profile(uuid) TO authenticated;
-
 DROP POLICY IF EXISTS "candidates_view_own_profile" ON public.candidate_profiles;
 CREATE POLICY "candidates_view_own_profile"
 ON public.candidate_profiles
@@ -119,7 +111,6 @@ TO authenticated
 USING (
   public.is_candidate_profile_owner(user_id, email)
 );
-
 DROP POLICY IF EXISTS "candidates_update_own_profile" ON public.candidate_profiles;
 CREATE POLICY "candidates_update_own_profile"
 ON public.candidate_profiles
@@ -131,7 +122,6 @@ USING (
 WITH CHECK (
   public.is_candidate_profile_owner(user_id, email)
 );
-
 DROP POLICY IF EXISTS "principals_view_candidate_profiles_for_school_applications" ON public.candidate_profiles;
 CREATE POLICY "principals_view_candidate_profiles_for_school_applications"
 ON public.candidate_profiles
@@ -140,7 +130,6 @@ TO authenticated
 USING (
   public.can_principal_view_candidate_profile(id)
 );
-
 DROP POLICY IF EXISTS "candidates_view_own_applications" ON public.job_applications;
 CREATE POLICY "candidates_view_own_applications"
 ON public.job_applications

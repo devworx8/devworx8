@@ -18,12 +18,9 @@ CREATE TABLE IF NOT EXISTS public.display_trusted_tvs (
   revoked_by uuid,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb
 );
-
 COMMENT ON TABLE public.display_trusted_tvs IS 'Persistent trusted TV pairings for room display endpoints.';
 COMMENT ON COLUMN public.display_trusted_tvs.token_hash IS 'SHA256 hash of pairing token. Raw token is never stored.';
-
 ALTER TABLE public.display_trusted_tvs ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "display_trusted_tvs_read_own_org"
   ON public.display_trusted_tvs
   FOR SELECT
@@ -35,7 +32,6 @@ CREATE POLICY "display_trusted_tvs_read_own_org"
       WHERE p.id = auth.uid() OR p.auth_user_id = auth.uid()
     )
   );
-
 CREATE POLICY "display_trusted_tvs_update_own_org"
   ON public.display_trusted_tvs
   FOR UPDATE
@@ -54,12 +50,9 @@ CREATE POLICY "display_trusted_tvs_update_own_org"
       WHERE p.id = auth.uid() OR p.auth_user_id = auth.uid()
     )
   );
-
 CREATE INDEX IF NOT EXISTS display_trusted_tvs_org_id_idx
   ON public.display_trusted_tvs (org_id);
-
 CREATE INDEX IF NOT EXISTS display_trusted_tvs_expires_at_idx
   ON public.display_trusted_tvs (expires_at);
-
 CREATE INDEX IF NOT EXISTS display_trusted_tvs_last_seen_at_idx
   ON public.display_trusted_tvs (last_seen_at);

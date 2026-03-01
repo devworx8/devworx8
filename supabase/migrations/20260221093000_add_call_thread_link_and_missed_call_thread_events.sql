@@ -1,10 +1,8 @@
 -- Link calls to chat threads and persist missed-call events into thread history.
 
 BEGIN;
-
 ALTER TABLE public.active_calls
   ADD COLUMN IF NOT EXISTS thread_id uuid;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -21,14 +19,11 @@ BEGIN
   END IF;
 END
 $$;
-
 CREATE INDEX IF NOT EXISTS idx_active_calls_thread_status_started
   ON public.active_calls(thread_id, status, started_at DESC)
   WHERE thread_id IS NOT NULL;
-
 ALTER TABLE public.call_signals
   DROP CONSTRAINT IF EXISTS call_signals_signal_type_check;
-
 ALTER TABLE public.call_signals
   ADD CONSTRAINT call_signals_signal_type_check CHECK (
     signal_type = ANY (
@@ -44,7 +39,6 @@ ALTER TABLE public.call_signals
       ]
     )
   );
-
 CREATE OR REPLACE FUNCTION public.insert_missed_call_thread_event()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -99,13 +93,10 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_insert_missed_call_thread_event ON public.active_calls;
-
 CREATE TRIGGER trg_insert_missed_call_thread_event
 AFTER UPDATE ON public.active_calls
 FOR EACH ROW
 WHEN (NEW.status = 'missed' AND COALESCE(OLD.status, '') IS DISTINCT FROM 'missed')
 EXECUTE FUNCTION public.insert_missed_call_thread_event();
-
 COMMIT;

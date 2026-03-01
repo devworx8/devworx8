@@ -11,11 +11,8 @@ CREATE TABLE IF NOT EXISTS public.birthday_memory_montage_jobs (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_birthday_memory_montage_event ON public.birthday_memory_montage_jobs(event_id);
-
 ALTER TABLE public.birthday_memory_montage_jobs ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS birthday_memory_montage_select ON public.birthday_memory_montage_jobs;
 CREATE POLICY birthday_memory_montage_select
 ON public.birthday_memory_montage_jobs
@@ -29,7 +26,6 @@ USING (
       AND COALESCE(p.organization_id, p.preschool_id) = birthday_memory_montage_jobs.organization_id
   )
 );
-
 DROP POLICY IF EXISTS birthday_memory_montage_insert ON public.birthday_memory_montage_jobs;
 CREATE POLICY birthday_memory_montage_insert
 ON public.birthday_memory_montage_jobs
@@ -44,7 +40,6 @@ WITH CHECK (
       AND p.role IN ('teacher', 'principal', 'admin', 'super_admin', 'principal_admin')
   )
 );
-
 DROP POLICY IF EXISTS birthday_memory_montage_update ON public.birthday_memory_montage_jobs;
 CREATE POLICY birthday_memory_montage_update
 ON public.birthday_memory_montage_jobs

@@ -9,6 +9,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { CircularQuotaRing } from '@/components/ui/CircularQuotaRing';
 
 type Theme = ReturnType<typeof useTheme>['theme'];
 
@@ -24,6 +25,7 @@ interface DashUsageBannerProps {
   usageLabel: string;
   styles: any;
   theme: Theme;
+  isGenerating?: boolean;
 }
 
 export const DashUsageBanner: React.FC<DashUsageBannerProps> = ({
@@ -31,6 +33,7 @@ export const DashUsageBanner: React.FC<DashUsageBannerProps> = ({
   usageLabel,
   styles,
   theme,
+  isGenerating = false,
 }) => {
   if (!tierStatus) return null;
   const quotaRatio = tierStatus.quotaLimit > 0 ? tierStatus.quotaUsed / tierStatus.quotaLimit : 0;
@@ -43,18 +46,28 @@ export const DashUsageBanner: React.FC<DashUsageBannerProps> = ({
   return (
     <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.surface }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-        <View
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 11,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: theme.primary + '1f',
-          }}
-        >
-          <Ionicons name="sparkles-outline" size={12} color={theme.primary} />
-        </View>
+        {tierStatus.quotaLimit > 0 ? (
+          <CircularQuotaRing
+            used={tierStatus.quotaUsed}
+            limit={tierStatus.quotaLimit}
+            size={40}
+            strokeWidth={4}
+            showPercentage
+          />
+        ) : (
+          <View
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 11,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.primary + '1f',
+            }}
+          >
+            <Ionicons name="sparkles-outline" size={12} color={theme.primary} />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={[styles.usageBannerText, { color: theme.text, flex: 0 }]}>

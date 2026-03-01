@@ -32,12 +32,13 @@ export interface SchoolInfo {
 export interface AgeGroup {
   id: string;
   name: string;
-  min_age_months: number;
-  max_age_months: number;
-  age_min: number;
-  age_max: number;
-  school_type: string;
-  description: string;
+  min_age_months: number | null;
+  max_age_months: number | null;
+  age_min: number | null;
+  age_max: number | null;
+  school_type: string | null;
+  description: string | null;
+  preschool_id?: string | null;
 }
 
 export interface FilterOptions {

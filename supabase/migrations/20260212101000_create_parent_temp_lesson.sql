@@ -180,6 +180,5 @@ BEGIN
   RETURN v_assignment_id;
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.create_parent_temp_lesson(UUID, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, INTEGER) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_parent_temp_lesson(UUID, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, INTEGER) TO authenticated;

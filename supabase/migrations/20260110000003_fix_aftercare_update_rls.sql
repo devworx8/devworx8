@@ -4,7 +4,6 @@
 -- Drop existing UPDATE policies
 DROP POLICY IF EXISTS "principals_update_aftercare" ON public.aftercare_registrations;
 DROP POLICY IF EXISTS "parents_update_own_aftercare" ON public.aftercare_registrations;
-
 -- Create single comprehensive UPDATE policy for authenticated users
 CREATE POLICY "authenticated_update_aftercare"
 ON public.aftercare_registrations
@@ -73,6 +72,5 @@ WITH CHECK (
     AND status IN ('pending_payment', 'paid')
   )
 );
-
 -- Ensure RLS is enabled
 ALTER TABLE public.aftercare_registrations ENABLE ROW LEVEL SECURITY;

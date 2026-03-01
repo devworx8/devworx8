@@ -154,7 +154,7 @@ async function getServerAutoScanBudget(tier?: string | null): Promise<ImageBudge
       hint: (error as any)?.hint,
       tier: normalizeTier(tier),
     });
-    throw error;
+    return null;
   }
   const row = parseServerBudgetRow(data);
   if (!row) return null;

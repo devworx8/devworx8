@@ -102,6 +102,17 @@ export interface AIInsightsResponse {
   period_days: number;
 }
 
+function normalizeQuotaMap(input: unknown): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const map: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    map[key] = Math.max(0, numeric);
+  }
+  return map;
+}
+
 /**
  * Get user AI limits and current usage
  */
@@ -132,7 +143,39 @@ export async function getUserLimits(userId: string): Promise<AIUserLimitsRespons
       duration_ms: Date.now() - startTime,
     });
 
-    return data;
+    const quotasMap = normalizeQuotaMap((data as any)?.quotas);
+    const usedMap = normalizeQuotaMap(
+      (data as any)?.used ??
+      (data as any)?.current_usage ??
+      (data as any)?.currentUsage,
+    );
+    const remainingRawMap = normalizeQuotaMap((data as any)?.remaining);
+    const remainingMap: Record<string, number> = {};
+    const keys = new Set([
+      ...Object.keys(quotasMap),
+      ...Object.keys(usedMap),
+      ...Object.keys(remainingRawMap),
+    ]);
+
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(remainingRawMap, key)) {
+        remainingMap[key] = Math.max(0, remainingRawMap[key] || 0);
+        continue;
+      }
+      const quota = quotasMap[key] || 0;
+      const used = usedMap[key] || 0;
+      remainingMap[key] = Math.max(0, quota - used);
+    }
+
+    return {
+      ...(data as Record<string, unknown>),
+      quotas: quotasMap as Record<AIQuotaFeature, number>,
+      used: usedMap as Record<AIQuotaFeature, number>,
+      remaining: remainingMap as Record<AIQuotaFeature, number>,
+      reset_at: String((data as any)?.reset_at || (data as any)?.period_start || ''),
+      tier: String((data as any)?.tier || 'free'),
+      preschool_id: String((data as any)?.preschool_id || (data as any)?.organization_id || ''),
+    } as AIUserLimitsResponse;
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

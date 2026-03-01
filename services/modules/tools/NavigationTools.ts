@@ -412,7 +412,7 @@ You can ask me to modify the diagram, make it more detailed, or create a differe
           'settings': '/settings',
           'petty-cash': '/petty-cash',
           'financial': '/financial-dashboard',
-          'approvals': '/principal-approval-dashboard'
+          'approvals': '/screens/pop-review'
         };
         
         const path = sectionPaths[args.section];

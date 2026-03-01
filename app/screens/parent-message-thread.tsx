@@ -68,7 +68,7 @@ export default function ParentMessageThreadScreen() {
   const isGroup = params.isGroup === '1';
   const threadType = params.threadType || '';
   const theme = useTheme().theme || defaultTheme;
-  const user: any = useAuth().user;
+  const { user, profile } = useAuth();
 
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -116,6 +116,22 @@ export default function ParentMessageThreadScreen() {
     h.otherParticipant?.sender?.role ||
     participantRecipient?.user_profile?.role ||
     null;
+  const isPrincipal =
+    profile?.role === 'principal' || profile?.role === 'principal_admin';
+  const showAddToWeeklyProgram =
+    isPrincipal &&
+    !!h.selectedMessage &&
+    h.selectedMessage.sender_id !== user?.id;
+  const handleAddToWeeklyProgram = useCallback(() => {
+    const content = (h.selectedMessage?.content ?? '');
+    const safe = typeof content === 'string' ? content.slice(0, 2000) : '';
+    h.setShowMessageActions(false);
+    h.setSelectedMessage(null);
+    router.push({
+      pathname: '/screens/add-theme-from-message',
+      params: { message: safe },
+    });
+  }, [h.selectedMessage, h.setShowMessageActions, h.setSelectedMessage]);
   // Call context
   const callContext = useCallSafe();
 
@@ -419,7 +435,9 @@ export default function ParentMessageThreadScreen() {
           onReact={actions.handleReact} onReply={actions.handleReply} onCopy={actions.handleCopy}
           onForward={actions.handleForward} onDelete={actions.handleDelete}
           onEdit={h.selectedMessage.sender_id === user?.id ? actions.handleEdit : undefined}
-          onStar={actions.handleToggleStar} />
+          onStar={actions.handleToggleStar}
+          showAddToWeeklyProgram={showAddToWeeklyProgram}
+          onAddToWeeklyProgram={showAddToWeeklyProgram ? handleAddToWeeklyProgram : undefined} />
       )}
       <ForwardMessagePicker visible={actions.showForwardPicker} onSelect={actions.confirmForward} onCancel={actions.cancelForward} />
       <ChatSearchOverlay visible={opts.showSearchOverlay} query={opts.searchQuery} results={opts.searchResults as any[]}

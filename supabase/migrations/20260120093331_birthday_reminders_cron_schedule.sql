@@ -4,7 +4,6 @@
 
 -- Enable pg_cron extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 -- Schedule the birthday reminders cron to run daily at 6:00 AM (SAST - UTC+2)
 -- 4:00 AM UTC = 6:00 AM SAST (South African Standard Time)
 -- The function calls the birthday-reminders-cron Edge Function via HTTP
@@ -22,7 +21,6 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- Also schedule a weekly birthday summary on Sunday at 7 AM (5 AM UTC)
 -- This gives teachers/principals a heads-up for the week ahead
 SELECT cron.schedule(
@@ -39,6 +37,5 @@ SELECT cron.schedule(
   )
   $$
 );
-
 -- Add comment for documentation
 COMMENT ON EXTENSION pg_cron IS 'Job scheduler for PostgreSQL - used for birthday reminders and other scheduled tasks';

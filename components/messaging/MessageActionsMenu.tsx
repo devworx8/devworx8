@@ -56,6 +56,9 @@ interface MessageActionsMenuProps {
   onEdit?: () => void;
   onTranslate?: (language: 'en' | 'af' | 'zu') => void;
   isTranslating?: boolean;
+  /** When true, show "Add to weekly program" (principal adding teacher's theme to curriculum) */
+  showAddToWeeklyProgram?: boolean;
+  onAddToWeeklyProgram?: () => void;
 }
 
 export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
@@ -72,6 +75,8 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
   onEdit,
   onTranslate,
   isTranslating = false,
+  showAddToWeeklyProgram = false,
+  onAddToWeeklyProgram,
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -153,6 +158,7 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
     { id: 'reply', label: 'Reply', icon: 'arrow-undo' },
     { id: 'forward', label: 'Forward', icon: 'arrow-redo' },
     { id: 'copy', label: 'Copy', icon: 'copy-outline' },
+    ...(showAddToWeeklyProgram && onAddToWeeklyProgram ? [{ id: 'add_to_weekly_program', label: 'Add to weekly program', icon: 'calendar-outline' as keyof typeof Ionicons.glyphMap, color: theme.primary }] : []),
     ...(isOwnMessage && onEdit ? [{ id: 'edit', label: 'Edit', icon: 'pencil-outline' as keyof typeof Ionicons.glyphMap }] : []),
     ...(onTranslate ? [{ id: 'translate', label: 'Translate', icon: 'language-outline' as keyof typeof Ionicons.glyphMap }] : []),
     { id: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true, color: '#ef4444' },
@@ -450,6 +456,9 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
                         break;
                       case 'translate':
                         setShowTranslateOptions(true);
+                        break;
+                      case 'add_to_weekly_program':
+                        if (onAddToWeeklyProgram) handleAction(onAddToWeeklyProgram);
                         break;
                       case 'delete':
                         handleAction(onDelete);

@@ -45,6 +45,8 @@ import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { DASH_TELEMETRY_EVENTS, trackDashTelemetry } from '@/lib/telemetry/events';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useRealtimeTier } from '@/hooks/useRealtimeTier';
+import { DashUsageBanner } from '@/components/ai/dash-assistant';
 
 // Merge all style domains for backward compatibility with child components
 const styles = {
@@ -151,6 +153,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     []
   );
 
+  const { tierStatus } = useRealtimeTier();
+  const usageLabel = tierStatus
+    ? tierStatus.quotaLimit > 0
+      ? `${tierStatus.quotaUsed}/${tierStatus.quotaLimit} used today`
+      : 'Unlimited usage'
+    : '';
+
   const refreshScanBudget = useCallback(async (tierOverride?: string | null) => {
     const activeTier = String(tierOverride || tierRef.current || 'free');
     const budget = await loadAutoScanBudget(activeTier, autoScanUserId);
@@ -243,6 +252,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
   useEffect(() => {
     tierRef.current = tier;
+// #region agent log
+fetch('http://127.0.0.1:7783/ingest/d5d94b4c-0783-4dbc-b028-804fb46fa360',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e44ee0'},body:JSON.stringify({sessionId:'e44ee0',location:'DashAssistantImpl.tsx:tier',message:'DashAssistant tier resolved',data:{tier,role:normalizedRole,voiceEnabled,disableTts},timestamp:Date.now(),hypothesisId:'A',runId:'run1'})}).catch(()=>{});
+// #endregion
   }, [tier]);
 
   useEffect(() => {
@@ -918,6 +930,16 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               )}
             </View>
           </View>
+
+          {tierStatus && tierStatus.quotaLimit > 0 && (
+            <DashUsageBanner
+              tierStatus={tierStatus}
+              usageLabel={usageLabel}
+              styles={styles}
+              theme={theme}
+              isGenerating={isTypingActive}
+            />
+          )}
 
           {/* Messages */}
           <View style={[layoutStyles.messagesClip, { marginBottom: messageViewportInset }]}>

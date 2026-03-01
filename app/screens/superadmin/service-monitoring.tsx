@@ -4,21 +4,48 @@
 //       https://docs.expo.dev/router/introduction/
 //       https://tanstack.com/query/v5/docs/framework/react/overview
 
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { View, Text, ScrollView, RefreshControl, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useServiceHealthSummary } from "@/hooks/superadmin/useServiceHealthData";
+import { useMonthlyServiceCosts, useServiceHealthSummary } from "@/hooks/superadmin/useServiceHealthData";
 import { ServiceStatusGrid } from "@/components/superadmin/ServiceStatusGrid";
 import type { ServiceHealth } from "@/hooks/superadmin/useServiceHealthData";
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ServiceMonitoringScreen() {
   const { data: services, summary, isLoading, refetch, isRefetching } = useServiceHealthSummary();
-  const [selectedService, setSelectedService] = useState<ServiceHealth | null>(null);
+  const targetMonth = useMemo(() => new Date(), []);
+  const {
+    data: monthlyCosts,
+    isLoading: isCostLoading,
+    refetch: refetchCosts,
+    isRefetching: isRefetchingCosts,
+  } = useMonthlyServiceCosts(targetMonth);
 
-  const handleServicePress = (service: ServiceHealth) => {
-    setSelectedService(service);
+  const monthLabel = useMemo(
+    () =>
+      targetMonth.toLocaleDateString("en-ZA", {
+        month: "long",
+        year: "numeric",
+      }),
+    [targetMonth],
+  );
+
+  const totalCostUsd = useMemo(
+    () => (monthlyCosts || []).reduce((sum, row) => sum + Number(row.total_cost_usd || 0), 0),
+    [monthlyCosts],
+  );
+  const totalCostZar = useMemo(
+    () => (monthlyCosts || []).reduce((sum, row) => sum + Number(row.total_cost_zar || 0), 0),
+    [monthlyCosts],
+  );
+
+  const handleServicePress = (_service: ServiceHealth) => {
     // TODO: Open detail modal
+  };
+
+  const handleRefresh = () => {
+    void Promise.all([refetch(), refetchCosts()]);
   };
 
   if (isLoading) {
@@ -39,8 +66,8 @@ export default function ServiceMonitoringScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
+            refreshing={isRefetching || isRefetchingCosts}
+            onRefresh={handleRefresh}
             colors={["#3b82f6"]}
           />
         }
@@ -99,14 +126,57 @@ export default function ServiceMonitoringScreen() {
           )}
         </View>
 
-        {/* Cost Overview Placeholder */}
+        {/* Cost Overview */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Monthly Costs</Text>
-          <View style={styles.placeholderCard}>
-            <Text style={styles.placeholderText}>
-              💰 Cost aggregation will be available once the cost-aggregator Edge Function is deployed.
-            </Text>
+          <View style={styles.costHeader}>
+            <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>Monthly Costs</Text>
+            <Text style={styles.costMonthLabel}>{monthLabel}</Text>
           </View>
+
+          {isCostLoading ? (
+            <View style={styles.placeholderCard}>
+              <EduDashSpinner size="small" color="#3b82f6" />
+              <Text style={[styles.placeholderText, styles.loadingInlineText]}>Loading cost data...</Text>
+            </View>
+          ) : monthlyCosts && monthlyCosts.length > 0 ? (
+            <View style={styles.costCard}>
+              <View style={styles.costSummaryRow}>
+                <View>
+                  <Text style={styles.costSummaryLabel}>Estimated Total (USD)</Text>
+                  <Text style={styles.costSummaryValue}>${totalCostUsd.toFixed(4)}</Text>
+                </View>
+                <View style={styles.costSummaryDivider} />
+                <View>
+                  <Text style={styles.costSummaryLabel}>Estimated Total (ZAR)</Text>
+                  <Text style={styles.costSummaryValue}>R {totalCostZar.toFixed(2)}</Text>
+                </View>
+              </View>
+
+              {monthlyCosts.map((row) => {
+                const serviceName = row.service_name.replace(/[:_]+/g, " ").replace(/\s+/g, " ").trim();
+                return (
+                  <View key={row.service_name} style={styles.costRow}>
+                    <View style={styles.costMeta}>
+                      <Text style={styles.costServiceName}>{serviceName}</Text>
+                      <Text style={styles.costServiceSubtext}>
+                        {row.preschool_count} school{row.preschool_count === 1 ? "" : "s"}
+                      </Text>
+                    </View>
+                    <View style={styles.costAmounts}>
+                      <Text style={styles.costUsd}>${Number(row.total_cost_usd || 0).toFixed(4)}</Text>
+                      <Text style={styles.costZar}>R {Number(row.total_cost_zar || 0).toFixed(2)}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.placeholderCard}>
+              <Text style={styles.placeholderText}>
+                No cost records yet for {monthLabel}. Run the cost aggregator to populate this section.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* API Keys Placeholder */}
@@ -215,11 +285,93 @@ const styles = StyleSheet.create({
   section: {
     padding: 16,
   },
+  costHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  costMonthLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 12,
+  },
+  sectionTitleInline: {
+    marginBottom: 0,
+  },
+  costCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    gap: 10,
+  },
+  costSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+  },
+  costSummaryLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  costSummaryValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  costSummaryDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#eef2f7",
+    marginHorizontal: 12,
+  },
+  costRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
+  costMeta: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  costServiceName: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  costServiceSubtext: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 1,
+  },
+  costAmounts: {
+    alignItems: "flex-end",
+  },
+  costUsd: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "700",
+  },
+  costZar: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 1,
   },
   emptyState: {
     backgroundColor: "#ffffff",
@@ -245,5 +397,8 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
     lineHeight: 20,
+  },
+  loadingInlineText: {
+    marginTop: 8,
   },
 });

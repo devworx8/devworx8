@@ -8,17 +8,14 @@
 
 ALTER TABLE public.dash_ai_tutor_attempts
   DROP CONSTRAINT IF EXISTS dash_ai_tutor_attempts_mode_check;
-
 ALTER TABLE public.dash_ai_tutor_attempts
   ADD CONSTRAINT dash_ai_tutor_attempts_mode_check
   CHECK (mode IN ('diagnostic', 'practice', 'quiz', 'explain', 'play'));
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. RLS policy: teachers can read attempts by students in their classes
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 DROP POLICY IF EXISTS tutor_attempts_teacher_select ON public.dash_ai_tutor_attempts;
-
 CREATE POLICY tutor_attempts_teacher_select ON public.dash_ai_tutor_attempts
   FOR SELECT
   USING (
@@ -31,13 +28,11 @@ CREATE POLICY tutor_attempts_teacher_select ON public.dash_ai_tutor_attempts
          AND c.teacher_id = auth.uid()
     )
   );
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. RLS policy: principals can read all attempts in their school
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 DROP POLICY IF EXISTS tutor_attempts_principal_select ON public.dash_ai_tutor_attempts;
-
 CREATE POLICY tutor_attempts_principal_select ON public.dash_ai_tutor_attempts
   FOR SELECT
   USING (
@@ -51,17 +46,14 @@ CREATE POLICY tutor_attempts_principal_select ON public.dash_ai_tutor_attempts
          AND p.role = 'principal'
     )
   );
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 4. Composite index for the teacher join path (performance)
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 CREATE INDEX IF NOT EXISTS idx_tutor_attempts_student_correct
   ON public.dash_ai_tutor_attempts (student_id, is_correct, created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_tutor_attempts_subject_grade
   ON public.dash_ai_tutor_attempts (subject, grade, created_at DESC);
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 5. RPC: Aggregated class tutor analytics for teacher heatmap
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -129,13 +121,10 @@ BEGIN
   ORDER BY s.first_name, s.last_name, a.subject;
 END;
 $$;
-
 COMMENT ON FUNCTION public.get_class_tutor_analytics IS
   'Returns per-student, per-subject tutor analytics for a class. Used by teacher heatmap dashboard.';
-
 -- Grant execute to authenticated users (RPC enforces its own auth check)
 GRANT EXECUTE ON FUNCTION public.get_class_tutor_analytics(UUID, TIMESTAMPTZ) TO authenticated;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 6. RPC: Student detail drilldown (individual tutor session history)
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -200,8 +189,6 @@ BEGIN
   LIMIT p_limit;
 END;
 $$;
-
 COMMENT ON FUNCTION public.get_student_tutor_sessions IS
   'Returns tutor session summaries for a student. Used for drilldown from class heatmap.';
-
 GRANT EXECUTE ON FUNCTION public.get_student_tutor_sessions(UUID, INT) TO authenticated;

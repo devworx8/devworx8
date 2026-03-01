@@ -1,5 +1,4 @@
 BEGIN;
-
 -- Ensure EduDash Pro Community School is classified as non-preschool for K-12/combined routing.
 UPDATE public.preschools
 SET
@@ -8,7 +7,6 @@ SET
   updated_at = NOW()
 WHERE id = '00000000-0000-0000-0000-000000000001'
    OR LOWER(name) = 'edudash pro community school';
-
 -- Keep organizations table aligned for the same school entity.
 UPDATE public.organizations
 SET
@@ -19,7 +17,6 @@ SET
   updated_at = NOW()
 WHERE id = '00000000-0000-0000-0000-000000000001'
    OR LOWER(name) = 'edudash pro community school';
-
 -- Defensive alignment in case the school exists in the schools table.
 UPDATE public.schools
 SET
@@ -27,5 +24,4 @@ SET
   updated_at = NOW()
 WHERE id = '00000000-0000-0000-0000-000000000001'
    OR LOWER(name) = 'edudash pro community school';
-
 COMMIT;

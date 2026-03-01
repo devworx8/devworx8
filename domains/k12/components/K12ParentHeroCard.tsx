@@ -112,35 +112,14 @@ export function K12ParentHeroCard({
         </View>
       </View>
 
-      {/* Stats Row */}
-      <View style={styles.heroSummaryStatsRow}>
-        <View style={styles.heroSummaryStat}>
-          <Text style={[styles.heroSummaryValue, { color: theme.text }]}>
-            {dashboardSummary.activeChildAvgGrade || '--'}
-          </Text>
-          <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-            {t('dashboard.parent.k12.avg_grade', { defaultValue: 'Avg Grade' })}
+      {/* Quick summary — avoid duplicating stats already shown in child cards */}
+      {dashboardSummary.activeChildPendingTasks > 0 && (
+        <View style={[styles.heroSummaryStatsRow, { justifyContent: 'center' }]}>
+          <Text style={[styles.heroSummaryLabel, { color: 'rgba(255,255,255,0.7)', textAlign: 'center' }]}>
+            {dashboardSummary.activeChildPendingTasks} {t('dashboard.parent.k12.pending_tasks_hint', { defaultValue: 'pending tasks to complete' })}
           </Text>
         </View>
-        <View style={styles.heroStatDivider} />
-        <View style={styles.heroSummaryStat}>
-          <Text style={[styles.heroSummaryValue, { color: '#3C8E62' }]}>
-            {dashboardSummary.activeChildAttendance}%
-          </Text>
-          <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-            {t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' })}
-          </Text>
-        </View>
-        <View style={styles.heroStatDivider} />
-        <View style={styles.heroSummaryStat}>
-          <Text style={[styles.heroSummaryValue, { color: theme.text }]}>
-            {dashboardSummary.activeChildPendingTasks}
-          </Text>
-          <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-            {t('teacher.pending', { defaultValue: 'Pending' })}
-          </Text>
-        </View>
-      </View>
+      )}
     </LinearGradient>
   );
 }

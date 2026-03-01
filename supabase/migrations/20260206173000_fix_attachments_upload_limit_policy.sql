@@ -2,7 +2,6 @@
 -- a SECURITY DEFINER function with row_security disabled.
 
 BEGIN;
-
 -- Helper: count today's image uploads in attachments bucket for a user
 CREATE OR REPLACE FUNCTION public.count_daily_attachment_images(p_user_id uuid)
 RETURNS integer
@@ -22,12 +21,9 @@ AS $$
       OR o.name ~* '\\.(jpg|jpeg|png|gif|webp|bmp)$'
     );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.count_daily_attachment_images(uuid) TO authenticated, service_role;
-
 -- Replace recursive policy with safe function call
 DROP POLICY IF EXISTS attachments_upload_limit_images ON storage.objects;
-
 CREATE POLICY attachments_upload_limit_images
 ON storage.objects
 AS RESTRICTIVE
@@ -48,5 +44,4 @@ WITH CHECK (
     )
   )
 );
-
 COMMIT;

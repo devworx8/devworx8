@@ -60,22 +60,22 @@ export const SA_LANGUAGES: Record<SALanguageCode, SALanguage> = {
     code: 'xh-ZA',
     name: 'Xhosa',
     nativeName: 'isiXhosa',
-    hasAzureTTS: false,        // No native Azure voice ❌
+    hasAzureTTS: true,
     hasAzureSTT: false,
     hasDeviceTTS: 'poor',      // Limited device support
     hasDeviceSTT: 'poor',      // Limited device support
-    recommendedTTS: 'azure',   // Use en-ZA voice (better than robotic device)
+    recommendedTTS: 'azure',
     recommendedSTT: 'openai',  // Best option available
   },
   'nso-ZA': {
     code: 'nso-ZA',
     name: 'Northern Sotho',
     nativeName: 'Sepedi',
-    hasAzureTTS: false,        // No native Azure voice ❌
+    hasAzureTTS: true,
     hasAzureSTT: false,
     hasDeviceTTS: 'none',      // Almost never available
     hasDeviceSTT: 'none',      // Almost never available
-    recommendedTTS: 'azure',   // Use en-ZA voice (better than robotic device)
+    recommendedTTS: 'azure',
     recommendedSTT: 'openai',  // Best option available
   },
 };
@@ -97,14 +97,11 @@ export const AZURE_TTS_VOICES: Record<string, string> = {
   'zu-ZA': 'zu-ZA-ThandoNeural',
   'zu-ZA-male': 'zu-ZA-ThembaNeural',
   
-  // Fallbacks for unsupported languages
-  // isiXhosa - Use SA English (no native voice available)
-  'xh-ZA': 'en-ZA-LeahNeural',
-  'xh-ZA-male': 'en-ZA-LukeNeural',
-  
-  // Sepedi - Use SA English (no native voice available)
-  'nso-ZA': 'en-ZA-LeahNeural',
-  'nso-ZA-male': 'en-ZA-LukeNeural',
+  // Additional SA voices
+  'xh-ZA': 'xh-ZA-NomalungaNeural',
+  'xh-ZA-male': 'xh-ZA-NomalungaNeural',
+  'nso-ZA': 'nso-ZA-DidiNeural',
+  'nso-ZA-male': 'nso-ZA-DidiNeural',
 };
 
 /**

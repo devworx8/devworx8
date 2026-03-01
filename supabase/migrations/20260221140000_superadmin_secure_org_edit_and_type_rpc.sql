@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE OR REPLACE FUNCTION public.superadmin_update_entity_type(
   p_entity_type text,
   p_entity_id uuid,
@@ -183,7 +182,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.superadmin_update_entity_profile(
   p_entity_type text,
   p_entity_id uuid,
@@ -397,12 +395,9 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_type(text, uuid, text, boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_type(text, uuid, text, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_profile(text, uuid, text, text, text, text, text, text, text, boolean, boolean, boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.superadmin_update_entity_profile(text, uuid, text, text, text, text, text, text, text, boolean, boolean, boolean) TO service_role;
-
 NOTIFY pgrst, 'reload schema';
-
 COMMIT;

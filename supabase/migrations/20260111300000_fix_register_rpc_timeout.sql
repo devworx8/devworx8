@@ -234,64 +234,8 @@ EXCEPTION
     );
 END;
 $function$;
-
 -- Grant execute to anon for web registration
-GRANT EXECUTE ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text
-) TO anon;
-GRANT EXECUTE ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text
-) TO authenticated;
-
-COMMENT ON FUNCTION public.register_organization_member(
-  uuid,
-  uuid,
-  uuid,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  text,
-  date,
-  text
-) IS
+GRANT EXECUTE ON FUNCTION public.register_organization_member TO anon;
+GRANT EXECUTE ON FUNCTION public.register_organization_member TO authenticated;
+COMMENT ON FUNCTION public.register_organization_member IS 
 'Register a new organization member. Optimized for web registration with minimal timeout.';

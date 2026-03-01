@@ -1,13 +1,11 @@
 -- Allow principals/admins to manage promotional campaigns created within their org
 
 ALTER TABLE public.promotional_campaigns ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Admins can manage campaigns" ON public.promotional_campaigns;
 DROP POLICY IF EXISTS promotional_campaigns_org_select ON public.promotional_campaigns;
 DROP POLICY IF EXISTS promotional_campaigns_org_insert ON public.promotional_campaigns;
 DROP POLICY IF EXISTS promotional_campaigns_org_update ON public.promotional_campaigns;
 DROP POLICY IF EXISTS promotional_campaigns_org_delete ON public.promotional_campaigns;
-
 CREATE POLICY promotional_campaigns_org_select
 ON public.promotional_campaigns
 FOR SELECT
@@ -30,7 +28,6 @@ USING (
       AND COALESCE(me.organization_id, me.preschool_id) = COALESCE(owner.organization_id, owner.preschool_id)
   )
 );
-
 CREATE POLICY promotional_campaigns_org_insert
 ON public.promotional_campaigns
 FOR INSERT
@@ -52,7 +49,6 @@ WITH CHECK (
     )
   )
 );
-
 CREATE POLICY promotional_campaigns_org_update
 ON public.promotional_campaigns
 FOR UPDATE
@@ -93,7 +89,6 @@ WITH CHECK (
       AND COALESCE(me.organization_id, me.preschool_id) = COALESCE(owner.organization_id, owner.preschool_id)
   )
 );
-
 CREATE POLICY promotional_campaigns_org_delete
 ON public.promotional_campaigns
 FOR DELETE

@@ -44,8 +44,17 @@ export default function PrincipalYearPlannerScreen() {
 
   const orgId = extractOrganizationId(profile);
 
-  const { terms, monthlyEntries, loading, refreshing, handleRefresh, handleSubmit, handleDelete, handleTogglePublish } =
-    useYearPlanner({ orgId, userId: user?.id });
+  const {
+    terms,
+    monthlyEntries,
+    loading,
+    refreshing,
+    handleRefresh,
+    handleSubmit,
+    handleDelete,
+    handleTogglePublish,
+    handlePublishPlan,
+  } = useYearPlanner({ orgId, userId: user?.id });
 
   const [viewTab, setViewTab] = useState<'terms' | 'monthly'>('terms');
   const [expandedMonth, setExpandedMonth] = useState<{ year: number; month: number } | null>(null);
@@ -135,10 +144,16 @@ export default function PrincipalYearPlannerScreen() {
               <Text style={[styles.tabBtnText, viewTab === 'monthly' && styles.tabBtnTextActive]}>Monthly</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={openCreateModal}>
-            <Ionicons name="add" size={24} color="#fff" />
-            <Text style={styles.addButtonText}>New Term</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.publishButton} onPress={() => handlePublishPlan()}>
+              <Ionicons name="megaphone-outline" size={20} color={theme.primary} />
+              <Text style={[styles.publishButtonText, { color: theme.primary }]}>Publish plan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={openCreateModal}>
+              <Ionicons name="add" size={24} color="#fff" />
+              <Text style={styles.addButtonText}>New Term</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading ? (
@@ -311,6 +326,25 @@ const createStyles = (theme: any) =>
     },
     tabBtnTextActive: {
       color: '#fff',
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    publishButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      gap: 6,
+    },
+    publishButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
     },
     addButton: {
       flexDirection: 'row',

@@ -2,7 +2,6 @@
 -- Adds screening metadata + secure RPCs for principal-appointed admin workflows.
 
 BEGIN;
-
 ALTER TABLE public.join_requests
   ADD COLUMN IF NOT EXISTS screened_by uuid,
   ADD COLUMN IF NOT EXISTS screened_at timestamptz,
@@ -10,7 +9,6 @@ ALTER TABLE public.join_requests
   ADD COLUMN IF NOT EXISTS screening_notes text,
   ADD COLUMN IF NOT EXISTS screening_checklist jsonb NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS principal_decision_required boolean NOT NULL DEFAULT true;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -28,7 +26,6 @@ BEGIN
       );
   END IF;
 END $$;
-
 UPDATE public.join_requests
 SET principal_decision_required = CASE
   WHEN request_type IN ('teacher_invite', 'staff_invite') THEN true
@@ -38,7 +35,6 @@ WHERE principal_decision_required IS DISTINCT FROM CASE
   WHEN request_type IN ('teacher_invite', 'staff_invite') THEN true
   ELSE false
 END;
-
 CREATE OR REPLACE FUNCTION public.screen_join_request(
   p_request_id uuid,
   p_screening_status text,
@@ -123,7 +119,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.list_admin_work_queue(
   p_org_id uuid,
   p_org_type text
@@ -419,7 +414,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.get_admin_dashboard_bundle(
   p_org_id uuid,
   p_org_type text,
@@ -489,7 +483,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.enforce_join_request_screening_rules()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -574,13 +567,11 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS trg_enforce_join_request_screening_rules ON public.join_requests;
 CREATE TRIGGER trg_enforce_join_request_screening_rules
 BEFORE UPDATE ON public.join_requests
 FOR EACH ROW
 EXECUTE FUNCTION public.enforce_join_request_screening_rules();
-
 DO $$
 BEGIN
   CREATE POLICY join_requests_school_admin_update_same_org
@@ -607,9 +598,7 @@ EXCEPTION
   WHEN duplicate_object THEN
     NULL;
 END $$;
-
 GRANT EXECUTE ON FUNCTION public.screen_join_request(uuid, text, text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_admin_work_queue(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_admin_dashboard_bundle(uuid, text, text) TO authenticated;
-
 COMMIT;
